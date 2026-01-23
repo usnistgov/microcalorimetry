@@ -1,0 +1,18 @@
+{
+    "definitions": {
+        "ParsedDCSweep": {
+            "type": "object",
+            "properties": {
+                "v": {
+                    "$ref": "DCSweep.json#/definitions/DCSweep"
+                },
+                "i": {
+                    "$ref": "DCSweep.json#/definitions/DCSweep"
+                }
+            },
+            "additionalProperties": {
+                "$ref": "DCSweep.json#/definitions/DCSweep"
+            }
+        }
+    }
+}

@@ -1,0 +1,28 @@
+{
+  "title": "CorrectionFactorDataInputs",
+  "description": "Defines a set of data corresponding to a combination of sensors used in a correction factor measurement.",
+  "type": "object",
+  "additionalProperties":{
+    "properties": {
+      "special": {"$ref":"#/definitions/correction-factor-measurements"},
+      "standard": {"$ref":"#/definitions/correction-factor-measurements"},
+      "splitter": {"$ref": "S11.json#/definitions/S11"}
+    },
+    "required": [
+      "special",
+      "standard",
+      "splitter"
+    ]
+  },
+  "definitions":{
+    "correction-factor-measurements":{
+      "description":"Points to a DUT's S-parameters, parsed RF sweep, and calorimeter sensitivity cofficients for a particular measurement.",
+      "properties":{
+        "s11": {"$ref": "S11.json#/definitions/S11"},
+        "parsed_calibration": {"$ref": "ParsedRFSweep.json#/definitions/ParsedRFSweep"},
+        "clrm_coeffs": {"$ref": "ThermoelectricFitCoefficients.json#/definitions/ThermoelectricFitCoefficients"}
+      },
+    "additionalProperties":false
+    }
+  }
+}

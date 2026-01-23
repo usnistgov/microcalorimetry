@@ -1,0 +1,17 @@
+key_0,key_1,key_2,key_3,value,type,comment
+,,,,,,
+instruments,names,,,NVM0,str,human-readable name (arbitrary and unique)
+output_settings,columns,,,NVM_sensor_volts,str,Name of output column in record. Only columns that are not in the defaut set need to be declared. 
+,,,,,,
+instruments,NVM1,model,,HP34420A,str,make and model of instrument; used to determine which commands to use
+instruments,NVM1,serial,,0,str,Serial or internal tag
+instruments,NVM1,*IDN?,,3290,str,last 4 digits of serial number
+instruments,NVM1,GPIB_address,,GPIB0::21::INSTR,str,GPIB address
+instruments,NVM1,role,,thermopile_monitor,str,an instrument's role is its specific use in the context of this measurement
+instruments,NVM1,output_column,,NVM_sensor_volts,str,for the thermopile_monitor the output column is NVM_volts
+instruments,NVM1,initial_settings,v_range,2.00E-03,float,settings for this instrument in monitor mode
+instruments,NVM1,initial_settings,nplc,100,float,settings for this instrument in monitor mode
+instruments,NVM1,initial_settings,num_readings,1,int,settings for this instrument in monitor mode
+instruments,NVM1,monitor_mode_settings,timeout,5,float,timeout for wait_until_data_available (seconds)
+instruments,NVM1,monitor_mode_settings,enable,TRUE,bool,"if True, do not pole voltmeter in this mode"
+instruments,NVM1,fast_off_mode_settings,enable,FALSE,bool,"if True, do not pole voltmeter in this mode"

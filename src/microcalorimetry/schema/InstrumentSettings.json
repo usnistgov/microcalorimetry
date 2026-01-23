@@ -1,0 +1,159 @@
+{
+    "definitions": {
+        "AnyInstrument": {
+            "description": "Describes the settings used for an arbitrary instrument",
+            "anyOf": [
+                {
+                    "$ref": "#/definitions/HP34420A Voltmeter"
+                },
+                {
+                    "$ref": "#/definitions/HP3458A Voltmeter"
+                },
+                {
+                    "$ref": "#/definitions/KS_E8257D RF Source"
+                },
+                {
+                    "$ref": "#/definitions/DP8200 Voltage Source"
+                },
+                {
+                    "$ref": "#/definitions/RS_NRP75TWG Power Meter"
+                }
+            ]
+        },
+        "HP34420A Voltmeter": {
+            "description": "Possible settings to use for the HP34420A Nanovoltmeter acting as a Voltmeter.",
+            "type": "object",
+            "properties": {
+                "v_range": {
+                    "anyof": [
+                        {
+                            "type": "str",
+                            "enum": [
+                                "auto"
+                            ]
+                        },
+                        {
+                            "type": "number",
+                            "minimum": 0
+                        }
+                    ]
+                },
+                "nplc": {
+                    "type": "number",
+                    "description": "Number of power line cycles "
+                },
+                "num_readings": {
+                    "type": "integer",
+                    "description": "Number of readings to take for each poll"
+                }
+            }
+        },
+        "HP3458A Voltmeter": {
+            "description": "Possible settings to use for the HP3458A DMM acting as a Voltmeter.",
+            "type": "object",
+            "properties": {
+                "v_range": {
+                    "anyof": [
+                        {
+                            "type": "str",
+                            "enum": [
+                                "auto"
+                            ]
+                        },
+                        {
+                            "type": "number",
+                            "minimum": 0
+                        }
+                    ]
+                },
+                "nplc": {
+                    "type": "number",
+                    "description": "Number of power line cycles "
+                },
+                "num_readings": {
+                    "type": "integer",
+                    "description": "Number of readings to take for each poll"
+                },
+                "timer": {
+                    "type": "number",
+                    "description": "How long to wait between concurrent readings."
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "How long to wait before throwing an error while waiting for data to come back."
+                }
+            }
+        },
+        "KS_E8257D RF Source": {
+            "description": "Possible settings to use for the HP3458A DMM acting as a Source.",
+            "type": "object",
+            "properties": {
+                "f_GHz": {
+                    "type": "number",
+                    "description": "Frequency to set in GHz."
+                },
+                "AM": {
+                    "type": "boolean",
+                    "description": "Whether or not to use amplitude modulation."
+                },
+                "AM_ext_port": {
+                    "type": "integer",
+                    "description": "External port number to use for amplitude modulation."
+                },
+                "AM_ext_sensitivity_percent_per_volt": {
+                    "type": "number",
+                    "description": "Linear sensitivity (percent per volt) of the modulated signal to the DC input."
+                }
+            }
+        },
+        "DP8200 Voltage Source": {
+            "description": "Possible settings to use for the DP8200 acting as a voltage source.",
+            "type": "object",
+            "properties": {
+                "v_range": {
+                    "type": "number",
+                    "description": "Ouput voltage range."
+                },
+                "source_level": {
+                    "type": "number",
+                    "description": "Output voltage level."
+                }
+            }
+        },
+        "RS_NRP75TWG Power Meter": {
+            "description": "Possible settings to use for the RS NRP75TWG Power Meter.",
+            "type": "object",
+            "properties": {
+                "read_units": {
+                    "type": "string",
+                    "description": "Read units, restriced to Watts for compatability.",
+                    "enum": [
+                        "W"
+                    ]
+                },
+                "integration_time": {
+                    "type": "number",
+                    "description": "How long to integrate symbol in seconds.",
+                    "minimum": 0,
+                    "maximum": 0.3
+                },
+                "zero_once": {
+                    "type": "boolean",
+                    "description": "Forces a zeroing measurment to calibrate instrument, freezes the runner while it happens."
+                },
+                "timeout": {
+                    "type": "number",
+                    "description": "how long to wait (in seconds) for data to be available before throwing an error."
+                },
+                "average_state": {
+                    "type": "str",
+                    "description": "Activates continuous averaging of the sensor readings.",
+                    "enum": [
+                        "ON",
+                        "OFF"
+                    ]
+                }
+            }
+        }
+    }
+}

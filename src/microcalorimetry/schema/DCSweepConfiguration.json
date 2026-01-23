@@ -1,0 +1,236 @@
+{
+    "title": "Configuration of an RF Sweep",
+    "type": "object",
+    "properties": {
+        "record_settings": {
+            "type": "object",
+            "properties": {
+                "meas_name": {
+                    "type": "string",
+                    "description": "name of the datarecord when saved."
+                },
+                "maxlen": {
+                    "type": "integer",
+                    "description": "maximum length of the datarecord in memory"
+                },
+                "minlen": {
+                    "type": "integer",
+                    "description": "minimum length of the datarecord in memory"
+                }
+            },
+            "additionalProperties": false
+        },
+        "nvm_names": {
+            "type": ["array", "string"],
+            "items": {
+                "type": "string"
+            },
+            "description": "Array of names for each nano-voltmeter instrument",
+            "additionalProperties": false
+        },
+        "addresses": {
+            "type": "object",
+            "description": "Key-value pairs of GPIB addresses corresponding to each instrument's name. There is an expected instrument named SMU.",
+            "Properties": {
+                "SMU": {
+                    "type": "string",
+                    "description": "Address of the SMU."
+                }
+            },
+            "additionalProperties": {
+                "type": "string",
+                "description": "Addresses of the nanovoltmeters."
+            }
+        },
+        "models": {
+            "type": "object",
+            "description": "Key-value pairs of model names corresponding to each instrument's name. Their is an expected instrument named SMU.",
+            "properties": {
+                "SMU": {
+                    "type": "string",
+                    "description": "Model name of the SMU.",
+                    "enum": [
+                        "K2450"
+                    ]
+                }
+            },
+            "additionalProperties": {
+                "type": "string",
+                "description": "additional model-names corresponding to the nvm_names.",
+                "enum": [
+                    "HP34420A"
+                ]
+            }
+        },
+        "serials": {
+            "type": "object",
+            "description": "KeyValue pairs of serial numbers corresponding to each instrument.",
+            "additionalProperties": {
+                "type": "string"
+            }
+        },
+        "monitor_thermopile": {
+            "type": "boolean",
+            "description": "Activates monitoring of thermopiles. Usually on.",
+            "additionalProperties": false
+        },
+        "fast_settings": {
+            "description": "Describe the behaviour of the SMU during the fast period immediatley before and after a step-change in the source value.",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/DCSweepModeSettings"
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "initial_level_duration": {
+                            "type": "number",
+                            "description": "how long to measure immediatley before a step change in the source value on fast mode.",
+                            "minimum": 1
+                        }
+                    }
+                }
+            ],
+            "required": [
+                "initial_level_duration"
+            ]
+        },
+        "slow_settings": {
+            "$ref": "#/definitions/DCSweepModeSettings",
+            "description": "Describe the behaviour of the SMU during the slow period following a step-change in the source value.",
+            "additionalProperties": false
+        },
+        "initial_setup": {
+            "type": "object",
+            "description": "describes the initial setup configuration of the SMU.",
+            "properties": {
+                "SMU": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "wiring": {
+                            "type": "string",
+                            "enum": [
+                                "4W"
+                            ],
+                            "description": "describes 2 or 4 wire configuration of the SMU. Only 4W supported."
+                        },
+                        "source_measure": {
+                            "type": "string",
+                            "enum": [
+                                "SVMI",
+                                "SIMV"
+                            ],
+                            "description": "Source volts (V) measure current (A) OR Source current (A) measure volts (V). Units of source/measure settings correspond to this setting."
+                        },
+                        "panel": {
+                            "type": "string",
+                            "enum": [
+                                "front",
+                                "rear"
+                            ],
+                            "description": "Use front or rear panels for the measurement."
+                        }
+                    }
+                }
+            }
+        },
+        "setup": {
+            "type": "object",
+            "additionalProperties": {
+                "$ref": "InstrumentSettings.json#/definitions/HP34420A Voltmeter",
+                "description": "Additional voltmeter settings under a key corresponding to the nvm_names array."
+            },
+            "description": "describes additional setup of the SMU and Nanovoltmeter.",
+            "properties": {
+                "SMU": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "describes additional setup of the SMU specifically.",
+                    "properties": {
+                        "measure_for_duration_or_count": {
+                            "type": "string",
+                            "enum": [
+                                "duration"
+                            ],
+                            "description": "Requried to be duration."
+                        },
+                        "source_range": {
+                            "type": "number",
+                            "description": "Sets range for the source values (voltage or amps depending on the source_measure setting)."
+                        },
+                        "source_ilimit": {
+                            "type": "number",
+                            "description": "Sets the hardware current (A) limiter on the source source."
+                        },
+                        "measure_range": {
+                            "type": "number",
+                            "description": "Sets the measure range (V or A depending on the source_measure setting)"
+                        },
+                        "over_voltage_protection": {
+                            "type": "number",
+                            "description": "Sets the maxmimum voltage limit on the source. Will round to nearest acceptable value based on the instrument (see model manual for details). (V or A depending on the source_measure setting)"
+                        },
+                        "source_readback": {
+                            "type": "boolean",
+                            "description": "Reads back the measured value of the source rather then the programmed value. Leave as true for accurate measurements."
+                        },
+                        "buffer_size": {
+                            "type": "number",
+                            "description": "How large to make the internal memory buffer of the SMU. Leave as large (i.e. > 1e5)"
+                        },
+                        "buffer_fill_mode": {
+                            "type": "string",
+                            "description": "How to handle the SMUs memory buffer. Fill_once will throw an error if it fails, circular will make a circular array.",
+                            "enum": [
+                                "circular",
+                                "fill_once"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "additionalProperties": false,
+    "definitions": {
+        "DCSweepModeSettings": {
+            "type": "object",
+            "description": "Describes the behaviour of the SMU for the fast/slow periods of a step.",
+            "properties": {
+                "duration_per_level": {
+                    "type": "number",
+                    "description": "how long to measure during the measure mode"
+                },
+                "nplc": {
+                    "type": "number",
+                    "description": "number of power line cycles to measure for."
+                },
+                "measure_autozero": {
+                    "type": "boolean",
+                    "description": "Turns auto-zeroing on for each individual measurement."
+                },
+                "source_delay": {
+                    "anyOf": [
+                        {
+                            "type": "string",
+                            "enum": [
+                                "auto"
+                            ]
+                        },
+                        {
+                            "type": "number",
+                            "minimum": 0
+                        }
+                    ]
+                }
+            },
+            "required": [
+                "duration_per_level",
+                "nplc",
+                "measure_autozero",
+                "source_delay"
+            ]
+        }
+    }
+}

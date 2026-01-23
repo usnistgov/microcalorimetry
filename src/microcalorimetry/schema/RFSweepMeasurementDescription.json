@@ -1,0 +1,68 @@
+{
+    "definitions": {
+        "RFSweepMeasurementDescription": {
+            "description": "A set of descriptive properties of the measurement",
+            "properties":{
+                "connector_type":{
+                    "type":"string",
+                    "description":"Connector type of the microcalorimeter."
+                },
+                "system":{
+                    "type":"string",
+                    "description":"Designation for measurement system (i.e. system A, B, etc)"
+                },
+                "water_bath_temperature":{
+                    "type":"number",
+                    "description":"Temperature of the water bath in Celsius."
+                },
+                "notes":{
+                    "description":"Additional notes about the measurement.",
+                    "type":"string"
+                },
+                "calorimeter_name":{
+                    "description":"Name of the calorimeter being used.",
+                    "type":"string"
+                },
+                "DUT_name":{
+                    "description":"Name of the device under test (DUT) inside the microcalorimeter.",
+                    "type":"string"
+                },
+                "thermal_ref_name":{
+                    "description":"Name of the device used as a thermal reference (if applicable).",
+                    "type":"string"
+                },
+                "monitor_name":{
+                    "description":"Name of the sidearm (S3) inside the microcalorimeter.",
+                    "type":"string"
+                },
+                "RF_source_name":{
+                    "description":"Name of the sidearm (S3) inside the microcalorimeter.",
+                    "type":"string"
+                },
+                "splitter_name":{
+                    "description":"Name of the splitter being used",
+                    "type":"string"
+                },
+                "connect_number":{
+                    "description":"Connect number of the DUT.",
+                    "type":"integer"
+                },
+                "DC_source_type":{
+                    "description":"What type of DC source is being used to bias the DUT (if applicable)",
+                    "type":"string",
+                    "enum":["PTC_SMU", "NTC_SMU", "NTC_TYPE_IV", "PTC_TYPE_IV"]
+                },
+                "RF_source_type":{
+                    "description":"What type of DC source is being used to bias the DUT (if applicable)",
+                    "type":"string",
+                    "enum":["signal_generator","VNA"]
+                },
+                "lead_resistance":{
+                    "description":"Resistance of DC lead connected to the DUT (usually zero)."
+                }
+            },
+            "required":["connector_type","system","water_bath_temperature","RF_source_name","notes","calorimeter_name","DUT_name","connect_number"],
+            "additionalProperties":false
+        }
+    }
+}

@@ -1,0 +1,20 @@
+key_0,key_1,key_2,key_3,value,type,comment
+,,,,,,
+instruments,names,,,PM1,str,human-readable name (arbitrary and unique)
+output_settings,columns,,,P3 (W),str,Name of output column in record. Only columns that are not in the defaut set need to be declared. 
+instruments,PM1,output_column,,P3 (W),str,name of SMU voltage output column
+,,,,,,
+instruments,PM1,model,,RS_NRP75TWG,str,make and model of instrument; used to determine which commands to use
+instruments,PM1,serial,,101155,str,last 4 digits of serial number
+instruments,PM1,GPIB_address,,GPIB0::13::INSTR,str,GPIB address
+instruments,PM1,role,,power_meter,str,an instrument's role is its specific use in the context of this measurement 
+instruments,PM1,initial_settings,read_units,W,str,units to read power in. Keep as W
+instruments,PM1,initial_settings,integration_time,0.3,float,how long to integrate measurement signal in seconds. Maxes out at 0.3 seconds
+instruments,PM1,initial_settings,average_state,ON,str,Keep as ON to activate continuous averaging.
+instruments,PM1,initial_settings,zero_once,FALSE,bool,Zero once when setting is called. Happens on intialization.
+,,,,,,
+instruments,PM1,monitor_mode_settings,integration_time,0.3,float,should be long enough for all of the other operations to happen in the background
+instruments,PM1,monitor_mode_settings,timeout,5,float,timeout for wait_until_data_available (seconds)
+,,,,,,
+instruments,PM1,fast_off_mode_settings,integration_time,0.03,float,should be long enough to capture transient behavior
+instruments,PM1,fast_off_mode_settings,timeout,30,float,timeout for wait_until_data_available (seconds)

@@ -1,0 +1,111 @@
+{
+    "definitions": {
+        "RFSweepLevellingSettings": {
+            "description": "Settings that define the levelling behaviour of the RF sweep.",
+            "properties": {
+                "level_to": {
+                    "type": "string",
+                    "description": "DUT or monitor, which sensor to use for leveling feedback.",
+                    "enum": [
+                        "DUT_power",
+                        "monitor_power"
+                    ]
+                },
+                "use_GPIB_levelling": {
+                    "type": "boolean",
+                    "description": "If true, utilize levelling over GPIB commands."
+                },
+                "GPIB_levelling_C": {
+                    "type": "number",
+                    "description": "constant of integration for the GPIB levelling feedback.",
+                    "minimum": 0,
+                    "exclusiveMaximum": 1
+                },
+                "GPIB_levelling_time": {
+                    "type": "number",
+                    "description": "Duration of levelling via GPIB in seconds (starts immediatley, AM levelling starts after this finished).",
+                    "minimum": 0
+                },
+                "use_AM_levelling": {
+                    "type": "boolean",
+                    "description": "If true, utilize AM levelling via a voltage source."
+                },
+                "AM_levelling_C": {
+                    "type": "number",
+                    "description": "constant of integration for the AM levelling feedback.",
+                    "minimum": 0,
+                    "exclusiveMaximum": 1
+                },
+                "AM_levelling_time": {
+                    "type": "number",
+                    "description": "Duration of levelling via AM in seconds (after GPIB levelling finishes).",
+                    "minimum": 0
+                },
+                "max_source_power_change_dB": {
+                    "type": "number",
+                    "description": "rf power will not change by more than this ammount in a levelling step",
+                    "minimum": 0,
+                    "exclusiveMaximum": 1
+                },
+                "V_off_slow_min": {
+                    "type": "number",
+                    "description": "in volts. If V_off slow is less than this number, assume an error has occurred and stop the experiment. Only applies to bolometers.",
+                    "minimum": 0,
+                    "exclusiveMaximum": 10
+                },
+                "V_off_slow_max": {
+                    "type": "number",
+                    "description": "in volts. If V_off slow is less than this number, assume an error has occurred and stop the experiment. Only applies to bolometers.",
+                    "minimum": 0,
+                    "exclusiveMaximum": 10
+                },
+                "AM_HARDMAX": {
+                    "type": "number",
+                    "description": "Max allowed power for for the DUT in dBm.",
+                    "exclusiveMaximum": 0.5
+                },
+                "HARD_MAX_dBm": {
+                    "type": "object",
+                    "properties": {
+                        "monitor_power": {
+                            "type": "number",
+                            "description": "Max allowed power for the monitor in dBm."
+                        },
+                        "DUT_power": {
+                            "type": "number",
+                            "description": "Max allowed power for the DUT in dBm."
+                        },
+                        "calorimeter_power": {
+                            "type": "number",
+                            "description": "Max allowed power for for the calorimeter_thermopile in dBm."
+                        },
+                        "RF_source_power": {
+                            "type": "number",
+                            "description": "Max allowed power for for the rfsource in dBm."
+                        }
+                    },
+                    "required": [
+                        "monitor_power",
+                        "DUT_power",
+                        "calorimeter_power",
+                        "RF_source_power"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "required": [
+                "level_to",
+                "use_AM_levelling",
+                "use_GPIB_levelling",
+                "AM_levelling_C",
+                "AM_levelling_time",
+                "GPIB_levelling_C",
+                "GPIB_levelling_time",
+                "max_source_power_change_dB",
+                "AM_HARDMAX",
+                "HARD_MAX_dBm"
+            ],
+            "additionalProperties": false
+        }
+    }
+}

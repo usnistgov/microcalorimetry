@@ -1,0 +1,248 @@
+{
+  "definitions": {
+    "Units": {
+      "description": "Possible units of a quantity.",
+      "type": "string",
+      "enum": [
+        "V",
+        "W",
+        "A",
+        "dBm"
+      ]
+    },
+    "RecordedQuantity": {
+      "type": "object",
+      "description": "A quantity connected to a column in the record produced by an instrument.",
+      "properties": {
+        "units": {
+          "$ref": "RFSweepSignalConfig.json#/definitions/Units"
+        },
+        "column": {
+          "type": "string"
+        },
+        "instrument": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "units",
+        "column",
+        "instrument"
+      ]
+    },
+    "SignalConfigGeneral": {
+      "type": "object",
+      "description": "Describes required properties of a signal.",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "units": {
+          "$ref": "RFSweepSignalConfig.json#/definitions/Units"
+        },
+        "can_level": {
+          "type": "boolean"
+        },
+        "input_signals":{
+          "type":["string","array"],
+          "items":{
+            "type":"string",
+            "enum":["e", "vdc", "idc", "power"]
+          }
+        }
+      },
+      "required": [
+        "units",
+        "can_level",
+        "type",
+        "input_signals"
+      ]
+    },
+    "ThermoelectricSignal": {
+      "description": "A signal associated with a thermoelectric power sensor.",
+      "allOf": [
+        {
+          "$ref": "RFSweepSignalConfig.json#/definitions/SignalConfigGeneral"
+        }
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "thermoelectric"
+          ]
+        },
+        "coeffs": {},
+        "e": {
+          "$ref": "RFSweepSignalConfig.json#/definitions/RecordedQuantity"
+        }
+      },
+      "required": [
+        "e",
+        "coeffs"
+      ]
+    },
+    "BolometerSignal": {
+      "description": "A signal associated with a bolometer power sensor.",
+      "allOf": [
+        {
+          "$ref": "RFSweepSignalConfig.json#/definitions/SignalConfigGeneral"
+        }
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "bolometer"
+          ]
+        },
+        "resistance": {
+          "type": "number"
+        },
+        "can_level": {
+          "enum": [
+            true
+          ]
+        },
+        "vdc": {
+          "$ref": "RFSweepSignalConfig.json#/definitions/RecordedQuantity"
+        },
+        "idc": {
+          "$ref": "RFSweepSignalConfig.json#/definitions/RecordedQuantity"
+        }
+      },
+      "required": [
+        "vdc"
+      ]
+    },
+    "RFSourceSignal": {
+      "description": "A signal associated with an RF source.",
+      "allOf": [
+        {
+          "$ref": "RFSweepSignalConfig.json#/definitions/SignalConfigGeneral"
+        }
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "RF_source"
+          ]
+        },
+        "can_level": {
+          "enum": [
+            true
+          ]
+        },
+        "power": {
+          "$ref": "RFSweepSignalConfig.json#/definitions/RecordedQuantity"
+        },
+        "vdc": {
+          "$ref": "RFSweepSignalConfig.json#/definitions/RecordedQuantity"
+        }
+      },
+      "required": [
+        "power"
+      ]
+    },
+    "SpecialSensorSignal": {
+      "description": "A signal associated with a special sensor used in microcalorimetry.",
+      "allOf": [
+        {
+          "$ref": "RFSweepSignalConfig.json#/definitions/SignalConfigGeneral"
+        }
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "special"
+          ],
+          "can_level": {
+            "enum": [
+              false
+            ]
+          }
+        },
+        "idc": {
+          "$ref": "RFSweepSignalConfig.json#/definitions/RecordedQuantity"
+        },
+        "vdc": {
+          "$ref": "RFSweepSignalConfig.json#/definitions/RecordedQuantity"
+        }
+      }
+    },
+    "CommercialPowerSensorSignal": {
+      "description": "A signal associated with a commercial power sensor.",
+      "allOf": [
+        {
+          "$ref": "RFSweepSignalConfig.json#/definitions/SignalConfigGeneral"
+        }
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "commercial"
+          ],
+          "can_level": {
+            "enum": [
+              true
+            ]
+          },
+          "unit": {
+            "enum": "W"
+          }
+        },
+        "power": {
+          "$ref": "RFSweepSignalConfig.json#/definitions/RecordedQuantity"
+        }
+      },
+      "required": [
+        "power"
+      ]
+    }
+  },
+  "title": "RFSweepSignalConfig",
+  "type": "object",
+  "description": "Defines signals in an RF sweep. These relate raw data in the record to physical signals at physical locations in the measurement.",
+  "properties": {
+    "DUT_power": {
+      "description": "Mapping of sensor models and columns for the device under test (DUT) inside the calorimeter",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/ThermoelectricSignal"
+        },
+        {
+          "$ref": "#/definitions/BolometerSignal"
+        },
+        {
+          "$ref": "#/definitions/CommercialPowerSensorSignal"
+        },
+        {
+          "$ref": "#/definitions/SpecialSensorSignal"
+        }
+      ]
+    },
+    "RF_source_power": {
+      "description": "Mapping of sensor models and columns for the rfsource outside the calorimeter",
+      "$ref:": "#/definitions/RFSourceSignal"
+    },
+    "monitor_power": {
+      "description": "Mapping of sensor models and columns for the monitor outside the calorimeter",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/ThermoelectricSignal"
+        },
+        {
+          "$ref": "#/definitions/BolometerSignal"
+        },
+        {
+          "$ref": "#/definitions/CommercialPowerSensorSignal"
+        }
+      ]
+    },
+    "calorimeter_power": {
+      "description": "Describes the signal that can be associated with the calorimeter thermopile.",
+      "$ref": "#/definitions/ThermoelectricSignal"
+    }
+  },
+  "additionalProperties":false,
+  "required":["RF_source_power","calorimeter_power","DUT_power"]
+}

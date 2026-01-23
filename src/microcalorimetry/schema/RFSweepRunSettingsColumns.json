@@ -1,0 +1,29 @@
+{
+    "definitions": {
+        "RFSweepRunSettingsColumns": {
+            "description": "Describes the names of the columns used in the run settings file. These should never change, but are checked here.",
+            "properties":{
+                "names":{
+                    "type":"array",
+                    "description":"Names of the columns in the run settings file.",
+                    "prefixItems": [
+                        { "type":"string","enum": ["Frequency_GHz"]},
+                        { "type":"string","enum": ["Intial_source_power_dBm"] },
+                        { "type":"string","enum": ["Target_source_power_dBm"] },
+                        { "type":"string","enum": ["Source_source_power_dBm"] }
+                    ]
+                },
+                "types":{
+                    "type":"array",
+                    "description":"Names of the columns in the run settings file.",
+                    "items": {
+                        "type":"string",
+                        "enum":["float"]
+                    }
+                }                        
+            },
+            "required":["names","types"],
+            "additionalProperties":false
+        }
+    }
+}

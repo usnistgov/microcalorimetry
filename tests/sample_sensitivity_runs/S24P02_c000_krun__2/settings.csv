@@ -1,0 +1,55 @@
+﻿key_0,key_1,key_2,value,type,comment
+# These are settings for the data record,,,,,
+record_settings,meas_name,,c000_krun_,str,name of datarecord
+record_settings,maxlen,,5000,int,max length of data record
+record_settings,minlen,,0,int,min length of data record
+#The first  one should be for the calorimeter thermopile and called NVM the rest can be NVM_<name>,,,,,
+nvm_names,,,NVM,str,visa address of smu
+nvm_names,,,NVM_sensor,str,visa address of nvm
+,,,,,
+# pyvisa adresses are kept here. Use NVM_name for multiple nanovolt-meters. The first  one should be the calorimeter thermopile and called NVM,,,,,
+addresses,SMU,,GPIB0::23::INSTR,str,visa address of smu
+addresses,NVM,,GPIB0::16::INSTR,str,visa address of nvm
+addresses,NVM_sensor,,GPIB0::17::INSTR,str,visa address off NVM_sensor
+,,,,,
+# Model information goes here. This is used to instantialize the instruments using importlib so please use model names consistent with calorimeter-python library,,,,,
+models,SMU,,K2450,str,SMU with a 'smu_source_sweep' functionality.
+models,NVM,,HP34420A,str,Voltmeter model with a 'voltmeter' functionality.
+models,NVM_sensor,,HP34420A,str,Voltmeter model with a 'voltmeter' functionality.
+,,,,,
+# serial and model information goes here,,,,,
+serials,SMU,,7308,str,serial of SMU
+serials,NVM,,2691,str,serial of NVM1
+serials,NVM_sensor,,3294,str,Serial of NVM2
+,,,,,
+# other run settings,,,,,
+monitor_thermopile,,,TRUE,bool,"if true, the NVM will be connected to and monitored. Otherwise the NVM settings will not be used"
+,,,,,
+# fast period stair case settings,,,,,
+fast_settings,duration_per_level,,5,float,determines how long to measure immediatley after a a step
+fast_settings,nplc,,1,float,integrration time for samples immediatley after a step
+fast_settings,initial_level_duration,,1,float,how long to measure immediatley before a step
+fast_settings,measure_autozero,,FALSE,bool,autozero or not during fast period. Autozeroing will double the sample time. 
+fast_settings,source_delay,,0,float,"Delay before measuring after the source is adjusted. Small delays can create abberant overload values near transisiton state that aren't real, but may affect analysis. Use 'auto' for the SMU to set delay automatically, a float to set it yourself."
+,,,,,
+# slow period stair case settings,,,,,
+slow_settings,duration_per_level,,3600,float,determines how long to measure during the slow measurement period.
+slow_settings,nplc,,10,float,integrration time for slow period samples
+slow_settings,measure_autozero,,TRUE,bool,autozero or not during fast period. Autozeroing will double the sample time. 
+slow_settings,source_delay,,auto,str,"Delay before measuring after the source is adjusted. Small delays can create abberant overload values near transisiton state that aren't real, but may affect analysis. Use 'auto' for the SMU to set delay automatically, a float to set it yourself."
+,,,,,
+# other  instrument initial configuration,,,,,
+initial_setup,SMU,wiring,4W,str,Determines  the wiring of the SMU. Keep as 4W
+initial_setup,SMU,source_measure,SVMI,str,SVMI or SIMV
+initial_setup,SMU,panel,rear,str,rear or front
+setup,SMU,measure_for_duration_or_count,duration,str,Determines how the trigger loop is definined in the SMU. Keep as duration
+setup,SMU,source_range,5,int,"Source range value, adjust to match voltage setting levels"
+setup,SMU,source_ilimit,2.00E-02,float,"Source ilimit, limits current output on the source"
+setup,SMU,measure_range,2.00E-02,float,"Measure range, adjust to match expected values"
+setup,SMU,over_voltage_protection,10,int,Voltage limiter on the source
+setup,SMU,source_readback,TRUE,bool,Source readback gives actual readings on the source value. Expected to always be TRUE
+setup,SMU,buffer_size,1.00E+05,int,How many data points to allocated on the SMU internal memory. Must be >= to the maximum expected samples for a fast or slow period
+setup,SMU,buffer_fill_mode,fill_once,str,How data is store in SMU buffer. fill_once or continuous (i.e. a circular array)
+setup,NVM,v_range,auto,str,Change to match expected thermopile voltage maximum
+setup,NVM,nplc,100,float,PLC integration time on thermopile
+setup,NVM,timer,14,float,Timing btw samples on the NVM. Must be >= the integration time or will throw errors

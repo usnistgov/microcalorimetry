@@ -1,0 +1,84 @@
+[build-system]
+requires = ["setuptools>=80", "setuptools-scm[simple]>=8"]
+build-backend = "setuptools.build_meta"
+
+# This tells setuptools to look for packages inside the 'src' directory
+[tool.setuptools]
+# This tells setuptools to look for packages inside the 'src' directory
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]  # list of folders that contain the packages (["."] by default)
+include = ["microcalorimetry"]  # package names should match these glob patterns (["*"] by default)
+exclude = ["tests", "tools","docs",""]  # exclude packages matching these glob patterns (empty by default)
+namespaces = false
+
+[tool.ruff.lint]
+ignore = ["F401","E501","F403","F841","E741"]
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+docstring-code-format = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+[tool.uv.sources]
+rmellipse = { git = "https://github.com/usnistgov/rmellipse", branch = "development" }
+
+
+
+[project]
+name = "microcalorimetry"
+dynamic = ["version"]
+authors = [
+  { name="Daniel Cole Gray", email="daniel.c.gray@nist.gov" },
+  { name = "Zenn C. Roberts",email = "zenn.roberts@nist.gov"},
+    { name ="Aaron M. Hagerstrom", email = "aaron.hagerstrom@nist.gov"}
+]
+
+description = "A package for performing and analyzing microcalorimeter measurements."
+
+readme = "README.md"
+
+requires-python = ">=3.12,<3.14"
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: Microsoft :: Windows"
+]
+
+dependencies = [
+  "numpy>=2.0.0",
+  "matplotlib>=3.9.0",
+  "h5py>=3.11.0",
+  "rminstr-specs>=0.4.0",
+  "numpydoc>=1.8.0",
+  "click>=8.2.1",
+  "pyside6>=6.9.1",
+  "pyyaml>=6.0.2",
+  "jsonschema>=4.25.0",
+  "pyvisa>=1.14.0",
+  "rminstr>=0.6.2",
+  "rmellipse",
+  "customtkinter>=5.2.2",
+]
+
+[project.scripts]
+ucal= "microcalorimetry._cli:_main"
+
+[dependency-groups]
+dev = [
+    "astroid==3.3.8",
+    "pre-commit>=4.3.0",
+    "pytest==8.3.3",
+    "pytest-cov==6.1.1",
+    "ruff>=0.14.13",
+    "sphinx==7.4.0",
+    "sphinx-autoapi==3.6.0",
+    "sphinx-click>=6.1.0",
+    "sphinx-gallery==0.17.0",
+    "sphinx-jsonschema>=1.19.1",
+    "sphinx-multiversion>=0.2.4",
+    "spyder-kernels>=3.0.5",
+]

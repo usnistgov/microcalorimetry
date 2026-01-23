@@ -1,0 +1,91 @@
+{
+    "title": "RFSensorMasterList",
+    "description": "This is configuration that is used to validate settings by matching a sensor's name against its expected model. It is a file that is supplied in addition to the measurement RFSweepConfiguration.",
+    "properties": {
+        "RFSOURCES": {
+            "type": "array",
+            "description": "RF Sources used to produce a signal.",
+            "items": {
+                "type": "string"
+            }
+        },
+        "CALORIMETERS": {
+            "type": "array",
+            "description": "Names of commercial mounts that just produce a power reading.",
+            "items": {
+                "type": "string"
+            }
+        },
+        "COMMERCIAL_MOUNTS": {
+            "type": "array",
+            "description": "Names of commercial mounts that just produce a power reading.",
+            "items": {
+                "type": "string"
+            }
+        },
+        "SPECIAL_MOUNTS": {
+            "type": "array",
+            "description": "Names of special mounts that have no sensing element.",
+            "items": {
+                "type": "string"
+            }
+        },
+        "THIN_FILM_MOUNTS": {
+            "type": "array",
+            "description": "Names of thinfilm mounts that require a PTC feedback loop.",
+            "items": {
+                "type": "string"
+            }
+        },
+        "THERMISTOR_MOUNTS": {
+            "type": "array",
+            "description": "Name of thermistor mounts that require an NTC feedback loop",
+            "items": {
+                "type": "string"
+            }
+        },
+        "KEYSIGHT_THERMOPILE_BALANCE_MOUNTS": {
+            "type": "array",
+            "description": "Name of keysight balance mounts are not operated with a feedback loop.",
+            "items": {
+                "type": "string"
+            }
+        },
+        "EXPECTED_RESISTANCE": {
+            "type": "object",
+            "description": "Key-value pairs of every sensor and what they're resistance should be (if applicable).",
+            "additionalProperties": {
+                "type": "number",
+                "properties": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000
+                }
+            }
+        },
+        "EXPECTED_LINEAR_TERM_BOUNDS": {
+            "type": "object",
+            "description": "Key-value pairs of the expected linear term of the thermoelectric sensor in volts per watts.",
+            "additionalProperties": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                    "type": "number",
+                    "minimum": 0
+                }
+            }
+        }
+    },
+    "required": [
+        "CALORIMETERS",
+        "EXPECTED_LINEAR_TERM_BOUNDS",
+        "EXPECTED_RESISTANCE",
+        "THERMISTOR_MOUNTS",
+        "THIN_FILM_MOUNTS",
+        "SPECIAL_MOUNTS",
+        "COMMERCIAL_MOUNTS",
+        "KEYSIGHT_THERMOPILE_BALANCE_MOUNTS"
+    ],
+    "additionalProperties": false
+}

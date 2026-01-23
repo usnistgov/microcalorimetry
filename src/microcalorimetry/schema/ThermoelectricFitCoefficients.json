@@ -1,0 +1,10 @@
+{
+    "definitions": {
+        "ThermoelectricFitCoefficients":{
+            "description": "File, HDF5Group, or in memory reprsentation of a ThermoelectricFitCoefficients.",
+            "$ref$":"DataModel.json#/definitions/DataModel",
+            "examples":["path/to/data.hdf5/path/to/coeffs"],
+            "additionalProperties": false
+        }
+    }
+}

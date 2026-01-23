@@ -1,0 +1,31 @@
+# fields that annotate information about the measurement
+MeasurementDescription:
+  connector_type: Type N
+  system: System A
+  water_bath_temperatue: 23.5 C
+  notes: This is an example file
+  calorimeter: 24CLRM_000
+  mount_name: Sensor ID
+  connect_number: 0
+  lead_resistance: 200.0
+  DC_source_type: NTC_Type_IV
+  RF_source_type: Signal Generator
+
+# Fields that describe the configuration of
+# a particular instrument
+Instruments:
+  NVM1:
+    model: HP34420A
+    serial: 3294
+    GPIB_address: GPIB::16::INSTR
+    role: thermopile_monitor
+    output_column: NVM_volts
+    initial_settings:
+      v_range: 0.002
+      nplc: 100
+      num_readings: 1
+    monitor_mode_settings:
+      timeout: 5.0
+      enable: True
+    fast_off_mode_settings:
+      enable: False

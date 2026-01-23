@@ -1,0 +1,62 @@
+{
+    "definitions": {
+        "BolometerParserSettings": {
+            "title":"Bolometer Parser Settings",
+            "description": "RF sweep parser settings specific to a bolometer sensor.",
+            "type": "object",
+            "properties": {
+                "V_off_delay": {
+                    "type": "number",
+                    "description": "What time should be fit to when determining 'off' point when fitting the fast off.",
+                    "examples": [0.37]
+                },
+                "V_off_function": {
+                    "type": "string",
+                    "enume": [
+                        "single_sample",
+                        "lin_plus_exp",
+                        "linear"
+                    ],
+                    "description": "What type of fit function to use when fitting to the fast off voltage of the sensor.",
+                    "examples": ["linear"]
+                },
+                "V_off_fit_time_window": {
+                    "description": "The time window - relative to when power was turned off - to fit the data to. Should be large enough to capture the curve.",
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {
+                        "type": "number"
+                    },
+                    "examples": [[1,20]]
+                },
+                "dependentRequired": {
+                    "V_off_delay": ["V_off_delay","V_off_function","V_off_fit_time_window"]
+                }
+            },
+            "ThermoelectricSensorAnalysisSettings": {
+                "description": "Analysis settings specific to a thermoelectric sensor.",
+                "additionalProperties": false
+            }
+        }
+    },
+    "title": "RFSweepParserConfig",
+    "type": "object",
+    "description": "Settings needed to parsed an RFsweep for a sensor, not specific to any type of sensor.",
+    "properties": {
+        "analysis_config": {
+            "type": "object",
+            "properties": {
+                "instr_timing_tolerance": {
+                    "type": "number",
+                    "description": "Used for determining the relative time delays between the instrument signals for finding the 'correct' RF switching time. A typical value is 5 seconds."
+                },
+                "RF_on_average_window": {
+                    "type": "number",
+                    "description": "time window (in seconds) to average over when evaluating long timescle settled values."
+                }
+            },
+            "required":["instr_timing_tolerance","RF_on_average_window"]
+        }
+    }
+}

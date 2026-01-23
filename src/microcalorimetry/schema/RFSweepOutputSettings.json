@@ -1,0 +1,42 @@
+{
+    "definitions": {
+        "RFSweepOutputSettings": {
+            "description": "Describes the settings for outputing data from an RF sweep.",
+            "properties":{
+                "out_file_name":{
+                    "type":"string",
+                    "description":"Name of the file (with.csv extension) for saving the data-record."
+                },
+                "metadata_file_name":{
+                    "type":"string",
+                    "description":"Name of the metadata file (with.csv extension) for saving the data-record."
+                },
+                "maxlen":{
+                    "type":"integer",
+                    "description":"Maximum length of the in memory data record."
+                },
+                "minlen":{
+                    "type":"integer",
+                    "description":"Minimum length of the in memory data record."
+                },
+                "columns":{
+                    "type":["string","array"],
+                    "description":"a list of every column for the datarecord.",
+                    "items":{
+                        "type":"string"
+                    }
+                },
+                "plot_interval":{
+                    "type":"number",
+                    "description":"How often to produce a short plot of whats in the active memory of the data-record (seconds)."
+                },
+                "short_plot_time_window":{
+                    "type":"number",
+                    "description":"Time window (in seconds) for short plot made every plot_interval."
+                }             
+            },
+            "required":["columns","out_file_name","metadata_file_name","maxlen","minlen"],
+            "additionalProperties":false
+        }
+    }
+}

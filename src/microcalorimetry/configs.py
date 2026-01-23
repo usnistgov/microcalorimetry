@@ -1,0 +1,759 @@
+"""
+Module for defining configuration objects.
+
+Configuration objects are either:
+
+* Objects that inherit from DataModelContainer, and hold either a datset itsself or a file pointer to the dataset
+* Objects that inherit from SerialDictionary, which JSON compatable dictionary objects that can be instantiate from a file pointer or the dictionary itself.
+
+Supported serialization formats are:
+
+* JSON
+* YAML (restricted to a JSON compatable subset using pyyaml's safe_load method)
+* ExperimentParameters (spreadsheet editable JSON like object defined in Rocky Mountain Instruments)
+* HDF5 Group Saveable Dictionaries (A generic object serialization format defined in Rocky Mountain Ellipse)
+
+Each configuration object has a corresponding JSON schema that can be used to provide
+validation.
+
+"""
+
+# third party dependencies
+
+import h5py
+from pathlib import Path
+import pandas as pd
+
+# uncertainty propagation
+from rmellipse.utils import load_object, GroupSaveable
+import numpy as np
+
+# file formats
+import json
+from typing import Any
+from yaml import safe_load
+
+# I think at somepoint this should be updated to a new draft
+from referencing.jsonschema import DRAFT7 as DRAFT
+from jsonschema import Draft7Validator as DraftValidator
+from referencing import Registry
+from rminstr.data_structures import ExptParameters
+from rmellipse.uobjects import RMEMeas
+from rmellipse.propagators import RMEProp
+import xarray as xr
+import microcalorimetry._gwex as gwex
+
+# build an internal registry of JSON schema
+# that map the filenames to the schema object
+# in a way that is compatable with the file
+# referencing that the sphinx-jsonschema extension
+# uses
+# this way i can do "$ref":"filename.json#/definitions/schema"
+# and build up schemas in local files of the same directory.
+SCHEMA_DIR = Path(__file__).parents[0] / 'schema'
+resources = []
+for file in SCHEMA_DIR.iterdir():
+    if file.is_file():
+        with open(file, 'r') as fio:
+            contents = DRAFT.create_resource(json.load(fio))
+            resources.append((file.name, contents))
+REGISTRY = Registry().with_resources(resources)
+
+__all__ = [
+    'load_config',
+    'SerialDictionary',
+    'DataModelContainer',
+    'S11',
+    'ThermoelectricFitCoefficients',
+    'DCSweep',
+    'RFSweep',
+    'ParsedRFSweep',
+    'ParsedDCSweep',
+    'CorrectionFactorModelInputs',
+    'RFSweepParserConfig',
+]
+
+
+# %% File loaders for configs
+def _load_file(obj, group=None):
+    # assume string objects or Paths are files
+    path = Path(obj)
+    valid = '.yml', '.yaml', '.csv'
+    # fo yml, yaml files
+    if path.suffix == '.yml' or path.suffix == '.yaml':
+        data = _load_yaml(path)
+    # if csv, assume experiment parameters
+    elif path.suffix == '.csv':
+        data = __load_experiment_parameters(path)
+    elif path.suffix == '.json':
+        data = _load_json(path)
+    elif path.suffix == '.h5' or path.suffix == '.hdf5':
+        data = _load_h5(path, group)
+    else:
+        raise ValueError(
+            f'File extension of {path} not recognized (must be one of {valid})'
+        )
+    return data
+
+
+def _load_json(file):
+    with open(file, 'r') as f:
+        obj = json.load(f)
+    return obj
+
+
+def _load_h5(file, group=None):
+    with h5py.File(file, 'r') as f:
+        g = f
+        if group is not None:
+            g = f[group]
+        obj = load_object(g, load_big_objects=True)
+    return obj
+
+
+def _load_yaml(path: Path | str):
+    with open(Path(path), 'r') as f:
+        data = safe_load(f)
+    return data
+
+
+def __load_experiment_parameters(path: Path | str):
+    config = ExptParameters(str(path), '').config
+    return config
+
+
+def _load_schema_from_definition(fname: str, definition_name: str = None):
+    """
+    Convenienve method for loading in schema stored in a definition.
+
+    Parameters
+    ----------
+    fname : str
+        Name of schema (assumed to be in SCHEMA_DIR) without the extension.
+        Assumed to be json.
+    definition_name : str, optional
+        Name of definition, by default None. If None, assumed
+        to be the same as fname.
+
+    Returns
+    -------
+    dict:
+        JSON Schema
+    """
+    schema = load_config(SCHEMA_DIR / f'{fname}.json')
+    if definition_name:
+        schema = schema['definitions'][definition_name]
+    return schema
+
+
+def split_h5path(path: Path | str) -> tuple[Path, str | None]:
+    """
+    Split a path formatted as path/to/file.h5/path/to/group
+
+    Used to combine file and group paths into a single string.
+
+    Parameters
+    ----------
+    path : Path | str
+        Path spec formatted as path/to/hdf5_file.<ext>/path/to/group
+        where <ext> is one of .h5, or .hdf5 file extensions.
+
+    Returns
+    -------
+    tuple[Path, str | None]
+        Seperated file path and group path.
+    """
+    full_path = Path(path)
+    # split file paths and determine
+    # if there is a valid h5 extension
+    p = str(full_path.as_posix())
+    possible_h5_extensions = ['.h5', '.hdf5']
+    h5_ext = None
+    for ext in possible_h5_extensions:
+        if ext in p:
+            h5_ext = ext
+            break
+    # if there is an h5 extension split into path and group
+    if h5_ext is not None:
+        split = p.split(h5_ext)
+        assert len(split) <= 2 and len(split) >= 1
+        path = split[0] + h5_ext
+        if len(split) == 2:
+            group = split[1]
+            if group == '':
+                group = None
+        else:
+            group = None
+        return Path(path), group
+    # otherwise return the path with
+    # no group
+    else:
+        return full_path, None
+
+
+def load_config(obj: Any | str | Path | list[Path | str], schema: dict | Path = None):
+    """
+    Validate a JSON like-object and/or load it from a file.
+
+    Parameters
+    ----------
+    obj : Any | str | Path
+        Any object to validate, or a file path to that object.
+    schema : dict | Path, optional
+        Schema or path to a jsonschema in .json format. by default None
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
+    # if a file was passed (json or equivalent) ,load that
+    if issubclass(type(obj), str) or issubclass(type(obj), Path):
+        obj_path, grp = split_h5path(Path(obj))
+        obj = _load_file(obj_path, grp)
+
+    # if schema was passed, use it to validate the object
+    if schema is not None:
+        if issubclass(type(schema), str) or issubclass(type(schema), Path):
+            schema = _load_json(schema)
+        DraftValidator(schema, registry=REGISTRY).validate(obj)
+
+    return obj
+
+
+class SerialDictionary(dict):
+    def __init__(
+        self, obj: dict | str | Path | zip | list[Path | str], schema: dict | Path
+    ):
+        dict.__init__(self)
+        if isinstance(obj, zip):
+            obj = dict(obj)
+        obj = load_config(obj, schema=schema)
+        # make a shallow copy
+        for k in obj:
+            self[k] = obj[k]
+
+
+# %% Data Model Classes that store pointers to data
+
+
+class DataModelContainer(GroupSaveable):
+    """
+    Stores a pointer to or a data-set itself.
+    """
+
+    SCHEMA = load_config(SCHEMA_DIR / 'DataModelContainer.json')['definitions'][
+        'DataModelContainer'
+    ]
+
+    def __init__(
+        self, *data_or_path, attrs=None, parent=None, **data_or_path_key_value_pair
+    ):
+        # Find where the data or path is stored.
+        if len(data_or_path) == 1 and len(data_or_path_key_value_pair) == 0:
+            data_or_path = data_or_path
+        elif len(data_or_path) == 0 and len(data_or_path_key_value_pair) == 1:
+            data_or_path = list(data_or_path_key_value_pair.values())
+        else:
+            raise ValueError(
+                'Expected exactly one inpuyt for data_or_path positional or keyword argument.'
+            )
+
+        if len(data_or_path) == 1:
+            obj = data_or_path[0]
+        elif len(data_or_path) == 0:
+            if 'path' in attrs:
+                obj = attrs['path']
+            else:
+                obj = attrs['data']
+        else:
+            raise ValueError('Expected 1 kwarg/arg OR a field called "path" in attrs.')
+
+        # if it's already a datamodel container (casting as self)
+        # make a shallow copy
+        if issubclass(type(obj), DataModelContainer):
+            self._obj = obj._obj
+        else:
+            self._obj = obj
+
+        GroupSaveable.__init__(
+            self,
+            attrs={'is_big_object': False, 'name': 'DataModelContainer'},
+            parent=parent,
+        )
+
+        if issubclass(type(obj), DataModelContainer):
+            self.data = obj.data
+            self.path = obj.path
+            self.group = obj.group
+
+        elif isinstance(self._obj, str) or isinstance(self._obj, Path):
+            self.data = None
+            self.path, self.group = split_h5path(self._obj)
+            self.attrs['path'] = Path(self._obj).as_posix()
+
+        # store single basic types as metadata too
+        elif any([isinstance(self._obj, t) for t in [float, int, bool, complex]]):
+            self.data = self._obj
+            self.path = None
+            self.group = None
+            self.attrs['data'] = self._obj
+
+        elif isinstance(self._obj, GroupSaveable):
+            self.data = self._obj
+            self.path = None
+            self.group = None
+
+            self.add_child(
+                key=self._obj.name, data=self._obj, is_big_object=self.data is not None
+            )
+
+        else:
+            raise TypeError(f'{type(self._obj)} not supported')
+
+    def load(self) -> RMEMeas:
+        """Load data from self."""
+        return _group_saveable_from_datamodelcontainer(self)
+
+    @classmethod
+    def try_from(cls, obj: Any):
+        """
+        Try to turn obj into a DataModel, and return obj if it already is.
+
+        Parameters
+        ----------
+        obj : Any
+            Any object you think should already be a data model but
+            you aren't quite sure.
+        """
+        try:
+            return cls(obj)
+        except TypeError:
+            return obj
+
+
+class S11(DataModelContainer):
+    """
+    Stores a DataModel that represents an S11 measurement.
+    """
+
+    _SCHEMA_FILE = SCHEMA_DIR / 'S11.json'
+    SCHEMA = _load_json(_SCHEMA_FILE)['definitions']['S11']
+
+    def __init__(self, *data_or_path, **data_or_path_kwargs):
+        DataModelContainer.__init__(self, *data_or_path, **data_or_path_kwargs)
+
+    def load(self) -> RMEMeas:
+        """
+        Load an S11 file from supported formats into an RMEMeas object.
+
+        Supported file formats:
+
+        * Microwave Uncertainty Framework .meas  files in the touchstone s2p format.
+        * RMEMeas group saveable objects formats.
+        * .dut files (NIST calibrations service file format)
+
+        Parameters
+        ----------
+        path : Path
+            Path to the file to be loaded in (.meas, .h5/hdf5, or .dut)
+
+        Returns
+        -------
+        RMEMeas
+            RMEMeas data in the S1P data in the s1p_c format.
+
+        """
+        container = self
+
+        prp = RMEProp(sensitivity=True)
+        convert = prp.propagate(gwex.convert)
+
+        # load from hdf
+        if container.data:
+            return container.data
+
+        else:
+            path = container.path
+            suffix = path.suffix
+
+            if '.h5' == suffix or '.hdf5' == suffix:
+                try:
+                    d = _group_saveable_from_datamodelcontainer(container)
+                except ModuleNotFoundError:
+                    # probably an old MUFmeas naning of the objects,
+                    # try to use the deprecated function
+                    d = _group_saveable_from_deprecatedmufmeas(container)
+
+            # not hdf5 files
+            elif '.meas' in suffix:
+                raise NotImplementedError('not added .meas support yet')
+
+            elif '.dut' in suffix:
+                data = gwex.from_csv(str(path), gwex.dut_s1p)
+                data = gwex.convert(gwex.s1p_c, data)
+                # older code might rename these to something different
+                try:
+                    data = data.rename({'parameter_locations': 'umech_id'})
+                except ValueError:
+                    pass
+                assert data.umech_id[0] == 'nominal'
+
+                d = RMEMeas('sensor_id', data)
+                d.make_umechs_unique(same_uid=True)
+                d.assign_categories_to_all(Origin=path.name + r' $\Gamma$')
+                d.name = path.name
+
+            else:
+                raise ValueError(f'Extension {suffix} not supporte for {path}')
+
+            # convert to s1p_c complex
+            if d.nom.dataformat != gwex.s1p_c.name:
+                try:
+                    d = convert(gwex.s1p_c, d)
+                except KeyError as e:
+                    raise (e)
+
+        return d
+
+
+class Eta(DataModelContainer):
+    """
+    Stores a DataModel that represents an Eta measurement.
+    """
+
+    _SCHEMA_FILE = SCHEMA_DIR / 'Eta.json'
+    SCHEMA = _load_json(_SCHEMA_FILE)['definitions']['Eta']
+
+    def __init__(self, *data_or_path, **data_or_path_kwargs):
+        DataModelContainer.__init__(self, *data_or_path, **data_or_path_kwargs)
+
+    def load(self) -> RMEMeas:
+        """Load data from file or access data in container."""
+        container = self
+
+        # load from hdf format
+        if container.data:
+            return container.data
+
+        else:
+            path = container.path
+            suffix = path.suffix
+
+            if '.h5' == suffix or '.hdf5' == suffix:
+                try:
+                    d = _group_saveable_from_datamodelcontainer(container)
+                except ModuleNotFoundError:
+                    # probably an old MUFmeas naning of the objects,
+                    # try to use the deprecated function
+                    d = _group_saveable_from_deprecatedmufmeas(container)
+
+            elif '.eff' in suffix:
+                df = pd.read_csv(path, sep=r'\s+', comment='#', header=None)
+                # old format, not uncertainties
+                if len(df.columns) == 4:
+                    eta = xr.DataArray(
+                        np.expand_dims(df[3].to_numpy(), -1),
+                        dims=('frequency', 'eta'),
+                        coords={'frequency': df[0].to_numpy(), 'eta': [0]},
+                    )
+                    eta = gwex.as_format(eta, gwex.eff)
+                    d = RMEMeas.from_nom(path.stem, eta)
+                # some format with uncertainties
+                else:
+                    read = False
+                    fmts = [gwex.eff_7, gwex.eff_5, gwex.eff_2]
+                    for fmt in fmts:
+                        if not read:
+                            try:
+                                data = gwex.from_csv(str(path), fmt)
+                                read = True
+                                # print(' ' * 8, 'reading ', path)
+                            except Exception as e:
+                                read = False
+                                # print(e)
+                    if not read:
+                        raise ValueError(f'Failed to read {path} as any of {fmts}')
+                    data = data.sel(col=['eta'])
+                    data = gwex.as_format(data, gwex.eff)
+                    d = RMEMeas(str(path), data)
+
+            else:
+                raise ValueError(
+                    f"Extension {suffix} not supporte for {path}. Must be ['h5','hdf5', or 'eff']"
+                )
+            return d
+
+
+class GC(DataModelContainer):
+    """
+    Stores a DataModel that represents an Eta measurement.
+    """
+
+    _SCHEMA_FILE = SCHEMA_DIR / 'GC.json'
+    SCHEMA = _load_json(_SCHEMA_FILE)['definitions']['GC']
+
+    def __init__(self, *data_or_path, **data_or_path_kwargs):
+        DataModelContainer.__init__(self, *data_or_path, **data_or_path_kwargs)
+
+
+class RFSweep(DataModelContainer):
+    """
+    Stores a pointer to a DataModel representing RFSweep data.
+    """
+
+    _SCHEMA_FILE = SCHEMA_DIR / 'RFSweep.json'
+    SCHEMA = _load_json(_SCHEMA_FILE)['definitions']['RFSweep']
+
+    def __init__(self, *data_or_path, **data_or_path_kwargs):
+        DataModelContainer.__init__(self, *data_or_path, **data_or_path_kwargs)
+
+
+class DCSweep(DataModelContainer):
+    """
+    Stores a pointer to a DataModel representing DCSweep calorimeter data.
+    """
+
+    _SCHEMA_FILE = SCHEMA_DIR / 'DCSweep.json'
+    SCHEMA = _load_json(_SCHEMA_FILE)['definitions']['DCSweep']
+
+    def __init__(self, *data_or_path, **data_or_path_kwargs):
+        DataModelContainer.__init__(self, *data_or_path, **data_or_path_kwargs)
+
+
+class ThermoelectricFitCoefficients(DataModelContainer):
+    """DataModel that contains fit coefficients for a thermoelectric sensor."""
+
+    def __init__(self, *data_or_path, **data_or_path_kwargs):
+        DataModelContainer.__init__(self, *data_or_path, **data_or_path_kwargs)
+
+
+# %% Things that store data models in some sort of mapping
+class ParsedRFSweep(SerialDictionary):
+    """Dictionary of parsed RFSweep data measured in a microcalorimeter."""
+
+    _SCHEMA_FILE = SCHEMA_DIR / 'ParsedRFSweep.json'
+    SCHEMA = _load_json(_SCHEMA_FILE)['definitions']['ParsedRFSweep']
+
+    def __init__(self, d: dict | Path | zip):
+        SerialDictionary.__init__(self, d, schema=self.SCHEMA)
+        for k, v in self.items():
+            self[k] = RFSweep.try_from(v)
+
+
+class ParsedDCSweep(SerialDictionary):
+    """Dictionary of parsed DCSweep data measured in a microcalorimeter."""
+
+    _SCHEMA_FILE = SCHEMA_DIR / 'ParsedDCSweep.json'
+    SCHEMA = _load_json(_SCHEMA_FILE)['definitions']['ParsedDCSweep']
+
+    def __init__(self, d: dict | Path | zip):
+        SerialDictionary.__init__(self, d, schema=self.SCHEMA)
+        for k, v in self.items():
+            self[k] = DCSweep.try_from(v)
+
+
+class EtaHistorical(SerialDictionary):
+    """
+    Configuration of paths to historical datasets.
+    """
+
+    _SCHEMA_FILE = SCHEMA_DIR / '.json'
+    SCHEMA = load_config(SCHEMA_DIR / 'EtaHistorical.json')
+
+    def __init__(self, obj: dict | Path | zip):
+        SerialDictionary.__init__(self, obj, schema=self.SCHEMA)
+
+
+# %% Mappings for the different inputs used to calculate a correction factor
+class CorrectionFactorModelInputs(SerialDictionary):
+    """
+    Mapping of all the measurement inputs required for computing a correction factor.
+
+    Maps each every combination of reflective and load standard sensor used in a series
+    of correction factor measurement, to the neccesary RF sweep measurements, reflection
+    coefficients, and measurement of the splitter's port to port mismatch.
+    """
+
+    SCHEMA = _load_file(SCHEMA_DIR / 'CorrectionFactorDataInputs.json')
+
+    def __init__(self, obj: dict | Path | zip):
+        SerialDictionary.__init__(self, obj, schema=self.SCHEMA)
+        # cast into their containing objects
+        for row in self.values():
+            row['splitter'] = S11.try_from(row['splitter'])
+            for key in ['special', 'standard']:
+                row[key]['s11'] = S11.try_from(row[key]['s11'])
+                row[key]['clrm_coeffs'] = ThermoelectricFitCoefficients.try_from(
+                    row[key]['clrm_coeffs']
+                )
+                row[key]['parsed_calibration'] = ParsedRFSweep(
+                    row[key]['parsed_calibration']
+                )
+            self._cache = {'s11': {}}
+
+
+# %% Measurement configuration classes
+class RFSensorMasterList(SerialDictionary):
+    SCHEMA = SCHEMA = load_config(SCHEMA_DIR / 'RFSensorMasterList.json')
+
+    def __init__(self, obj: dict | Path):
+        SerialDictionary.__init__(self, obj, schema=self.SCHEMA)
+
+
+class RFSweepMeasurementDescription(SerialDictionary):
+    SCHEMA = _load_schema_from_definition('RFSweepMeasurementDescription')
+
+    def __init__(self, obj: dict | Path):
+        SerialDictionary.__init__(self, obj, schema=self.SCHEMA)
+
+
+class RFSweepLevellingSettings(SerialDictionary):
+    SCHEMA = _load_schema_from_definition('RFSweepLevellingSettings')
+
+    def __init__(self, obj: dict | Path):
+        SerialDictionary.__init__(self, obj, schema=self.SCHEMA)
+
+
+class RFSweepSignalConfig(SerialDictionary):
+    """Mapping of raw-data columns to a model of each sensor and the calorimter's thermopile element for an RF sweep."""
+
+    SCHEMA = load_config(SCHEMA_DIR / 'RFSweepSignalConfig.json')
+
+    def __init__(self, obj: dict | Path):
+        SerialDictionary.__init__(self, obj, schema=self.SCHEMA)
+
+
+class RFSweepRunSettingsColumns(SerialDictionary):
+    SCHEMA = _load_schema_from_definition('RFSweepRunSettingsColumns')
+
+    def __init__(self, obj: dict | Path):
+        SerialDictionary.__init__(self, obj, schema=self.SCHEMA)
+
+
+class RFSweepStatsSettings(SerialDictionary):
+    SCHEMA = _load_schema_from_definition('RFSweepStatsSettings')
+
+    def __init__(self, obj: dict | Path):
+        SerialDictionary.__init__(self, obj, schema=self.SCHEMA)
+
+
+class RFSweepOutputSettings(SerialDictionary):
+    SCHEMA = _load_schema_from_definition('RFSweepOutputSettings')
+
+    def __init__(self, obj: dict | Path):
+        SerialDictionary.__init__(self, obj, schema=self.SCHEMA)
+
+
+class RFSweepMeasurementMode(SerialDictionary):
+    SCHEMA = _load_schema_from_definition(
+        'RFSweepInstrumentRoles', definition_name='RFSweepMeasurementMode'
+    )
+
+    def __init__(self, obj: dict | Path):
+        SerialDictionary.__init__(self, obj, schema=self.SCHEMA)
+
+
+class RFSweepConfiguration(SerialDictionary):
+    SCHEMA = load_config(SCHEMA_DIR / 'RFSweepConfiguration.json')
+
+    def __init__(self, obj: dict | Path):
+        obj['stats_settings'] = RFSweepStatsSettings(obj['stats_settings'])
+        obj['output_settings'] = RFSweepOutputSettings(obj['output_settings'])
+        obj['measurement_description'] = RFSweepMeasurementDescription(
+            obj['measurement_description']
+        )
+        obj['levelling_settings'] = RFSweepLevellingSettings(obj['levelling_settings'])
+        obj['run_settings_columns'] = RFSweepRunSettingsColumns(
+            obj['run_settings_columns']
+        )
+        obj['signal_config'] = RFSweepSignalConfig(obj['signal_config'])
+        SerialDictionary.__init__(self, obj, self.SCHEMA)
+
+
+class DCSweepConfiguration(SerialDictionary):
+    SCHEMA = load_config(SCHEMA_DIR / 'DCSweepConfiguration.json')
+
+    def __init__(self, obj: dict | Path):
+        SerialDictionary.__init__(self, obj, schema=self.SCHEMA)
+
+
+class RFSweepParserConfig(SerialDictionary):
+    """Defines settings for parsing output data of a parser."""
+
+    SCHEMA = load_config(SCHEMA_DIR / 'RFSweepParserConfig.json')
+
+    def __init__(self, obj: dict | Path):
+        SerialDictionary.__init__(self, obj, schema=self.SCHEMA)
+
+
+# %% misc loader functions
+
+
+def _group_saveable_from_datamodelcontainer(
+    data_model: DataModelContainer,
+) -> RMEMeas:
+    """
+    Pass through data or load in data from an HDF5 group saveable.
+
+    Parameters
+    ----------
+    data : object | Path
+        File path for data or an object.
+    group : _type_, optional
+        _description_, by default None
+
+    Returns
+    -------
+    object
+        _description_
+    """
+    data = data_model.data
+    path = data_model.path
+    group = data_model.group
+    if data is not None:
+        return data
+    else:
+        with h5py.File(path, 'r') as f:
+            g = f
+            if group is not None:
+                g = f[group]
+            data = load_object(g, load_big_objects=True)
+            # incase the person pointed to a container, and not the data set itself
+            if isinstance(data, DataModelContainer):
+                data = data.data
+
+    return data
+
+
+def _group_saveable_from_deprecatedmufmeas(
+    data_model: DataModelContainer,
+) -> RMEMeas:
+    """
+    Pass through data or load in data from an HDF5 group saveable.
+
+    Parameters
+    ----------
+    data : object | Path
+        File path for data or an object.
+    group : _type_, optional
+        _description_, by default None
+
+    Returns
+    -------
+    object
+        _description_
+    """
+    data = data_model.data
+    path = data_model.path
+    group = data_model.group
+    if data is not None:
+        return data
+    else:
+        with h5py.File(path, 'r') as f:
+            g = f
+            if group is not None:
+                g = f[group]
+            data = RMEMeas.from_h5(g)
+
+    return data

@@ -1,0 +1,49 @@
+{
+    "title": "Configuration of an RF Sweep",
+    "type": "object",
+    "properties": {
+        "measurement_description": {
+            "$ref": "RFSweepMeasurementDescription.json#/definitions/RFSweepMeasurementDescription",
+            "description": "Descriptive metadata about the experiment."
+        },
+        "output_settings": {
+            "$ref": "RFSweepOutputSettings.json#/definitions/RFSweepOutputSettings",
+            "description": "Describes data ouput settings for the data-record."
+        },
+        "levelling_settings": {
+            "$ref": "RFSweepLevellingSettings.json#/definitions/RFSweepLevellingSettings",
+            "description": "Describes the configuration for active RF levelling procedures."
+        },
+        "stats_settings": {
+            "$ref": "RFSweepStatsSettings.json#/definitions/RFSweepStatsSettings",
+            "description": "Describes statistical tests used for determining if the thermopile element is level."
+        },
+        "column_model_mapping": {
+            "$ref": "RFSweepColumnModelMapping.json",
+            "description": "Maps the columns of the data-record file to a model of the sensor."
+        },
+        "run_settings_columns": {
+            "$ref": "RFSweepRunSettingsColumns.json#/definitions/RFSweepRunSettingsColumns",
+            "description": "Describes the names of the columns from the run settings file. Shouldn't change."
+        },
+        "gpib_interface": {
+            "type": "string",
+            "description": "Address to the GPIB interface being used (e.g. GPIB0::INTFC)"
+        },
+        "instruments": {
+            "type": "object",
+            "properties":{
+                "names":{
+                    "type":"array",
+                    "items":{
+                        "type":"string"
+                    }
+                }
+            },
+            "additionalProperties": {
+                "$ref": "RFSweepInstrumentRoles.json#/definitions/RFSweepInstrumentRole",
+                "description": "Additional properties are all instrument roles."
+            }
+        }
+    }
+}

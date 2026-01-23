@@ -1,0 +1,10 @@
+{
+    "definitions": {
+        "RFSweep": {
+            "description": "HDF5Group of an RFSweep dataset.",
+            "$ref$":"DataModelContainer.json#/definitions/DataModelContainer",
+            "examples":["path/to/data.hdf5/path/to/sweep"],
+            "additionalProperties": false
+        }
+    }
+}

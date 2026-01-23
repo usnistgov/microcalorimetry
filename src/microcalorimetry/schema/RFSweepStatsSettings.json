@@ -1,0 +1,46 @@
+{
+    "definitions": {
+        "RFSweepStatsSettings": {
+            "description": "Defines the names of the columns in the data-record.",
+            "properties":{
+                "names":{
+                    "type":"number",
+                    "description":"How long to wait before starting the sweep (in seconds).",
+                    "minimum":0
+                },      
+                "initial_wait":{
+                    "type":"number",
+                    "description":"Warm up time before the measurement starts (in seconds).",
+                    "minimum":0
+                },          
+                "minimum_wait":{
+                    "type":"number",
+                    "description":"Minimum time to wait before stability tests are allowed to pass (in seconds).",
+                    "minimum":0
+                },
+                "use_traditional_stats":{
+                    "type":"boolean",
+                    "description":"If True, use kendal test and runs test to check stability."
+                },
+                "stats_window":{
+                    "type":"number",
+                    "description":"Thermopile voltage must be stable over this time period to proceed to the next frequency (in seconds)."
+                },
+                "stats_Rcv":{
+                    "type":"number",
+                    "description":"Used by runs test. Hiher = more stringent test."
+                },
+                "stats_Tcv":{
+                    "type":"number",
+                    "description":"Used by Kendall test. Higher = more stringent."
+                },
+                "measurement_interval":{
+                    "type":"number",
+                    "description":"Thermopile voltage sampling interval for computing stability stats in seconds."
+                }              
+            },
+            "required":["initial_wait","minimum_wait","use_traditional_stats","stats_window","stats_Rcv","stats_Tcv","measurement_interval"],
+            "additionalProperties":false
+        }
+    }
+}

@@ -1,0 +1,71 @@
+{
+    "definitions":{
+        "ParsedRFSweep":{
+            "type": "object",
+            "description": "Output of a parsed calibration measurement. Each output is a an RMEMeas object with shape (n,) where n is a coordinate dimension called (frequency) in GHz and the outputs are real valued numbers corresponding to the measurement result.\n",
+            "properties": {
+                "e_off": {
+                    "$ref": "RFSweep.json#/definitions/RFSweep",
+                    "description": "Calorimeter thermopile voltages in RF off state."
+                },
+                "e_on": {
+                    "$ref": "RFSweep.json#/definitions/RFSweep",
+                    "description": "Calorimeter thermopile voltages in RF on state."
+                },
+                "E_off": {
+                    "$ref": "RFSweep.json#/definitions/RFSweep",
+                    "description": "Power inferred by the thermopile in calorimeters RF off state."
+                },
+                "E_on": {
+                    "$ref": "RFSweep.json#/definitions/RFSweep",
+                    "description": "Power inferred by the thermopile in calorimeters RF on state."
+                },
+                "zeta": {
+                    "$ref": "RFSweep.json#/definitions/RFSweep",
+                    "description": "Uncorrected effective efficiency of sensor 2 (internal DUT)"
+                },
+                "e_p2_off": {
+                    "$ref": "RFSweep.json#/definitions/RFSweep",
+                    "description": "Thermopile voltages of sensor at port 2 in RF off state."
+                },
+                "e_p2_on": {
+                    "$ref": "RFSweep.json#/definitions/RFSweep",
+                    "description": "Thermopile voltages of sensor at port 2 in RF on state."
+                },
+                "p2_fast": {
+                    "$ref": "RFSweep.json#/definitions/RFSweep",
+                    "description": "RF power measured by sensor 2 (internal DUT) \\n\\n during the fast RF off portion of a frequency point."
+                },
+                "p2_slow": {
+                    "$ref": "RFSweep.json#/definitions/RFSweep",
+                    "description": "RF power measured by sensor 2 (internal DUT)  \\n\\n during the slow RF on portion of a frequency point"
+                },
+                "p3_fast": {
+                    "$ref": "RFSweep.json#/definitions/RFSweep",
+                    "description": "RF power measured by sensor 3 (external sidearm) \\n\\n during the fast RF off portion of a frequency point."
+                },
+                "p3_slow": {
+                    "$ref": "RFSweep.json#/definitions/RFSweep",
+                    "description": "RF power measured by sensor 3 (external sidearm)  \\n\\n during the slow RF on portion of a frequency point"
+                },
+                "p2dc_on":{
+                    "$ref": "RFSweep.json#/definitions/RFSweep",
+                    "description": "RF power measured by sensor 2 (internal DUT) \\n\\n during the fast RF off portion of a frequency point."
+                },
+                "p2dc_off_fast": {
+                    "$ref": "RFSweep.json#/definitions/RFSweep",
+                    "description": "RF power measured by sensor 2 (internal DUT) \\n\\n during the fast RF off portion of a frequency point."
+                },
+                "p2dc_off_slow": {
+                    "$ref": "RFSweep.json#/definitions/RFSweep",
+                    "description": "RF power measured by sensor 2 (internal DUT)  \\n\\n during the slow RF on portion of a frequency point"
+                }
+            },
+            "required": [
+                "e_off",
+                "e_on"
+            ],
+            "additionalProperties":false
+        }
+    }
+}

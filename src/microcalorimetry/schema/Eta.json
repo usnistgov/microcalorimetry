@@ -1,0 +1,10 @@
+{
+    "definitions": {
+        "Eta": {
+            "description": "File, HDF5Group, or in memory representaion of effective efficiency.",
+            "$ref$":"DataModelContainer.json#/definitions/DataModelContainer",
+            "examples":["eta_file.eff","data.h5/eff_group"],
+            "additionalProperties": false
+        }
+    }
+}

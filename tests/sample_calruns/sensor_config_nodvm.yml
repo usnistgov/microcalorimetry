@@ -1,0 +1,8 @@
+S3:
+  columns:
+    p_col: P3 (W) #,str,Column containing power measurements for commercial power meters
+e:
+  nvm_col: NVM_volts
+  coeffs:
+    coeffs: 'O:\67201\Power\Experiments\2025\24CalorimeterAssembly\SN 000\Step4-gc\C24S002\c000\clrm_coeffs.hdf5' #,str,File path to HDF5 File containing caloriemter sensitivity coefficients
+    coeffs-group: coeffs #,str,Group containing sensitivity coefficients for calorimeter
