@@ -1,4 +1,4 @@
-# Rocky Mountain Instruments
+# Microcalorimetry
 
 > [!NOTE]
 > This software is in active and early development by the RF power calibrations service at NIST to support
