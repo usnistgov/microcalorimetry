@@ -561,6 +561,11 @@ def gc_device_row(
     solution = solution.rename({old_d: 'row'})
     solution = solution.assign_coords({'row': [0]})
     solution = solution.expand_dims({'col': [0]}, axis=-1)
+    # drop unused scalar coords, dont want them.
+    for k in solution.coords:
+        if k not in solution.dims:
+            solution = solution.drop_vars(k)
+
 
     # common function for building a single observation in matrix
     def obs(cxi, csi, i):
