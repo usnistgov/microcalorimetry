@@ -23,6 +23,7 @@ def _gui(no_console_stdout: bool = False):
     import microcalorimetry.measurements.dcsweep as dcsweep
     import microcalorimetry.measurements.rfsweep as rfsweep
     import microcalorimetry.analysis as anl
+    import microcalorimetry.export as export
 
     app = GUI(
         'microcalorimetry',
@@ -49,8 +50,8 @@ def _gui(no_console_stdout: bool = False):
             'parse': rfsweep.parse,
             'view': rfsweep.view,
             'run': rfsweep._main.run_gui,
-            'make_settled_runlist': rfsweep.generate_settled_runlist,
-            'make_runlist_from_loss': rfsweep.runlist_from_loss,
+            'make settled runlist': rfsweep.generate_settled_runlist,
+            'make runlist from loss': rfsweep.runlist_from_loss,
         },
         output_group_saveable=['parse'],
     )
@@ -58,11 +59,19 @@ def _gui(no_console_stdout: bool = False):
     app.add_function_tab(
         'analysis',
         functions={
-            'make_k_coeffs': anl.make_k_coeffs,
-            'make_eta': anl.make_eta,
-            'review_eta': anl.review_eta,
+            'make k coeffs': anl.make_k_coeffs,
+            'make eta': anl.make_eta,
+            'review eta': anl.review_eta,
         },
         output_group_saveable=['make_k_coeffs', 'make_eta'],
+    )
+
+    app.add_function_tab(
+        'export',
+        functions={
+            'as doteff': export.as_doteff,
+        },
+        output_group_saveable=[],
     )
 
     app.mainloop()
