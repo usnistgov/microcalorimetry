@@ -65,7 +65,7 @@ def test_C24N118_from_scratch(
     print(dc_parsed.keys())
     # make sensitivity coeffs for each NVM column
     C24S002_coeffs, fig = anl.make_k_coeffs(
-        dc_parsed, p_of_e=True, deg=2, make_plots=False
+        dc_parsed, p_of_e=False, deg=2, make_plots=False
     )
 
     if resave_reference_results:
@@ -481,6 +481,15 @@ def test_S24P02_from_scratch(
 
     # Points to the RF and DC metadata needed for each sensor
     big_config = {
+        'S24P02': {
+            'is_load': True,
+            'dc_sweep_metadata': LOCAL
+            / Path(
+                r'sample_sensitivity_runs/S24P02_c000_krun__2/c000_krun__metadata.csv'
+            ),
+            'rf_sweep_metadata': LOCAL
+            / Path(Path(r'sample_calruns/S24P02/c000_gc_r000/20250627_metadata.csv')),
+        },
         'S24S03': {
             'is_load': False,
             'dc_sweep_metadata': LOCAL
@@ -516,15 +525,6 @@ def test_S24P02_from_scratch(
                 / Path(r'sample_calruns/S24S01/c000_calrun_2/20250409_metadata.csv'),
             ],
         },
-        'S24P02': {
-            'is_load': True,
-            'dc_sweep_metadata': LOCAL
-            / Path(
-                r'sample_sensitivity_runs/S24P02_c000_krun__2/c000_krun__metadata.csv'
-            ),
-            'rf_sweep_metadata': LOCAL
-            / Path(Path(r'sample_calruns/S24P02/c000_gc_r000/20250627_metadata.csv')),
-        },
     }
 
     # this parses the RF and DC sweeps
@@ -543,7 +543,7 @@ def test_S24P02_from_scratch(
             parsed_dc, figs = dcsweep.parse(Path(sweep_configs['dc_sweep_metadata']))
 
             k, figs = anl.make_k_coeffs(
-                parsed_dc, constrain_zero=True, p_of_e=True, deg=2, make_plots=False
+                parsed_dc, constrain_zero=True, p_of_e=False, deg=3, make_plots=False
             )
 
             # assign the coefficients we just calculated
@@ -659,11 +659,11 @@ if __name__ == '__main__':
     re_calculate = True
     mpl.use('QtAgg')
     if re_calculate:
-        fig = test_C24N118_from_scratch(resave_reference_results=True)
+        # fig = test_C24N118_from_scratch(resave_reference_results=False)
 
         fig = test_S24P02_from_scratch(
             # dont switch this to True unless you want to override reference data.
-            resave_reference_results=True,
+            resave_reference_results=False,
             make_plots=True,
         )
     # anl.review_eta(MUTABLE / "test_C24N118_from_scratch.h5/new_eta", HISTORICAL_DATA)
