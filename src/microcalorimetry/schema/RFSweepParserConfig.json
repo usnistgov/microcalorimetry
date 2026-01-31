@@ -53,7 +53,11 @@
                 },
                 "RF_on_average_window": {
                     "type": "number",
-                    "description": "time window (in seconds) to average over when evaluating long timescle settled values."
+                    "description": "time window (in seconds) to average over when evaluating long timescale settled values."
+                },
+                "stats_window_override": {
+                    "type": "number",
+                    "description": "Override the statswindow (in seconds) to average over when evaluating long timescale RF off values."
                 }
             },
             "required":["instr_timing_tolerance","RF_on_average_window"]

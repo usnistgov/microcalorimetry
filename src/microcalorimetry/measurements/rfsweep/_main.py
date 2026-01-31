@@ -19,6 +19,7 @@ import pandas as pd
 import json
 import click
 from itertools import cycle
+from decimal import Decimal
 
 __all__ = ['run', 'parse', 'view', 'generate_settled_runlist', 'runlist_from_loss']
 
@@ -400,6 +401,8 @@ def parse(
     analysis_config: configs.RFSweepParserConfig = None,
     verbose: bool = False,
     make_plots: bool = False,
+    plot_segments_analysis: list[int] = [0,-1],
+    plot_all_segments_analysis: bool = False
 ) -> tuple[dict[RMEMeas], list[plt.Figure]]:
     """
     Parse a microccalorimeter run to produce data with uncertainties.
@@ -414,6 +417,11 @@ def parse(
         If True, prints info about the analysis. Default is True
     make_plots : bool, optional
         Makes plots if True.
+    plot_segments_analysis : list[int]
+        What segment of each run to plot.
+    plot_all_segments_analysis : bool
+        If True, when making plots plot every segments
+        analysis.
 
     Returns
     -------
@@ -455,6 +463,23 @@ def parse(
         run.load()
         run.analyze()
         metadata_dict.update({str(k): v for k, v in run.expt.config.items()})
+
+        # make detailed analysis plots
+        if make_plots:
+            for signal, analyzer in run.analyzers.items():
+                try:
+                    analyzer.plot_analysis
+                except AttributeError:
+                    print(f"{signal} {analyzer} has no plot analysis method. Skipping" )
+                    continue
+                for si, segment in enumerate(run.segments):
+                    called_out = si in plot_segments_analysis
+                    is_end = si == len(run.segments)-1 and (-1 in plot_segments_analysis)
+                    if called_out or is_end or plot_all_segments_analysis:
+                        figure = analyzer.plot_analysis(segment)
+                        figure.suptitle(f"{signal} signal \n run {Path(metadata_path).parent.name} ; segment {si}")
+                        figures.append(figure)
+
         runs.append(run)
 
     # use the last signal config
@@ -462,9 +487,65 @@ def parse(
 
     # format data output into rmellipse objects
     c = microparser.Campaign(runs, Path.cwd(), 'rfsweep')
+
+
+
+    # generate noise plots
+    if make_plots:
+        # if make_plots:
+        data_df = c.output_segments(fmt_for='pandas')
+        for signal, sconfig in signal_config.items():
+            input_signals = sconfig['input_signals']
+            if isinstance(input_signals, str):
+                input_signals = [input_signals]
+            for ins in input_signals:
+                # plot the deviation of the RF on value as a function
+                # of the step number
+                fig,ax = plt.subplots(1,1)
+                try:
+                    column = sconfig[ins]['column']
+                    fig.suptitle(f'{signal} \n {column} standard deviation')
+                    ax.set_xlabel('Step Number')
+                    ax.set_ylabel(f'{ins} ({sconfig[ins]['units']})')
+                    for mode in ['on']:
+                        dev = data_df[f'{column}_{mode}_dev']
+                        mean = np.mean(dev)
+                        mean_str = r'$\mu$ = {:0.2E}'.format(Decimal(mean))
+                        ax.plot(dev, 'o', label = f'RF {mode.title()} : {mean_str}')
+    
+                    ax.legend(loc = 'best')
+                    figures.append(fig)
+                except Exception as e:
+                    plt.close(fig)
+                    print(f"Encountered error plotting signal {signal}:{ins} std \n {type(e)}: {e}")
+
+
+                fig,ax = plt.subplots(2, 1, figsize = (8,8))
+                try:
+                    column = sconfig[ins]['column']
+                    fig.suptitle(f'{signal} \n {column} standard deviation')
+                    ax[1].set_xlabel('Before (left) and After (right)')
+                    ax[0].set_ylabel(f'STD of {ins} ({sconfig[ins]['units']})')
+                    ax[1].set_ylabel(f'STD of {ins} (ppm)')
+                    for ir, run in enumerate(c.run_list):
+                        for iseg, segment in enumerate(run.segments):
+                            i_off=  segment.results[f'{column}_off_i']
+                            f_off =  segment.results[f'{column}_off_f']
+                            i_off_dev =  segment.results[f'{column}_off_i_dev']
+                            f_off_dev =  segment.results[f'{column}_off_f_dev']
+                            label = f'{run.name} : segment {iseg}'
+                            ax[0].plot([0,1], [i_off_dev, f_off_dev],'o--', label = label)
+                            ax[1].plot([0,1], [i_off_dev/i_off*1e6, f_off_dev/f_off*1e6],'o--')
+                    ax[0].legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0)
+                    fig.tight_layout()
+                    figures.append(fig)
+                except Exception as e:
+                    plt.close('fig')
+                    print(f"Encountered error plotting  {signal}:{ins} segment off \n {type(e)}: {e}")
+                    
+    # format fata for rmellipse calculataions
     data = c.output_segments(fmt_for='rmellipse', include_specs=True)
 
-    # generate QA plots
 
     ep = run.expt.config
 
@@ -682,7 +763,8 @@ def parse(
     # Make a bunch of plots against frequenecy and step number
     # For 'at a glance' analysis
     if make_plots:
-        for k, v in outputs.items():
+        plot_outputs = {k:v for k,v in outputs.items() if k in ['zeta']}
+        for k, v in plot_outputs.items():
             fig, ax = plt.subplots(1, 2)
             lb, ub = v.confint(0.95)
             ax[0].plot(v.nom.frequency, v.nom, 'ko')
