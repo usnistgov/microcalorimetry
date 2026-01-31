@@ -128,7 +128,7 @@ def parse(
     avg_window_shiftback_secs: float = 0,
     imm_step: bool = False,
     make_plots: bool = False,
-    repeatability_id: str = '',
+    repeatability_id: str = 'dc_sweep',
 ) -> tuple[configs.ParsedDCSweep, list[plt.Figure]]:
     r"""
     Load and analyze a sensitivity run.
@@ -165,7 +165,8 @@ def parse(
     make_plots : bool, optional
         If true, generates plots. The default is True.
     repeatability_id : str, optional
-        If provided, used as id for uncertainty origin in calculation. The default is ''.
+        If provided, used as id for uncertainty origin in calculation.
+        The default is 'dc_sweep'.
 
     Returns
     -------

@@ -26,7 +26,7 @@ class FileFrame(customtkinter.CTkFrame):
 
         # button for managing plot settings
         self.plotmenu = customtkinter.CTkOptionMenu(
-            self, values=['Export All'], command=self.plotmenu_callback
+            self, values=['Export All', 'Close All'], command=self.plotmenu_callback
         )
         self.plotmenu.grid(row=0, column=1, padx=(0, 10), sticky='nwe')
         self.plotmenu.set('Plots')
@@ -56,11 +56,22 @@ class FileFrame(customtkinter.CTkFrame):
             self.button_open(file=file)
 
     def plotmenu_callback(self, choice, file=None):
-        self.plotmenu.set('plots')
+        self.plotmenu.set('Plots')
         if choice == 'Export All':
             self.plotmenu_export_all()
+        if choice == 'Close All':
+            self.plotmenu_close_all()
         else:
             raise Exception(f'{choice} not recognized')
+
+    def plotmenu_close_all(self):
+        tabnames = list(self.graphicstabs.plots_dict.keys())
+        for tabname in tabnames:
+            try:
+                self.graphicstabs.delete(tabname)
+            except Exception as e:
+                print(f"Failed to close {tabname} for {e}")
+        self.graphicstabs.close_hidden_tabs()
 
     def plotmenu_export_all(self):
         dialog = customtkinter.CTkInputDialog(
