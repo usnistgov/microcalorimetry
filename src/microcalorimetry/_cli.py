@@ -63,7 +63,7 @@ def _gui(no_console_stdout: bool = False):
             'make eta': anl.make_eta,
             'review eta': anl.review_eta,
         },
-        output_group_saveable=['make_k_coeffs', 'make_eta'],
+        output_group_saveable=['make k coeffs', 'make eta'],
     )
 
     app.add_function_tab(
