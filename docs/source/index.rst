@@ -81,6 +81,7 @@ Table of Contents
 .. toctree::
    :maxdepth: 3
 
+   package_structure/index.rst
    schemas/index.rst
    auto_examples/index.rst
    cli.rst
