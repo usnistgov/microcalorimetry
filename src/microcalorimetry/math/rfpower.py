@@ -90,11 +90,20 @@ def openloop_thermoelectric_power(
                 else:
                     xk = -1 / (3 * a) * (b + zeta**k * C + delta_0 / (zeta**k * C))
                 x[k] = xk
-
             # check for the real root between 0 and 100
             # that should be the one that indicates the power
             # reading
-            p.data[..., :] = np.real(x[0]).astype(float)
+            # pick the right root:
+            for k in range(3):
+                # pick a sample
+                sample = list(np.zeros(len(x[k].shape), dtype=int))
+                xi = x[k][*sample]
+                if np.isclose(np.imag(xi), 0, atol=1e-10):
+                    if np.real(xi) > -1e-3 and np.real(xi) < 50e-3:
+                        good_root = k
+
+            p.data[..., :] = np.real(x[good_root]).astype(float)
+
         else:
             p = fitting.polyroot2(coeffs, y=e)
 

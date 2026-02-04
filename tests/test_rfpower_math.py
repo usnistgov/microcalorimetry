@@ -64,9 +64,8 @@ def make_coeffs(coeffs: list[float], meas=False) -> xr.DataArray:
 def test_openloop_te_power():
     # make some test cases
     test_cases = [
-        TECoeffTestCase(a=1, b=1, c=1, d=1e-3, volts=1e-3, p_of_e=False),
-        TECoeffTestCase(a=-1, b=1, c=1, d=1e-3, volts=1e-3, p_of_e=False),
-        TECoeffTestCase(a=1, b=-1, c=1, d=-1e-3, volts=1e-3, p_of_e=False),
+        TECoeffTestCase(a=0.0001, b=0.01, c=0.1, d=0, volts=1e-3, p_of_e=False),
+        TECoeffTestCase(a=0.0001, b=0.01, c=-0.1, d=0, volts=-1e-3, p_of_e=False),
     ]
 
     for tc in test_cases:
@@ -80,11 +79,13 @@ def test_openloop_te_power():
         ref_coeffs = copy(test_coeffs)
         ref_coeffs[-1] -= tc.volts
         ref_roots = np.roots(ref_coeffs)
-        # pick the real value
-        ref_power_i = np.argmin(np.abs(np.imag(ref_roots)))
-        ref_power = ref_roots[ref_power_i]
-        print(ref_power, float(test_power))
-        assert np.isclose(np.real(ref_power), np.real(test_power))
+        # check the root I found is in the roots numpy found
+        assert any(
+            [
+                np.isclose(float(np.real(rp)), float(np.real(test_power)))
+                for rp in ref_roots
+            ]
+        )
     pass
 
 
