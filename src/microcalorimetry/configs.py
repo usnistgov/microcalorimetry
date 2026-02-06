@@ -30,8 +30,10 @@ import numpy as np
 
 # file formats
 import json
-from typing import Any
+from typing import Any, Callable
 from yaml import safe_load
+import importlib.util
+import sys
 
 # I think at somepoint this should be updated to a new draft
 from referencing.jsonschema import DRAFT7 as DRAFT
@@ -222,6 +224,8 @@ def load_config(obj: Any | str | Path | list[Path | str], schema: dict | Path = 
 
 
 class SerialDictionary(dict):
+    """A typed dictionary defined by a JSON schema that can be laoded from a file."""
+
     def __init__(
         self, obj: dict | str | Path | zip | list[Path | str], schema: dict | Path
     ):
@@ -232,6 +236,73 @@ class SerialDictionary(dict):
         # make a shallow copy
         for k in obj:
             self[k] = obj[k]
+
+
+class PythonFunction:
+    """
+    A callable object that can handle file path pointers or module specs.
+
+    e.g "python_module.py:function_name" will import function_name from
+    the python module, so file paths to functionc an be provided.
+
+    Or, module.submodule:function will import function from module.submodule.
+
+    Or, you can just provide a function. This in an interface object for
+    providing user defined funtions via CLI's or GUI's.
+    """
+
+    def __init__(self, obj: str | Path | Callable):
+        """
+        Provide either a path to a module, or a pathspec, or a function itself.
+
+        Parameters
+        ----------
+        obj : str | Path | Callable
+            Either a function, or a path spec (e.g. module.submodule:function_name)
+            or a path to a python file (e.g. path/to/file.py:function_name)
+
+        Returns
+        -------
+        None.
+
+        """
+        if isinstance(obj, str) or isinstance(obj, Path):
+            # check if a valid file path
+            path = Path(':'.join(str(obj).split(':')[:-1]))
+            fun = str(obj).split(':')[-1]
+
+            if path.exists():
+                self._fn = self._from_path(path, fun)
+                return
+
+            # path is probably a module at this point
+            self._fn = self._from_module_spec(path, fun)
+        # assume anything else is just a function
+        else:
+            self._fn = obj
+
+    @staticmethod
+    def _from_path(file: Path, fname: str):
+        module_name = Path(file).stem
+        spec = importlib.util.spec_from_file_location(module_name, Path(file).resolve())
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return getattr(module, fname)
+
+    @staticmethod
+    def _from_module_spec(name: str, fname: str):
+        module = importlib.import_module(str(name))
+        return getattr(module, fname)
+
+    @property
+    def name(self):
+        return self._fn.__name__
+
+    def __call__(self, *args, **kwargs):
+        """
+        Call the associated function.
+        """
+        return self._fn(*args, **kwargs)
 
 
 # %% Data Model Classes that store pointers to data

@@ -10,8 +10,9 @@ import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
 import itertools
+from typing import Callable
 
-__all__ = ['make_eta', 'review_eta']
+__all__ = ['make_eta', 'review_eta', 'make_eta_historical_model']
 
 
 def review_eta(eta: configs.Eta, historical_data: configs.EtaHistorical, k: int = 2):
@@ -100,13 +101,325 @@ def review_eta(eta: configs.Eta, historical_data: configs.EtaHistorical, k: int 
     return fig_hist, fig_budget
 
 
+def interp_eta_hist(
+    hist: configs.EtaHistorical,
+    frequency_bounds_tol: float = 0,
+    grad_tol: float = None,
+    min_required: int = 3,
+    nominal_only: bool = True,
+) -> tuple[configs.EtaHistorical, configs.EtaHistorical]:
+    """
+    Interpolates a set of historical Eta measurements.
+
+    Selects measurements that span the super set of freqeuncy ranges
+    within a specified tolerance.
+
+    Parameters
+    ----------
+    hist : configs.EtaHistorical
+        List of historical data to down select.
+    frequency_bounds_tol : float, optional
+        Bounds by which to check the input data spans the
+        range. The default is 0.5.
+
+    Returns
+    -------
+    no_interp : configs.EtaHistorical
+        Input values not interpolated
+    interp : configs.EtaHistorical
+        Output values interpolated down.
+    grad_tol : float, optional
+        Requires interpolated values to be within
+        the same gradient tolerance, this is to avoid interpolate
+        values smoothing over values where a peak is known to exist.
+    min_required : int, optional
+        Per frequency point, requires at least this any points
+        to meet the gradient tolerance to include the point in the model.
+    nominal_only : bool, optional
+        Removes uncertainty mechanism if asked to.
+        Default is True
+    """
+    sensor_data = configs.EtaHistorical(hist)
+
+    # if nominal only is set,
+    # this will reduce it down
+    # to only a nominal value
+    sel = None
+    if nominal_only:
+        sel = []
+    noms_only = {
+        k: configs.Eta(v).load().usel(umech_id=sel) for k, v in sensor_data.items()
+    }
+    flist = [n.nom.frequency for n in noms_only.values()]
+    flist = np.unique(np.concat(flist))
+    noms_only_interp = {}
+    ub = max(flist) - frequency_bounds_tol
+    lb = min(flist) + frequency_bounds_tol
+    for i, (k, v) in enumerate(noms_only.items()):
+        fmin = np.min(v.nom.frequency)
+        fmax = np.max(v.nom.frequency)
+        ub_ok = fmax >= ub
+        lb_ok = fmin <= lb
+        if ub_ok and lb_ok:
+            noms_only_interp[k] = v.interp(
+                frequency=flist,
+                method='quadratic',
+                kwargs={'fill_value': 'extrapolate'},
+            )
+        else:
+            msg = f"Skipping {k}, frequencies don't span bounds to tolerance."
+            if not ub_ok:
+                msg += f'\n   (fmax of {float(fmax)} > {max(flist)} - {frequency_bounds_tol} is False)'
+            if not lb_ok:
+                msg += f'\n   (fmin of {float(fmin)} < {min(flist)} + {frequency_bounds_tol} is False)'
+            print(msg)
+    # evaluate concavity
+    # to determine if it's acceptable to interpolate
+    if grad_tol:
+        absgradients = []
+        noms = []
+        for i, (k, v) in enumerate(noms_only_interp.items()):
+            absgradients.append(np.abs(np.gradient(v.nom[:, 0])))
+            noms.append(v.nom[:, 0])
+        noms = np.array(noms)
+        absgradients = np.array(absgradients)
+        max_gradients = np.max(absgradients, axis=0)
+        drop_f = []
+        for i, f in enumerate(flist):
+            # bin |gradients| by a tolerance
+            bins = np.linspace(
+                0, max_gradients[i], int(np.ceil(max_gradients[i] / grad_tol))
+            )
+            # everypoint fits into the gradient tolerance+-0, continue
+            if len(bins) == 1:
+                continue
+            # the maximum gradient is > tolerance so more then
+            # 1 bin, see how the different f points fit into it
+            fvals = absgradients[:, i]
+            inds = np.digitize(fvals, bins=bins, right=True)
+            # if true, every single frequency point fits
+            # into the same bin (index) and we can continue
+            if len(np.unique(inds)) == 1:
+                continue
+            # if we made it here some of the points have a smaller gradient
+            # and need to be dealt with
+            # pick the last bin(largest gradient)
+            good = np.where(inds == max(inds))[0]
+            bad = np.where(inds != max(inds))[0]
+
+            # if not enough points satisfy the gradient tolerance,
+            # add the point to the drop list
+            if len(good) < min_required:
+                drop_f.append(f)
+                # print(f"Dropping frequency {f} (only {len(good)} valid points)")
+                continue
+
+            # enough points do statisfy the gradient point, so replace the
+            # bad points with values samples on a gaussian distribution
+            # that preserves the distribution of the good points
+            std_good = np.std(noms[good, i], ddof=1)
+            mu_good = np.mean(noms[good, i])
+            resamples = np.random.normal(loc=mu_good, scale=std_good, size=len(bad))
+            old = noms[bad, i]
+            noms[bad, i] = resamples
+        # replace ineterpolated output values with resampled
+        # values
+        for i, k in enumerate(noms_only_interp):
+            diff = np.sum(noms_only_interp[k].cov[:, :, 0] - noms[i, :])
+            # print(float(diff))
+            noms_only_interp[k].cov[:, :, 0] = noms[i, :]
+        # remove and frequency points that didn't have enough acceptable data
+        # to sample
+        if drop_f:
+            new_flist_ind = np.logical_not(np.isin(flist, drop_f))
+            new_flist = flist[new_flist_ind]
+            for i, k in enumerate(noms_only_interp):
+                noms_only_interp[k] = noms_only_interp[k].sel(frequency=new_flist)
+
+    return noms_only, noms_only_interp
+
+
+def make_eta_historical_model(
+    historical_data: list[configs.EtaHistorical],
+    make_plots: bool = True,
+    frequency_bounds_tol: float = 0.5,
+    from_function: configs.PythonFunction = None,
+    grad_tol: int = 3e-4,
+    min_points: int = 5,
+    k: float = 2.0,
+) -> tuple[configs.Eta, list[plt.Figure]]:
+    """
+    Generate a historical repeatability model from sensor data or a function.
+
+    Each configuration object should be for an individual sensor.
+    Historical models are generated by comparing the nominal values
+    of each connect.
+
+    Missing frequency points are interpolated onto a frequency list that
+    represents a "super set" of all unique frequencies on the list.
+
+    Parameters
+    ----------
+    historical_data : list[configs.EtaHistorical]
+        List of EtaHistorical configuration objects for different sensors.
+    make_plots : bool, optional
+        Generate figures if True.
+    frequency_bounds_tol : float, optional
+        A historical measurement must have a frequqency range that spanse
+        the minimum/maximum frequency range
+    from_function : configs.PythonFunction, optional
+        If provided, a function that takes in a frequency array and outputs
+        a the repeatability (k=1) uncertainty can be provided. If python
+        file can be provided, it will be imported and the function is assumed
+        to be called "repeatability_model".
+    from_polynomial : list[int], optional
+        Provide a list of polynomial coefficients and these will be used
+        to model the historical repeatability instead.
+    grad_tol : float, optional
+        An frequency point must have an interpolated value within the maximum
+        tolerance of this value to be allowed into the combination.
+        Will be resampled it it doesn't.
+    min_points : int, optional
+        Minimum number of acceptable interpolated measurements per
+        frequency point to be accepted into the model.
+    k : float, optional
+        Expansion factor for plotting the uncertainty bounds
+
+    Returns
+    -------
+    hist_model : RMEMeas
+        RMEMeas object of eff centered at 0 with uncertainties describing
+        historical repeatability. Can be added to an effective efficiency
+        measurement to add repeatability uncertainties.
+    fig : plt.Figure
+        Figure reporting the model. None if no figure
+
+    """
+
+    # for each sensor, generate a
+    def markers():
+        out = itertools.cycle(
+            ('.', 'o', 'v', '^', 'p', '*', 'h', '<', '>', '1', '2', '3', '4', '8', 's')
+        )
+        return out
+
+    expansion_factor = k
+    colors = plt.cm.viridis(np.linspace(0, 1, len(historical_data)))
+    colors = itertools.cycle(colors)
+    prp = RMEProp(sensitivity=True)
+
+    fig = None
+    if make_plots:
+        fig, ax = plt.subplots(2, 1, sharex=True)
+    # values that will be averaged in the end
+    zero_averaged_sensors = []
+    for i, sensor_data in enumerate(historical_data):
+        if len(configs.EtaHistorical(sensor_data)) < min_points:
+            raise Exception(
+                f'config {i}, not enough sensors to meet mininum {min_points}'
+            )
+            continue
+        noms_only, noms_only_interp = interp_eta_hist(
+            sensor_data,
+            frequency_bounds_tol=frequency_bounds_tol,
+            grad_tol=grad_tol,
+            min_required=min_points,
+        )
+        interp_flist = list(noms_only_interp.values())[0].nom.frequency
+        mean = np.mean([v.nom for v in noms_only_interp.values()], axis=0)
+        zero_averaged_sensors += [v - mean for v in noms_only_interp.values()]
+
+        if make_plots:
+            marker_cycle = markers()
+            color = next(colors)
+            for k, v in noms_only_interp.items():
+                marker = next(marker_cycle)
+
+                line = ax[0].plot(
+                    v.nom.frequency,
+                    v.nom,
+                    marker=marker,
+                    color=color,
+                    ls='-',
+                )[0]
+                # included points
+                fuse_ind = np.isin(noms_only[k].nom.frequency, interp_flist)
+                fuse_ind2 = np.isin(interp_flist, noms_only[k].nom.frequency)
+                fuse = noms_only[k].nom.frequency[fuse_ind]
+                ax[1].plot(
+                    noms_only[k].nom.frequency.sel(frequency=fuse),
+                    noms_only[k].nom.sel(frequency=fuse) - mean[fuse_ind2],
+                    marker=marker,
+                    color=color,
+                    ls='',
+                )[0]
+            keys = list(noms_only_interp.keys())
+            line.set_label('{},..., {}'.format(keys[0], keys[-1]))
+
+        del noms_only, noms_only_interp, mean, interp_flist
+
+    # interpolate zero averaged sensors
+    flist = [n.nom.frequency for n in zero_averaged_sensors]
+    flist = np.unique(np.concat(flist))
+
+    # if a function was provided, use that to generate a model
+    if from_function:
+        fn = configs.PythonFunction(from_function)
+        model = zero_averaged_sensors[0].interp(frequency=flist) * 0
+        type_a = model.nom.copy()
+        type_a[:, 0] = fn(flist)
+        model.add_umech(
+            fn.name,
+            model.nom + type_a,
+            category={'Origin': 'Historical Repeatability', 'Type': 'A'},
+        )
+    # otherwise do it datadefined
+    else:
+        interp_zerod = [
+            z.interp(
+                frequency=flist, method='linear', kwargs=dict(fill_value='extrapolate')
+            )
+            for z in zero_averaged_sensors
+        ]
+
+        # # combine across individual sensors
+        model = prp.combine(
+            *interp_zerod,
+            combine_categories={'Type': 'A', 'Origin': 'Historical Repeatability'},
+        )
+        # set nominal to zero jsut to get rid of floating point
+        # stuff
+        model.cov[0, ...] = 0
+
+    ub = model.uncbounds(k=expansion_factor).cov[:, 0]
+    lb = model.uncbounds(k=-expansion_factor).cov[:, 0]
+    ax[1].fill_between(
+        model.nom.frequency,
+        lb,
+        ub,
+        color='k',
+        alpha=0.2,
+        label='Historical Repeatability Model (k={:0.2f})'.format(expansion_factor),
+        zorder=1000,
+    )
+    ax[0].legend(loc='best')
+    ax[1].legend(loc='best')
+    ax[1].set_xlabel('Frequency (GHz)')
+    ax[0].set_ylabel('Inerpolated Values of $\eta$')
+    ax[1].set_ylabel('Variation in $\eta$ from Sensor Average')
+
+    fig.tight_layout()
+
+    return model, fig
+
+
 def make_eta(
     gc: configs.GC,
     s11: configs.S11,
     parsed_rfsweep: configs.ParsedRFSweep,
+    historical_model: configs.Eta = None,
     historical_data: configs.EtaHistorical = None,
     thermal_weights: configs.ThermoelectricFitCoefficients = None,
-    min_historical_repeats: int = 3,
     uncertainties: bool = True,
     make_plots: bool = True,
 ) -> tuple[configs.Eta, list[plt.Figure]]:
@@ -121,6 +434,10 @@ def make_eta(
         Reflection coefficient of the sensor.
     parsed_rfsweep : configs.ParsedRFSweep
         Parsed RF sweep output.
+    historical_model : configs.Eta, optional
+        A zero-nominal effective efficiency dataset that is used to apply
+        uncertainties related to historical repeatability of the
+        calorimeter.
     historical_data : configs.EtaHistorical, optional
         Dictionary of key value pairs where values are
         configs.Eta. The default is None.
@@ -153,7 +470,7 @@ def make_eta(
     """
     # cast as my special dictionary just to be safe
     if historical_data is None:
-        historical_data = []
+        historical_data = {}
     historical_data = configs.EtaHistorical(historical_data)
 
     # set up the propagator
@@ -188,62 +505,18 @@ def make_eta(
 
     eta_new = effective_efficiency(zeta, s11, gc)
 
-    # build a historical model of repeatability
-    # by taking standard deviation across historical data
-    # this doesn't account for covariance between historical
-    # data, which it should, but I'm not sure how to handle that
-    # at the moment because the grids are irregular
-    if len(historical_data) > min_historical_repeats:
-        hist_noms = {}
-        flist = zeta.cov.frequency.values
-        for name, datamodel in historical_data.items():
-            # load the historical data with nominal only into the config
-            data = configs.Eta(datamodel).load().usel(umech_id=[])
-            # just need the nominal xarray value for now
-            hist_noms[name] = data.nom
-
-        # adds each one historical frequency measurmenet
-        # as independent, which isn't great
-        all_fdat = []
-        type_a_fgrid = []
-        dofs = []
-        for fi in fgrid:
-            fdat = []
-            for name, hdat in hist_noms.items():
-                try:
-                    hfdat = hdat.sel(frequency=fi)
-                    fdat.append(hfdat)
-                except KeyError:
-                    pass
-            if len(fdat) > min_historical_repeats:
-                all_fdat.append(
-                    xr.concat(fdat, dim='frequency').std('frequency', ddof=1)
-                )
-                type_a_fgrid.append(fi)
-                dofs.append(len(fdat))
-            else:
-                dofs.append(min(dofs))
-
-        # interpolate the type analysis to the frequency grid of the zeta measurements
-        # is this ok? probaby not but its the best I can think of at the moment
-        type_a = (
-            xr.concat(all_fdat, dim='frequency')
-            .assign_coords(frequency=type_a_fgrid)
-            .interp(frequency=fgrid)
+    # if historical model was provided
+    # interpolate it to the right grid and
+    # add it to the new value. Historical model should
+    # be nominally zero
+    if historical_model is not None:
+        historical_model = configs.Eta(historical_model).load()
+        historical_model = historical_model.interp(
+            frequency=eta_new.nom.frequency,
+            method='linear',
+            kwargs={'fill_value': 'extrapolate'},
         )
-        new_nom = eta_new.nom
-        # add each frequency as an independent mechanism
-        for i, fi in enumerate(fgrid):
-            type_a_fi = type_a.copy()
-            type_a_fi[fgrid != fi] = 0
-            type_a_fi = new_nom + type_a_fi
-            eta_new.add_umech(
-                'hist_typeA',
-                type_a_fi,
-                add_uid=True,
-                dof=dofs[i],
-                category={'Origin': 'Historical Repeatability'},
-            )
+        eta_new = eta_new + historical_model
 
     # cast as a DataModelContainer and maybe
     # generate review plots
