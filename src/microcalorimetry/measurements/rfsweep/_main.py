@@ -402,7 +402,8 @@ def parse(
     verbose: bool = False,
     make_plots: bool = False,
     plot_segments_analysis: list[int] = [0,-1],
-    plot_all_segments_analysis: bool = False
+    plot_all_segments_analysis: bool = False,
+    format_matlab: Path = None,
 ) -> tuple[dict[RMEMeas], list[plt.Figure]]:
     """
     Parse a microccalorimeter run to produce data with uncertainties.
@@ -865,10 +866,10 @@ def runlist_from_loss(
         measurement. The default is None.
     segment_size : int, optional
         Number of frequencie points per segment. The default is 5.
-    off_step_length: int, optional
+    off_step_length : int, optional
         How many steps each off period should be. Typically 2, the default
         it 2.
-    safety_backoff_dBm: float, optional
+    safety_backoff_dBm : float, optional
         Back off the start value by this amount to avoid over sourcing.
         The levelling feature will converge to the correct value during a
         measurement. The default is 3.0.

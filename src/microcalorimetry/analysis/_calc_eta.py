@@ -5,6 +5,7 @@ from rmellipse.uobjects import RMEMeas
 from microcalorimetry.math import rfpower, vna
 from microcalorimetry._helpers._collections import try_sel, mean_unique_values
 import microcalorimetry.configs as configs
+import microcalorimetry._gwex as _gwex
 import warnings
 import xarray as xr
 import numpy as np
@@ -12,7 +13,7 @@ import matplotlib.pyplot as plt
 import itertools
 from typing import Callable
 
-__all__ = ['make_eta', 'review_eta', 'make_eta_historical_model']
+__all__ = ['make_eta', 'review_eta', 'make_eta_historical_model', 'make_classical_eta_unc_model']
 
 
 def review_eta(eta: configs.Eta, historical_data: configs.EtaHistorical, k: int = 2):
@@ -238,12 +239,94 @@ def interp_eta_hist(
 
     return noms_only, noms_only_interp
 
+def make_classical_eta_unc_model(
+    frequency: np.array,
+    uA_model: configs.PythonFunction,
+    uB_model: configs.PythonFunction
+    ) -> tuple[configs.Eta, plt.Figure]:
+    """
+    Generate a classical uncertainty model for an eta measurement.
+
+    uA_model and uB_model are python functions that take in a frequency
+    list and output a standard uncertainty (Type A and B respectivley).
+
+    This model can be used to apply uncertainties to an eta calculate
+    after it has been calculated. Is is zero nominal, so uncertainties are
+    added to an eta measurmeent by simply adding it to to an effective
+    efficiency measurement.
+
+    Uncertainties are assumed to be independent across frequency.
+
+    Parameters
+    ----------
+    frequency : np.array
+        Frequency in GHz.
+    uA_model : configs.PythonFunction
+        Python function that outputs type A uncertainty.
+    uB_model : configs.PythonFunction
+        Python function that outputs type B uncertainty.
+
+    Returns
+    -------
+    eta_unc : configs.Eta
+        Eta configuration object with zero nominal and uncertainties
+        derived from uA_model and uB_model.
+    fig : plt.Figure
+        Matplotlib figure object generated.
+
+    """
+    uA = uA_model(frequency)
+    uB = uB_model(frequency)
+    
+    data = xr.DataArray(
+        np.zeros(uA.shape),
+        dims = ('frequency',),
+        coords = {'frequency':frequency}).expand_dims({'eta':[0]}, axis = -1)
+
+
+    data = _gwex.as_format(data, _gwex.eff)
+
+    data = RMEMeas.from_nom(f'eta_uncertainty',data)
+
+    def origin_str(model_fun):
+        return f'{model_fun.__name__}'
+
+    for i,f in enumerate(frequency):
+        ub_pert = data.nom.copy()
+        ua_pert = data.nom.copy()
+        ub_pert.loc[{'frequency':f}] += uB[i]
+        ua_pert.loc[{'frequency':f}] += uA[i]
+        data.add_umech(
+            f'uA_{f}',
+            ua_pert,
+            category = {'Type':'A','Origin':origin_str(uA_model)}
+            )
+    
+        data.add_umech(
+            f'uB_{f}',
+            ub_pert,
+            category = {'Type':'B','Origin':origin_str(uB_model)}
+            )
+
+    # add uncertainties
+    fig,ax = plt.subplots(1,1)
+    grouped = data.categorize_by('Type')
+    for u in grouped.umech_id:
+        unc = grouped.usel(umech_id = [u]).stdunc().cov
+        ax.plot(frequency, unc, label = f'u{u}')
+    ax.plot(frequency, data.stdunc().cov, label = 'UTot', color = 'k')
+    ax.set_xlabel("Frequency (GHz)")
+    ax.set_ylabel('Uncertainty in $\eta$ (k=1)')
+    ax.legend(loc = 'best')
+    fig.tight_layout()
+
+    return data, fig
+
 
 def make_eta_historical_model(
     historical_data: list[configs.EtaHistorical],
     make_plots: bool = True,
     frequency_bounds_tol: float = 0.5,
-    from_function: configs.PythonFunction = None,
     grad_tol: int = 3e-4,
     min_points: int = 5,
     k: float = 2.0,
@@ -267,14 +350,6 @@ def make_eta_historical_model(
     frequency_bounds_tol : float, optional
         A historical measurement must have a frequqency range that spanse
         the minimum/maximum frequency range
-    from_function : configs.PythonFunction, optional
-        If provided, a function that takes in a frequency array and outputs
-        a the repeatability (k=1) uncertainty can be provided. If python
-        file can be provided, it will be imported and the function is assumed
-        to be called "repeatability_model".
-    from_polynomial : list[int], optional
-        Provide a list of polynomial coefficients and these will be used
-        to model the historical repeatability instead.
     grad_tol : float, optional
         An frequency point must have an interpolated value within the maximum
         tolerance of this value to be allowed into the combination.
@@ -295,7 +370,6 @@ def make_eta_historical_model(
         Figure reporting the model. None if no figure
 
     """
-
     # for each sensor, generate a
     def markers():
         out = itertools.cycle(
@@ -361,35 +435,21 @@ def make_eta_historical_model(
     # interpolate zero averaged sensors
     flist = [n.nom.frequency for n in zero_averaged_sensors]
     flist = np.unique(np.concat(flist))
-
-    # if a function was provided, use that to generate a model
-    if from_function:
-        fn = configs.PythonFunction(from_function)
-        model = zero_averaged_sensors[0].interp(frequency=flist) * 0
-        type_a = model.nom.copy()
-        type_a[:, 0] = fn(flist)
-        model.add_umech(
-            fn.name,
-            model.nom + type_a,
-            category={'Origin': 'Historical Repeatability', 'Type': 'A'},
+    interp_zerod = [
+        z.interp(
+            frequency=flist, method='linear', kwargs=dict(fill_value='extrapolate')
         )
-    # otherwise do it datadefined
-    else:
-        interp_zerod = [
-            z.interp(
-                frequency=flist, method='linear', kwargs=dict(fill_value='extrapolate')
-            )
-            for z in zero_averaged_sensors
-        ]
+        for z in zero_averaged_sensors
+    ]
 
-        # # combine across individual sensors
-        model = prp.combine(
-            *interp_zerod,
-            combine_categories={'Type': 'A', 'Origin': 'Historical Repeatability'},
-        )
-        # set nominal to zero jsut to get rid of floating point
-        # stuff
-        model.cov[0, ...] = 0
+    # # combine across individual sensors
+    model = prp.combine(
+        *interp_zerod,
+        combine_categories={'Type': 'A', 'Origin': 'Historical Repeatability'},
+    )
+    # set nominal to zero jsut to get rid of floating point
+    # stuff
+    model.cov[0, ...] = 0
 
     ub = model.uncbounds(k=expansion_factor).cov[:, 0]
     lb = model.uncbounds(k=-expansion_factor).cov[:, 0]
@@ -447,11 +507,6 @@ def make_eta(
         effective efficiency. These should be thermopile sensitivity
         coefficients of the calorimeter calculated with the same model of
         sensor. The default is None.
-    min_historical_repeats : int, optional
-        Minium number of repeates (per frequency point) required for a data
-        driven statistical model to be made for a particular frequency point.
-        If less then this number are present, the statistical variation is
-        interpolated from nearby points. The default is 3.
     uncertainties : bool, optional
         Propagate uncertainties during calculation, is faster to turn
         off during debugging or exploratory analysis. The default is True.
@@ -461,10 +516,12 @@ def make_eta(
 
     Returns
     -------
-    eta : RMEMeas
-        Effective efficiency.
+
     fig : List[plt.Figure]
         Any figures generated.
+    eta : RMEMeas
+        Effective efficiency.
+
 
 
     """
