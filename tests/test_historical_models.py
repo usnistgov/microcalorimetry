@@ -23,13 +23,6 @@ def test_historical_data(make_new_reference: bool = False):
         SAMPLE_HIST / 'C24N132.yml',
     ]
 
-    # generate the historical model
-    hist_model, fig = anl.make_eta_historical_model(
-        historical_files,
-        make_plots=True,
-        from_function='microcalorimetry.math.hist_models:typeA_24mm',
-        k=2,
-    )
 
     # generate a data defined model
     data_model, fig = anl.make_eta_historical_model(
