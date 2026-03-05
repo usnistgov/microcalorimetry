@@ -4,16 +4,76 @@ import numpy as np
 
 # uncertainty propagation
 from rmellipse.propagators import RMEProp
+from rmellipse.uobjects import RMEMeas
 from typing import Iterable
 
 # local packages
 from microcalorimetry.math import rfpower, fitting
 from microcalorimetry._helpers._collections import try_sel, mean_unique_values, concat
 import microcalorimetry.configs as configs
+import microcalorimetry._gwex as _gwex
+import xarray as xr
 
 
-__all__ = ['make_correction_factor']
+__all__ = ['make_correction_factor','gc_from_model']
 
+def gc_from_model(
+    frequency: np.array,
+    model: configs.PythonFunction,
+    terms: int = 1,
+    )-> tuple[configs.GC, plt.Figure]:
+    """
+    Supply a parsed RF sweep and a python function to generate a GC model.
+
+    Parameters
+    ----------
+    frequency : np.array
+        Frequencies to evaluate model at.
+    model : configs.PythonFunction
+        Python function that takes in a frequency (GHz) list and outputs correction
+        factor values with the same shape.
+    terms : int, optional
+        How many terms int he gc model. Default is 1.
+
+    Raises
+    ------
+    NotImplementedError
+        Only 1 term currently supported.
+
+    Returns
+    -------
+    gc : configs.GC
+        Correction factor object.
+    fig : plt.Figure
+        Plot of the generated GC.
+
+    """
+    if terms != 1:
+        NotImplementedError('only term=1 is implemented currently.')
+
+
+    frequency = np.unique(frequency)
+    gc = model(frequency)
+
+
+    # put into an RMEMeas with the expected format
+
+    data = xr.DataArray(
+        gc.astype(float),
+        dims = ('frequency',),
+        coords = {'frequency':frequency}).expand_dims({'gc':[0]}, axis = -1)
+
+    data = _gwex.as_format(data, _gwex.gc1)
+
+    data = RMEMeas.from_nom(f'gc{terms}',data)
+
+
+    fig,ax = plt.subplots(1,1)
+    ax.plot(frequency, data.nom[:,0],'o-')
+    ax.set_xlabel("Frequency (GHz)")
+    ax.set_ylabel(f'gc model {model.__name__}')
+
+    return data, fig
 
 def make_correction_factor(
     gc_regressor_rows: configs.CorrectionFactorModelInputs,

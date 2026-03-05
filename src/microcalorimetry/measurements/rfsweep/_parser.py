@@ -2566,7 +2566,15 @@ def _average_pre_fastoff(step: Step, column: str, RF_on_average_window: float) -
     )
     indexed_vals = step.raw_data[column][logical_index]
     # filler value, doesn't mean anything for these sensors
-    results[column + '_initial_stable'] = index[logical_index][0]
+    try:
+       results[column + '_initial_stable'] = index[logical_index][0]
+    except IndexError as e:
+        # this happens is the window to average over was too tight.
+        # so print a helpful message.
+        if not logical_index.any():
+            raise IndexError("No values found in the RF_on_average window. It may be too tight of an averaging window.") from e
+        else:
+            raise e from e
     results[column + '_final_stable'] = index[logical_index][-1]
 
     results[column + '_on'] = np.mean(indexed_vals)
