@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-This module contains historical uncertainty models for microcalorimeter.
+This module contains functions that define uncertainy models for
 """
+
 import numpy as np
 
 
@@ -31,7 +32,9 @@ def uA_24mm(f):
     return out
 
 
-def _unc_typeN(frequencies, RLead: float = 0, RThermistor: float = 200) -> tuple[np.array]:
+def _unc_typeN(
+    frequencies, RLead: float = 0, RThermistor: float = 200
+) -> tuple[np.array]:
     """
     Get the uncertainties associated with the Type N calorimeter.
 
@@ -72,12 +75,12 @@ def _unc_typeN(frequencies, RLead: float = 0, RThermistor: float = 200) -> tuple
 
     uDCLoss50 = RLead / 400 / np.sqrt(3)
     UNotDC = 1.94e-3
-    U50 = np.sqrt(UNotDC ** 2 + (2 * uDCLoss50) ** 2)
+    U50 = np.sqrt(UNotDC**2 + (2 * uDCLoss50) ** 2)
     RefFreqPointer = FreqAll == 0.05
     OtherFreqPointer = np.logical_not(RefFreqPointer)
 
     # get uncertainty as combination of the 50 MHz and general rule
-    UtotNot50 = 2e-3 + 5.e-5 * FreqAll + 4.8e-6 * FreqAll ** 2
+    UtotNot50 = 2e-3 + 5.0e-5 * FreqAll + 4.8e-6 * FreqAll**2
     Utot = UtotNot50 * OtherFreqPointer + U50 * RefFreqPointer
     # DC Loss uncertainty from Feb 2012 memo
     uDCLossNot50 = RLead / 400 / np.sqrt(3)
@@ -109,7 +112,7 @@ def _unc_typeN(frequencies, RLead: float = 0, RThermistor: float = 200) -> tuple
 
     # Next line is really reproducibility, not uA
     # uA = np.sqrt(ue**2 + unVM**2 + ugsfit ^ 2 + uRan**2 + uDCLoss**2)
-    uA = np.sqrt(uRan ** 2 + uDCLoss ** 2)
+    uA = np.sqrt(uRan**2 + uDCLoss**2)
 
     # The code originally calculated the type B uncertainties based on the
     # type A uncertainty and the total uncertainty.
@@ -119,11 +122,11 @@ def _unc_typeN(frequencies, RLead: float = 0, RThermistor: float = 200) -> tuple
     # value of uA(from the 2012 memo).
 
     uDCLoss2012 = 0.00035 / np.sqrt(3)
-    uA2012 = np.sqrt(uRan ** 2 + uDCLoss2012 ** 2)
+    uA2012 = np.sqrt(uRan**2 + uDCLoss2012**2)
 
     # Removed special case for calorimeter N0
     # k = 1, not independently specified in memo
-    uB = np.sqrt((Utot / 2) ** 2 - uA2012 ** 2)
+    uB = np.sqrt((Utot / 2) ** 2 - uA2012**2)
     Utot = 2 * np.sqrt(uA**2 + uB**2)
     return uA, uB, Utot
 

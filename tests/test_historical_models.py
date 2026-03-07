@@ -23,10 +23,9 @@ def test_historical_data(make_new_reference: bool = False):
         SAMPLE_HIST / 'C24N132.yml',
     ]
 
-
     # generate a data defined model
-    data_model, fig = anl.make_eta_historical_model(
-        historical_files, make_plots=True, grad_tol=3e-4, min_points=4, k=2
+    data_model, fig = anl.make_eta_repeatability_model(
+        historical_files, make_plots=True
     )
 
     if make_new_reference:

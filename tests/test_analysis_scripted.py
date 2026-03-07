@@ -669,7 +669,7 @@ if __name__ == '__main__':
     import matplotlib as mpl
     import matplotlib.pyplot as plt
 
-    re_calculate = True
+    re_calculate = False
     mpl.use('QtAgg')
     if re_calculate:
         # fig = test_C24N118_from_scratch(resave_reference_results=False)
