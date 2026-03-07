@@ -923,7 +923,7 @@ requires-dist = [
     { name = "pyvisa", specifier = ">=1.14.0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "rmellipse", git = "https://github.com/usnistgov/rmellipse?branch=development" },
-    { name = "rminstr", specifier = ">=0.6.2" },
+    { name = "rminstr", specifier = ">=0.6.5" },
     { name = "rminstr-specs", specifier = ">=0.4.0" },
 ]
 
@@ -1506,7 +1506,7 @@ dependencies = [
 
 [[package]]
 name = "rminstr"
-version = "0.6.2"
+version = "0.6.5"
 source = { registry = "https://gitlab.nist.gov/gitlab/api/v4/projects/10154/packages/pypi/simple" }
 dependencies = [
     { name = "gitpython" },
@@ -1516,9 +1516,9 @@ dependencies = [
     { name = "pyvisa" },
     { name = "scipy" },
 ]
-sdist = { url = "https://gitlab.nist.gov/gitlab/api/v4/projects/10154/packages/pypi/files/ca4f57dbf888722d9f1aa5254e459e2f78fbe4c7767cf3f28e5a51e66745c0df/rminstr-0.6.2.tar.gz", hash = "sha256:ca4f57dbf888722d9f1aa5254e459e2f78fbe4c7767cf3f28e5a51e66745c0df" }
+sdist = { url = "https://gitlab.nist.gov/gitlab/api/v4/projects/10154/packages/pypi/files/ab568efe38767adc6d1732ddea540814a8d1b2b26563b6fca522066753b793ee/rminstr-0.6.5.tar.gz", hash = "sha256:ab568efe38767adc6d1732ddea540814a8d1b2b26563b6fca522066753b793ee" }
 wheels = [
-    { url = "https://gitlab.nist.gov/gitlab/api/v4/projects/10154/packages/pypi/files/fabd9a9a6905e0500d0195258f96b34f03bf0411f5d0df2cfe3f971e3616df00/rminstr-0.6.2-py3-none-any.whl", hash = "sha256:fabd9a9a6905e0500d0195258f96b34f03bf0411f5d0df2cfe3f971e3616df00" },
+    { url = "https://gitlab.nist.gov/gitlab/api/v4/projects/10154/packages/pypi/files/2d1f505186c2e5a2d60b67d8bb476df094eb42a57e378a5e4922b04c47624662/rminstr-0.6.5-py3-none-any.whl", hash = "sha256:2d1f505186c2e5a2d60b67d8bb476df094eb42a57e378a5e4922b04c47624662" },
 ]
 
 [[package]]

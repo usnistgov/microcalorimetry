@@ -62,7 +62,7 @@ def _gui(no_console_stdout: bool = False):
             'make k coeffs': anl.make_k_coeffs,
             'make eta': anl.make_eta,
             'review eta': anl.review_eta,
-            'make eta hist model': anl.make_eta_historical_model,
+            'make eta repeatability model': anl.make_eta_repeatability_model,
         },
         output_group_saveable=['make k coeffs', 'make eta', 'make eta hist model'],
     )
