@@ -20,6 +20,7 @@ import os.path
 from microcalorimetry._tkquick._gui._themes import console_font
 import microcalorimetry.math.vna as vna
 import microcalorimetry.math.trig as trig
+import microcalorimetry.math.rmemeas_extras as rmemeas_extras
 from rmellipse.uobjects import RMEMeas
 from rmellipse.propagators import RMEProp
 from rmellipse.utils import load_object
@@ -463,7 +464,7 @@ def uncertainty_breakdown(file, hdf5_path):
 
         ax_budget.set_ylabel(r'Contributions to Standard Uncertainty (k=1)')
         try:
-            data = data.categorize_by('Origin')
+            data = rmemeas_extras.categorize_by(data, 'Origin')
         except KeyError:
             data = data
         for ploc in data.umech_id:
@@ -551,20 +552,19 @@ def plot_RMEMeas(file, hdf5_path, fig=None):
                 else:
                     ax = fig.axes[0]
 
-                ub = data.uncbounds(k=1)[0]
-                lb = data.uncbounds(k=-1)[0]
+                stdunc = data.stdunc().cov
                 xlabel = data.nom.dims[0]
                 ylabel = hdf5_path.split('/')[-1]
                 xvals = data.nom.coords[xlabel]
-                ax.plot(
+                ax.errorbar(
                     xvals,
                     data.nom,
-                    'o-',
-                    lw=2,
+                    yerr=stdunc,
+                    fmt='o',
+                    capsize=3,
                     label='.../' + '/'.join(hdf5_path.split('/')[-2:]),
                 )
-                ax.plot(xvals, lb, '--k', label='k = 1')
-                ax.plot(xvals, ub, '--k')
+                
                 ax.set_xlabel(xlabel)
                 ax.set_ylabel(ylabel)
                 ax.set_title(hdf5_path)
@@ -582,20 +582,18 @@ def plot_RMEMeas(file, hdf5_path, fig=None):
                     figs.append(fig)
                 else:
                     ax = fig.axes[0]
-                ub = data.uncbounds(k=1)[0]
-                lb = data.uncbounds(k=-1)[0]
+                stdunc = data.stdunc().cov[:,1]
                 xlabel = data.nom.dims[0]
                 ylabel = hdf5_path.split('/')[-1]
                 xvals = data.nom.coords[xlabel]
-                ax.plot(
+                ax.errorbar(
                     xvals,
                     data.nom,
-                    'o-',
-                    lw=2,
+                    yerr=stdunc,
+                    fmt='o',
+                    capsize=3,
                     label='.../' + '/'.join(hdf5_path.split('/')[-2:]),
                 )
-                ax.plot(xvals, lb, '--k', label='k = 1')
-                ax.plot(xvals, ub, '--k')
                 ax.set_xlabel(xlabel)
                 ax.set_ylabel(ylabel)
                 ax.set_title(hdf5_path)

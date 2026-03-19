@@ -3,6 +3,8 @@ This module contains functions for exporting effective efficiency datasets.
 """
 from __future__ import annotations
 import microcalorimetry.configs as configs
+from microcalorimetry.math import rmemeas_extras
+from rmellipse.uobjects import RMEMeas
 import numpy as np
 import warnings
 from pathlib import Path
@@ -11,13 +13,44 @@ from datetime import datetime
 __all__ = ['as_doteff']
 
 
-def group_typed_uncertainties(params):
-    grouped = params.categorize_by("combine_id")
+def group_typed_uncertainties(params: RMEMeas)->RMEMeas:
+    """
+    Group uncertainty mechanisms in params by Type.
+
+    Any mechanism with a combine_id is assumed to be Type A.
+    
+    Any mechanisms that doesn't have a type assigned is assumed to be
+
+    Parameters
+    ----------
+    params : RMEMeas
+        Meas object to group uncertainty mechanisms.
+
+    Returns
+    -------
+    grouped : RMEMeas
+        Meas object with grouped uncertainties.
+
+    """
+    # treat anything with a combine ID as type A, derived from statistical means
+    use = params.copy()
+    cc = use.covcats
+    if 'combine_id' in params.covcats.categories:
+        cc.loc[{'categories':'Type'}][cc.loc[{'categories':'combine_id'}]!=''] = 'B'
+    # anything that hasn't been assigned a Type yet is Type B
+   
+    not_a_or_b = np.logical_and(
+        cc.loc[{'categories':'Type'}]!='A',
+        cc.loc[{'categories':'Type'}]!='B'
+        )
+    if not_a_or_b.any():
+        print("Some uncertainty mechanisms not identified as type A or B, assigning as B.")
+        cc.loc[{'categories':'Type'}][not_a_or_b] = 'B'
+
     # assume anything with a combine id is Type A
     # things that didn't have one would be grouped under uncategorized
-    grouped.assign_categories_to_all(Type="A")
-    grouped.assign_categories(["uncategorized"], ["Type"], ["B"])
-    return grouped.categorize_by("Type")
+    grouped = rmemeas_extras.categorize_by(use, "Type")
+    return grouped
 
 
 def as_doteff(
@@ -96,7 +129,7 @@ def as_doteff(
     # if using the DOFs, the expansion factor might be slightly different
     # for each frequency point. So, I'm picking the worst case scenario
     # to report here.
-    if expansion_factor <= 1:
+    if expansion_factor < 1:
         eta_utot = eta_dat.confint(expansion_factor)[1] - eta_nom
         expansion_factor = float(np.max(eta_utot / eta_dat.stdunc(k=expansion_factor).cov))
     # re calculate with the worst case
@@ -117,8 +150,8 @@ def as_doteff(
     # print(data_line)
     # calculate eta uncertainty
     with open(path, 'w') as f:
-        def line(line: str):
-            f.write(line + '\n')
+        def line(line: str, nl = '\n'):
+            f.write(line + nl)
 
         if sensor_name:
             line(f'# Gamma and Effective Efficiency of {sensor_name}')
@@ -139,4 +172,8 @@ def as_doteff(
                 eta_utot.sel(frequency=fi)
             )
             # print(dli)
-            line(dli)
+            if i == len(flist)-1:
+                term = ''
+            else:
+                term = '\n'
+            line(dli, nl = term)

@@ -635,6 +635,38 @@ class EtaHistorical(SerialDictionary):
     def __init__(self, obj: dict | Path | zip):
         SerialDictionary.__init__(self, obj, schema=self.SCHEMA)
 
+    def load_nominals(self, fail_on_error: bool = False) -> dict[xr.DataArray]:
+        """
+        Load in the nominal values of datasets in the config.
+
+        Parameters
+        ----------
+        fail_on_error : bool, optional
+            If true, throws an Exception if a dataset can't be laoded in
+            for whatever reason. Otherwise warns that a dataset
+            wasn't loaded and continues. The default is False.
+
+        Raises
+        ------
+        e
+            Exception that describes why a file wasnt loaded.
+
+        Returns
+        -------
+        nominals : dict[xr.DataArray]
+            dictionary of nominal effective efficiency datasets.
+
+        """
+        nominals = {}
+        for name, datamodel in self.items():
+            try:
+                nom = Eta(datamodel).load().nom
+                nominals[name] = nom
+            except Exception as e:
+                print(f'Failed to load {name} for exception: \n {e}')
+                if fail_on_error:
+                    raise e from e
+        return nominals
 
 # %% Mappings for the different inputs used to calculate a correction factor
 class CorrectionFactorModelInputs(SerialDictionary):

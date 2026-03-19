@@ -2,7 +2,7 @@ from rmellipse.propagators import RMEProp
 from rmellipse.uobjects import RMEMeas
 
 # local packages
-from microcalorimetry.math import rfpower, vna, numbers, fitting
+from microcalorimetry.math import rfpower, vna, numbers, fitting, rmemeas_extras
 from microcalorimetry._helpers._collections import try_sel, mean_unique_values
 import microcalorimetry.configs as configs
 import microcalorimetry._gwex as _gwex
@@ -18,6 +18,8 @@ __all__ = [
     'review_eta',
     'make_eta_repeatability_model',
     'make_classical_eta_unc_model',
+    'dc_lead_correction',
+    'apply_uncertainty_model',
 ]
 
 
@@ -47,10 +49,11 @@ def review_eta(eta: configs.Eta, historical_data: configs.EtaHistorical, k: int 
 
     # get historical data
     historical_data = configs.EtaHistorical(historical_data)
-    nominals = {
-        name: configs.Eta(datamodel).load().nom
-        for name, datamodel in historical_data.items()
-    }
+    nominals = historical_data.load_nominals()
+    # i don't want to deal with this one anymore
+    # so throw it awway
+    del historical_data
+
     if len(nominals) > 0:
         ref = numbers.greedy_average(*list(nominals.values()))
     else:
@@ -81,14 +84,12 @@ def review_eta(eta: configs.Eta, historical_data: configs.EtaHistorical, k: int 
     )
 
     for a in ax:
-        a.set_prop_cycle(
-            plt.cycler('color', cmap(np.linspace(0, 1, len(historical_data))))
-        )
+        a.set_prop_cycle(plt.cycler('color', cmap(np.linspace(0, 1, len(nominals)))))
     marker = itertools.cycle(
         ('.', 'o', 'v', '^', 'p', '*', 'h', '<', '>', '1', '2', '3', '4', '8', 's')
     )
 
-    for name, datamodel in historical_data.items():
+    for name, datamodel in nominals.items():
         hdat = nominals[name]
         m = next(marker)
         ax[0].plot(hdat.frequency, hdat, m, label=name)
@@ -96,8 +97,15 @@ def review_eta(eta: configs.Eta, historical_data: configs.EtaHistorical, k: int 
 
     ax[0].set_ylabel(r'$\eta$')
     ax[1].set_ylabel(r'$\eta$ - New Nominal')
-    fig.legend(*ax[0].get_legend_handles_labels(), loc='lower center', ncol=10)
-    fig.subplots_adjust(bottom=0.2)
+    fig.tight_layout()
+    fig.subplots_adjust(right=0.7)
+    fig.legend(
+        *ax[0].get_legend_handles_labels(),
+        loc='upper left',
+        ncol=1,
+        bbox_to_anchor=(0.7, 1.0),
+        bbox_transform=fig.transFigure,
+    )
 
     fig_hist = fig
 
@@ -108,7 +116,7 @@ def review_eta(eta: configs.Eta, historical_data: configs.EtaHistorical, k: int 
     ax_budget.set_xlabel('Frequency (GHz)')
     ax_budget.set_ylabel(r'Contributions to Uncertainty in $\eta$ (% of Nominal)')
     try:
-        eta2 = eta.categorize_by('Origin')
+        eta2 = rmemeas_extras.categorize_by(eta, 'Origin')
     except KeyError:
         eta2 = eta
     for ploc in eta2.umech_id:
@@ -186,7 +194,7 @@ def make_classical_eta_unc_model(
 
     # add uncertainties
     fig, ax = plt.subplots(1, 1)
-    grouped = data.categorize_by('Type')
+    grouped = rmemeas_extras.categorize_by(data, 'Type')
     for u in grouped.umech_id:
         unc = grouped.usel(umech_id=[u]).stdunc().cov
         ax.plot(frequency, unc, label=f'u{u}')
@@ -323,18 +331,53 @@ def make_eta_repeatability_model(
     return model, fig
 
 
+def dc_lead_correction(
+    eta: configs.Eta,
+    R_lead: float,
+    R_bolo: float,
+) -> tuple[configs.Eta]:
+    """
+    Corrects an effective efficiency measurmeent for losses in DC leads.
+
+    Parameters
+    ----------
+    eta : configs.Eta
+        _description_
+    R_lead : float
+        Sum of lead resistance for Force and Sense leads of sensor.
+    R_bolo : float
+        Bolometer resistance, usually 200 ohms for bolometer sensors.
+
+    Returns
+    -------
+    eta
+        Corrected eta value
+
+    """
+
+    eta = configs.Eta(eta).load()
+
+    # set up the propagator
+    linear = RMEProp()
+
+    bias_correct = linear.propagate(rfpower.dcbias_eta_correction)
+    corrected = bias_correct(eta, R_lead, R_bolo)
+
+    return corrected
+
+
 def make_eta(
     gc: configs.GC,
     s11: configs.S11,
     parsed_rfsweep: configs.ParsedRFSweep,
-    historical_model: configs.Eta = None,
     historical_data: configs.EtaHistorical = None,
     thermal_weights: configs.ThermoelectricFitCoefficients = None,
     uncertainties: bool = True,
     make_plots: bool = True,
-) -> tuple[configs.Eta, list[plt.Figure]]:
+) -> tuple[list[plt.Figure] | None, configs.Eta]:
     """
     Make an effective efficiency measurement.
+
 
     Parameters
     ----------
@@ -344,10 +387,6 @@ def make_eta(
         Reflection coefficient of the sensor.
     parsed_rfsweep : configs.ParsedRFSweep
         Parsed RF sweep output.
-    historical_model : configs.Eta, optional
-        A zero-nominal effective efficiency dataset that is used to apply
-        uncertainties related to historical repeatability of the
-        calorimeter.
     historical_data : configs.EtaHistorical, optional
         Dictionary of key value pairs where values are
         configs.Eta. The default is None.
@@ -362,12 +401,13 @@ def make_eta(
         off during debugging or exploratory analysis. The default is True.
     make_plots : bool, optional
         Make plots during the analsysis,otherwise figs will
-        be an empty list. The default is True.
+        be an empty list. The default is True. Plots are made by passing
+        off to the review eta function.
 
     Returns
     -------
 
-    fig : List[plt.Figure]
+    fig : List[plt.Figure] | None
         Any figures generated.
     eta : RMEMeas
         Effective efficiency.
@@ -412,23 +452,43 @@ def make_eta(
 
     eta_new = effective_efficiency(zeta, s11, gc)
 
-    # if historical model was provided
-    # interpolate it to the right grid and
-    # add it to the new value. Historical model should
-    # be nominally zero
-    if historical_model is not None:
-        historical_model = configs.Eta(historical_model).load()
-        historical_model = historical_model.interp(
-            frequency=eta_new.nom.frequency,
-            method='linear',
-            kwargs={'fill_value': 'extrapolate'},
-        )
-        eta_new = eta_new + historical_model
-
     # cast as a DataModelContainer and maybe
     # generate review plots
     fig = None
     if make_plots:
         fig = review_eta(eta_new, historical_data)
+        fig = list(fig)
 
-    return list(fig), eta_new
+    return fig, eta_new
+
+
+def apply_uncertainty_model(eta: configs.Eta, model: configs.Eta) -> configs.Eta:
+    """
+    Applies uncertainty models of effective efficiency measurements.
+
+    Uncertainties are applied by adding model to eta, assuming model is
+    zero nominal.
+
+    Parameters
+    ----------
+    eta : configs.Eta
+        Eta that will have unertainties applied.
+    model : configs.Eta
+        Has uncertainties that will be applied on to eta.
+
+    Returns
+    -------
+    eta : configs.Eta
+        Same nominal as the input eta, but with new uncertainties.
+
+    """
+    basic = RMEProp(sensitivity=True)
+    model = configs.Eta(model).load()
+    model = model.interp(
+        frequency=eta.nom.frequency,
+        method='linear',
+        kwargs={'fill_value': 'extrapolate'},
+    )
+    # add together
+    eta = eta + model
+    return eta
