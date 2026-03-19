@@ -50,6 +50,7 @@ def test_C24N118_from_scratch(
         (if any) inside the 'tests/mutable' directory which
         is ignored by git. By defualt 'C24N118'
     """
+
     dir = LOCAL / 'mutable_datafiles' / mutable_dir
     dir.mkdir(exist_ok=True, parents=True)
 
@@ -348,7 +349,6 @@ def test_C24N118_from_scratch(
         gc,
         C24N118_s1p_config,
         C24N118_parsed,
-        historical_model=HISTORICAL_MODEL,
         historical_data=HISTORICAL_DATA,
         make_plots=True,
     )
@@ -653,10 +653,11 @@ def test_S24P02_from_scratch(
         gc,
         S1P_FILES / 'S24P02.dut',
         results['S24P02']['parsed_rf'],
-        historical_model=HISTORICAL_MODEL,
         historical_data=None,
         make_plots=True,
     )
+
+    eta = anl.apply_uncertainty_model(eta, HISTORICAL_MODEL)
 
     if resave_reference_results:
         with h5py.File(reference_results, 'a') as f:

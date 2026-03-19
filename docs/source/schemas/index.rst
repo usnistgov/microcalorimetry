@@ -116,7 +116,7 @@ Configuration Reference
 
 This section includes detailed schema descriptions of every type of confguration object used in this package.
 This documentation is auto-generated based on the schema-definitions. Objects in this reference may also correspond
-to Python objects that can be imported in the ``microcalorimetery.configs`` submodule. See the API reference for
+to Python objects that can be imported in the ``microcalorimetry.configs`` submodule. See the API reference for
 more information on those objects.
 
 .. toctree::

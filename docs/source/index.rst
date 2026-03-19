@@ -63,7 +63,7 @@ Configuration objects for measurements and analysis scripts are provided in a ``
 
 .. code-block:: python
 
-   import microcalorimetery.configs as configs
+   import microcalorimetry.configs as configs
 
 
 Mathematical operations compatable with

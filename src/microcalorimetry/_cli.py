@@ -59,12 +59,20 @@ def _gui(no_console_stdout: bool = False):
     app.add_function_tab(
         'analysis',
         functions={
+            'make eta repeatability model': anl.make_eta_repeatability_model,
             'make k coeffs': anl.make_k_coeffs,
             'make eta': anl.make_eta,
+            'dc lead correction': anl.dc_lead_correction,
+            'apply_uncertainty_model':anl.apply_uncertainty_model,
             'review eta': anl.review_eta,
-            'make eta repeatability model': anl.make_eta_repeatability_model,
+
         },
-        output_group_saveable=['make k coeffs', 'make eta', 'make eta hist model'],
+        output_group_saveable=[
+            'make k coeffs',
+            'make eta',
+            'make eta hist model',
+            'dc lead correction',
+        ],
     )
 
     app.add_function_tab(

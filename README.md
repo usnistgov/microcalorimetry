@@ -62,13 +62,13 @@ import microcalorimetry.analysis as analysis
 
 Configuration objects for measurements and analysis scripts are provided in a ``microcalorimetry.configs`` module.
 ```Python
-import microcalorimetery.configs as configs
+import microcalorimetry.configs as configs
 ```
 
 Mathematical operations compatable with ([RMEMeas](https://pages.nist.gov/rmellipse-ipages/stable/index.html)) objects are stored in the ``microcalorimetry.math`` submodule.
 
 ```Python
-import microcalorimetery.math as mcmath
+import microcalorimetry.math as mcmath
 ```
 
 ## Authors

@@ -7,6 +7,31 @@ import numpy as np
 from microcalorimetry.math import fitting
 
 
+def dcbias_eta_correction(
+    eta: xr.DataArray,
+    R_lead: float,
+    R_bolo: float,
+):
+    """
+    Correct an effective efficiency measurment for DC biases.
+
+    From CPEM 2010 paper.
+
+    Parameters
+    ----------
+    eta : xr.DataArray
+        Effective efficiency measurement.
+    R_lead : float
+        Lead resistance of the Force and Sense leads of the sensor
+        added together.
+    R_bolo : float
+        Resistance of the bolometer, typically 200 Ohms for thermistor
+        sensors.
+    """
+    epsDC = R_lead / (2 * R_bolo)
+    return eta / (1 + epsDC)
+
+
 def openloop_thermoelectric_power(
     coeffs: xr.DataArray,
     e: xr.DataArray,
@@ -291,7 +316,9 @@ def zeta_dcsub(
 
 
 def effective_efficiency(
-    uncorrected_eta: xr.DataArray, gamma_s: xr.DataArray, gc: xr.DataArray
+    uncorrected_eta: xr.DataArray,
+    gamma_s: xr.DataArray,
+    gc: xr.DataArray,
 ) -> xr.DataArray:
     """
     Calculate effective efficiency.

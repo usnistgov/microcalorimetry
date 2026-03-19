@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-This module contains functions that define uncertainy models for
+This module contains functions that define uncertainty models for operating calorimeters.
+
+These models can be used as part of the calculate eta function to apply uncertainty models
+post correction.
+
+Typically these uncertainty models are inherited from uncertiainties called out in
+tech notes, papers, and internal memos.
+
 """
 
 import numpy as np
@@ -131,39 +138,65 @@ def _unc_typeN(
     return uA, uB, Utot
 
 
-def uA_CN(f):
+def uA_CN(frequencies, RLead: float = 0, RThermistor: float = 200):
     """
-    Type A uncertainty of the Type N Calorimeter in use at NIST.
+    Get the uncertainties associated with the Type N calorimeter.
+
+    This function is envoked by the underlying models.
+
+    This function taken from pat of the effcalc.m matlab function
+    on March 2026.
 
     Parameters
     ----------
-    f : np.ndarray
+    frequencies : array
         Array of frequencies
+    RLead : float, optional
+        Lead resistance of the sensor. The default is 0.
+    RThermistor :float , optional
+        Resistance of the thermistor. The default is 200.
 
     Returns
     -------
-    unc: array
-        Type A uncertainty same shape as f.
+    uA : np.array
+        Type A uncertainty.
+    uB : np.array
+        Type B uncertainty.
+    Utot : np.array
+        k = 2 total uncertainty.
 
     """
-    uA, _, _ = _unc_typeN(f)
+    uA, _, _ = _unc_typeN(frequencies, RLead, RThermistor)
     return uA
 
 
-def uB_CN(f):
+def uB_CN(frequencies, RLead: float = 0, RThermistor: float = 200):
     """
-    Type B uncertainty of the Type N Calorimeters in use at NIST.
+    Get the uncertainties associated with the Type N calorimeter.
+
+    This function is envoked by the underlying models.
+
+    This function taken from pat of the effcalc.m matlab function
+    on March 2026.
 
     Parameters
     ----------
-    f : np.ndarray
+    frequencies : array
         Array of frequencies
+    RLead : float, optional
+        Lead resistance of the sensor. The default is 0.
+    RThermistor :float , optional
+        Resistance of the thermistor. The default is 200.
 
     Returns
     -------
-    unc: array
-        Type B uncertainty same shape as f.
+    uA : np.array
+        Type A uncertainty.
+    uB : np.array
+        Type B uncertainty.
+    Utot : np.array
+        k = 2 total uncertainty.
 
     """
-    _, uB, _ = _unc_typeN(f)
+    _, uB, _ = _unc_typeN(frequencies, RLead, RThermistor)
     return uB

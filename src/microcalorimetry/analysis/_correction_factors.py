@@ -8,7 +8,7 @@ from rmellipse.uobjects import RMEMeas
 from typing import Iterable
 
 # local packages
-from microcalorimetry.math import rfpower, fitting
+from microcalorimetry.math import rfpower, fitting, rmemeas_extras
 from microcalorimetry._helpers._collections import try_sel, mean_unique_values, concat
 import microcalorimetry.configs as configs
 import microcalorimetry._gwex as _gwex
@@ -297,7 +297,7 @@ def make_correction_factor(
                 label='Total',
             )
             if not nominals:
-                gred = gc.categorize_by('Origin')
+                gred = rmemeas_extras.categorize_by(gc, 'Origin')
             else:
                 gred = gc
             for pl in gred.umech_id:

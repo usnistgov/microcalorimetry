@@ -1,6 +1,7 @@
 import microcalorimetry.analysis as anl
 import microcalorimetry.configs as configs
 import matplotlib.pyplot as plt
+from microcalorimetry.math import rmemeas_extras
 from pathlib import Path
 
 LOCAL = Path(__file__).parents[0]
@@ -221,7 +222,7 @@ def test_thermal_weights_test(make_plots: bool = False):
         colors = ['r', 'b', 'g']
         names = ['TF', 'KSTE', 'KSTE (w/ Mismatch)']
         for w, color, model in zip(weights, colors, names):
-            gred = w.categorize_by('Origin')
+            gred = rmemeas_extras.categorize_by(w, 'Origin')
             for i in range(1):
                 ax.plot(
                     w.sel(gc=i).nom.frequency,
@@ -259,7 +260,7 @@ def test_thermal_weights_test(make_plots: bool = False):
             'KSTE (w/ Mismatch) + TF',
         ]
         for w, color, model in zip(weights, colors, names):
-            gred = w.categorize_by('Origin')
+            gred = rmemeas_extras.categorize_by(w, 'Origin')
             for i in range(1):
                 ax.plot(
                     w.sel(gc=i).nom.frequency,
@@ -316,7 +317,7 @@ def test_thermal_weights_test(make_plots: bool = False):
         fig, ax = plt.subplots(3, 1, num='3-term-gc', sharex=True, figsize=(6, 11))
         ax = ax.flatten()
         for w, color, model in zip(weights, colors, names):
-            gred = w.categorize_by('Origin')
+            gred = rmemeas_extras.categorize_by(w, 'Origin')
             for i in range(3):
                 ax[i].plot(
                     w.sel(gc=i).nom.frequency,
@@ -348,7 +349,7 @@ def test_thermal_weights_test(make_plots: bool = False):
         fig, ax = plt.subplots(3, 1, num='3-term-gc', sharex=True, figsize=(6, 11))
         ax = ax.flatten()
         for w, color, model in zip(weights, colors, names):
-            gred = w.categorize_by('Origin')
+            gred = rmemeas_extras.categorize_by(w, 'Origin')
             for i in range(3):
                 ax[i].plot(
                     w.sel(gc=i).nom.frequency,
@@ -378,7 +379,7 @@ def test_thermal_weights_test(make_plots: bool = False):
         fig, ax = plt.subplots(3, 1, num='3-term-kc', sharex=True, figsize=(6, 11))
         ax = ax.flatten()
         for w, color, model in zip(weights, colors, names):
-            gred = w.categorize_by('Origin')
+            gred = rmemeas_extras.categorize_by(w, 'Origin')
             for i in range(3):
                 ax[i].plot(
                     w.sel(gc=i).nom.frequency,
@@ -449,7 +450,7 @@ def test_thermal_weights_test(make_plots: bool = False):
         fig, ax = plt.subplots(2, 2, num='3-term-gc', sharex=True, figsize=(6, 11))
         ax = ax.flatten()
         for w, color, model in zip(weights, colors, names):
-            gred = w.categorize_by('Origin')
+            gred = rmemeas_extras.categorize_by(w, 'Origin')
             for i in range(4):
                 ax[i].plot(
                     w.sel(gc=i).nom.frequency,
