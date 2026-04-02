@@ -16,7 +16,7 @@ this package is:
 This package is built using Rocky Mountain Ellipse ([RME](https://github.com/usnistgov/rmellipse)), a project to develop tools for digital traceability at NIST.
 
 
-Please refer to the documentation ([here](https://github.com/usnistgov/microcalorimetry-ipages)) for detailed information on how to use the package.
+Please refer to the [docs](https://pages.nist.gov/microcalorimetry-ipages/development/index.html) for detailed information on how to use the package.
 
 ## Introduction
 Install with pip or preffered package manager.
