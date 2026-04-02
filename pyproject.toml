@@ -23,8 +23,7 @@ docstring-code-format = true
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
-[tool.uv.sources]
-rmellipse = { git = "https://github.com/usnistgov/rmellipse", branch = "development" }
+
 
 
 
@@ -60,7 +59,7 @@ dependencies = [
   "jsonschema>=4.25.0",
   "pyvisa>=1.14.0",
   "rminstr>=0.6.5",
-  "rmellipse",
+  "rmellipse>=0.4",
   "customtkinter>=5.2.2",
 ]
 

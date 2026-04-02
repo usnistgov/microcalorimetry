@@ -119,15 +119,24 @@ def openloop_thermoelectric_power(
             # that should be the one that indicates the power
             # reading
             # pick the right root:
-            for k in range(3):
-                # pick a sample
-                sample = list(np.zeros(len(x[k].shape), dtype=int))
-                xi = x[k][*sample]
-                if np.isclose(np.imag(xi), 0, atol=1e-10):
-                    if np.real(xi) > -1e-3 and np.real(xi) < 50e-3:
-                        good_root = k
+            # iterate over every single value and do the thing
+            # this could be optimizid probably idk
+            out_data = np.zeros(p.data.shape)
+            for idx, _ in np.ndenumerate(out_data):
+                for k in range(3):
+                    xi = x[k][idx]
+                    # solution shoul be aproimatley real
+                    # and provide a value that is close
+                    # to what we expect to see
+                    if np.isclose(np.imag(xi), 0, atol=1e-10):
+                        if np.real(xi) > -1e-3 and np.real(xi) < 50e-3:
+                            good_root = k
+                            out_data[idx] = np.real(x[k][idx])
+                            # print(x[k][idx])
 
-            p.data[..., :] = np.real(x[good_root]).astype(float)
+                if good_root is None:
+                    raise Exception('Failed to pick a root.')
+            p.data[..., :] = out_data
 
         else:
             p = fitting.polyroot2(coeffs, y=e)

@@ -186,6 +186,8 @@ def calculate_step_final_values(
     date = datetime.fromtimestamp(raw[smu_volts_col][0][0]).strftime('%Y%m%d')
     finals = {}
     finals_ind = {}
+    # for each column name, threshhold the steps
+    # and find the right area to fit
     for n in cnames:
         t = raw[n][0]
         d = raw[n][1]
@@ -199,7 +201,7 @@ def calculate_step_final_values(
             # zero cooldown period, so needs to be at the final value
             if not fit_imm_step or si == 0:
                 t1 = s - avg_window_shiftback_secs
-                t0 = t1 - avg_window_size_secs - avg_window_shiftback_secs
+                t0 = t1 - avg_window_size_secs
             else:
                 # need to shift the first timestamp by one sample to not overlap with the previous
                 # step
@@ -207,7 +209,7 @@ def calculate_step_final_values(
                     raw[smu_volts_col][0][steps_ind[si - 1] + 1]
                     - avg_window_shiftback_secs
                 )
-                t1 = t0 + avg_window_size_secs - avg_window_shiftback_secs
+                t1 = t0 + avg_window_size_secs
 
             ind = np.logical_and(t >= t0, t < t1)
             vals = d[ind]
@@ -310,4 +312,5 @@ def calculate_step_final_values(
         )
         if save_plot_path:
             fig.savefig(save_plot_path)
+
     return finals[smu_volts_col], finals[smu_curr_col], finals[thermo_col], fig

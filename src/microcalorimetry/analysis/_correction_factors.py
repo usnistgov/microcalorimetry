@@ -15,7 +15,7 @@ import microcalorimetry._gwex as _gwex
 import xarray as xr
 
 
-__all__ = ['make_correction_factor','gc_from_model']
+__all__ = ['make_correction_factor','gc_from_model','review_correction_factor']
 
 def gc_from_model(
     frequency: np.array,
@@ -74,6 +74,63 @@ def gc_from_model(
     ax.set_ylabel(f'gc model {model.__name__}')
 
     return data, fig
+
+def review_correction_factor(
+    gc: configs.GC,
+    units: str = '',
+    ) -> list[plt.Figure,...]:
+
+    w = configs.GC(gc).load()
+    gred = rmemeas_extras.categorize_by(w,'Origin')
+
+    nterms = int(max(w.nom.gc))
+    # print(nterms)
+    out_figs = []
+
+    if units:
+        units = '( '+units + ' )'
+    else:
+        units = ''
+
+
+    for i in range(nterms+1):
+        # plot resultt
+        fig, ax = plt.subplots(1,1)
+
+        ax.plot(
+            w.sel(gc=i).nom.frequency,
+            w.nom.sel(gc=i),
+            'o-',
+        )
+        lb = w.sel(gc=i, drop=True).uncbounds(k=-2).cov
+        ub = w.sel(gc=i, drop=True).uncbounds(k=2).cov
+        ax.fill_between(lb.frequency, lb, ub, alpha=0.2, label = 'k = 2')
+        ax.set_title(f'Correction Term ${{{i}}}$')
+        ax.set_ylabel(f'Correction Term ${{{i}}}$ '+ units)
+        ax.legend(loc = 'best')
+        ax.set_xlabel('Frequency (GHz)')
+        fig.tight_layout()
+
+        out_figs.append(fig)
+
+
+        # plot uncertainties for term
+        fig, ax = plt.subplots(1,1)
+        wi = gred.sel(gc = i)
+        for uid in wi.umech_id:
+            ax.plot(
+                wi.nom.frequency,
+                wi.usel(umech_id = uid).stdunc().cov,
+                label = uid,
+                )
+        ax.plot(wi.nom.frequency, wi.stdunc(k=1).cov, color = 'k', label = 'Total')
+        ax.set_xlabel('Frequency (GHz)')
+        ax.set_ylabel('Contribution to Uncertainty (k=1)' + units)
+        ax.set_title(f'Correction Term ${{{i}}}$')
+        ax.legend(loc='best')
+        out_figs.append(fig)
+        # plt.show()
+    return out_figs
 
 def make_correction_factor(
     gc_regressor_rows: configs.CorrectionFactorModelInputs,
@@ -168,7 +225,7 @@ def make_correction_factor(
         # try to read the slow dc power from special reflect
         # assume zero if it's not present
 
-        if 'p2dc_on' in gcr['special']['parsed_calibration']:
+        if 'p2dc_on' in parsed_special:
             p2dc_on_fs = mean_unq(
                 configs.RFSweep(parsed_special['p2dc_on']).load(), 'frequency'
             )
@@ -245,11 +302,12 @@ def make_correction_factor(
         # but by weighting the correction factor regressor
         # by the sensitivity
         if calc_thermal_weights:
+            # nonlinear approximation
             derivative = polyderive(fs_clrm_coeffs)
             # evaluate the sensitivity at the power
             # levels being measureed
             if fs_clrm_coeffs.attrs['p_of_e']:
-                # because of inverse function theorem, 
+                # because of inverse function theorem,
                 # I can just invert the derivate of P(e)
                 kinv = polyval(derivative, e_on_fs - e_off_fs)
                 k = 1 / kinv
@@ -257,6 +315,12 @@ def make_correction_factor(
                 E = calc_te_power(fs_clrm_coeffs,e_on_fs - e_off_fs, p_of_e = False)
                 k = polyval(derivative, E)
             k = np.abs(k)
+            # linear approximation?
+            # if fs_clrm_coeffs.attrs['p_of_e']:
+            #     k = 1 / fs_clrm_coeffs.sel(deg=1, drop=True)
+            # else:
+            #     k = fs_clrm_coeffs.sel(deg=1, drop=True)
+            # k = np.abs(k)
             # divide by row
             row = row / k
 

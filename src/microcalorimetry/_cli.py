@@ -72,6 +72,7 @@ def _gui(no_console_stdout: bool = False):
             'make eta',
             'make eta hist model',
             'dc lead correction',
+            'apply_uncertainty_model'
         ],
     )
 

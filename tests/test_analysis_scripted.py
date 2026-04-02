@@ -87,14 +87,17 @@ def test_C24N118_from_scratch(
                 'V_off_function': 'linear',
                 'V_off_fit_time_window': (1, 10),
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'max_change',
             },
             'monitor_power': {
                 'instr_timing_tolerance': 5,
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'max_change',
             },
             'calorimeter_power': {
                 'instr_timing_tolerance': 5,
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'first_data_point',
             },
         },
         'signal_config': {
@@ -164,10 +167,12 @@ def test_C24N118_from_scratch(
             'monitor_power': {
                 'instr_timing_tolerance': 5,
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'max_change',
             },
             'calorimeter_power': {
                 'instr_timing_tolerance': 5,
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'first_data_point',
             },
         },
         'signal_config': {
@@ -234,10 +239,12 @@ def test_C24N118_from_scratch(
             'monitor_power': {
                 'instr_timing_tolerance': 5,
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'max_change',
             },
             'calorimeter_power': {
                 'instr_timing_tolerance': 5,
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'first_data_point',
             },
         },
         'signal_config': {
@@ -405,14 +412,17 @@ def test_S24P02_from_scratch(
                 'RF_on_average_window': 1800,
                 # needs to be replaced with coeffs after they are calculated
                 'coeffs': None,
+                'RF_off_time_offset_method': 'max_change',
             },
             'monitor_power': {
                 'instr_timing_tolerance': 5,
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'max_change',
             },
             'calorimeter_power': {
                 'instr_timing_tolerance': 5,
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'first_data_point',
             },
         },
         'signal_config': {
@@ -670,15 +680,13 @@ if __name__ == '__main__':
     import matplotlib as mpl
     import matplotlib.pyplot as plt
 
-    re_calculate = False
     mpl.use('QtAgg')
-    if re_calculate:
-        # fig = test_C24N118_from_scratch(resave_reference_results=False)
+    fig = test_C24N118_from_scratch(resave_reference_results=False)
 
-        fig = test_S24P02_from_scratch(
-            # dont switch this to True unless you want to override reference data.
-            resave_reference_results=False,
-            make_plots=True,
-        )
+    fig = test_S24P02_from_scratch(
+        # dont switch this to True unless you want to override reference data.
+        resave_reference_results=False,
+        make_plots=True,
+    )
     # anl.review_eta(MUTABLE / "test_C24N118_from_scratch.h5/new_eta", HISTORICAL_DATA)
     plt.show()
