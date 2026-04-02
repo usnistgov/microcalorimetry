@@ -1,0 +1,24 @@
+key_0,key_1,key_2,key_3,value,type,comment
+stats_settings,initial_wait,,,57600,float,time the program will spend warming up before the measurement at index 0 (units: seconds)
+stats_settings,use_traditional_stats,,,TRUE,bool,If True: use kendal test and runs test to check stability
+stats_settings,minimum_wait,,,1800,float,minimum waiting time at each frequency point in seconds
+stats_settings,stats_window,,,1800,float,thermopile voltage must be stable over this time interval to proceed to next frequency point (units: seconds)
+stats_settings,stats_Rcv,,,-3.4,float,used by runs test. higher = more stringent test
+stats_settings,stats_Tcv,,,0.25,float,used by Kendall test. Higher = more stringent
+stats_settings,measurement_interval,,,3,float,thermopile voltage sampling interval for computing stability stats in seconds
+,,,,,,
+levelling_settings,level_to,,,DUT_power,str,DUT or S3
+levelling_settings,HARD_MAX_dBm,DUT_power,,11,float, # dont want the DUT getting about 11 dBm so hard max here
+levelling_settings,HARD_MAX_dBm,monitor_power,,0,float, # doesn't matter when no monitor attatched but useful here
+levelling_settings,HARD_MAX_dBm,calorimeter_power,,1000,float, # set arbitrarily high so the DC bias doesnt trigger a shutdown
+levelling_settings,HARD_MAX_dBm,RF_source_power,,20,float, # sets a hard limit on the max source power across frequencies
+levelling_settings,use_AM_levelling,,,TRUE,bool,"If true, use an analog voltage source and AM input to level power"
+levelling_settings,use_GPIB_levelling,,,TRUE,bool,"If true, use GPIB commands to level power"
+levelling_settings,AM_levelling_C,,,0.01,float,used for AM levelling. Should be between 0 and 1.
+levelling_settings,AM_levelling_time,,,10000,float,how long to use AM levelling after GPIB levelling finishes (seconds)
+levelling_settings,GPIB_levelling_C,,,0.05,float,used for signal generator levelling. Should be between 0 and 1.
+levelling_settings,GPIB_levelling_time,,,2000,float,"Duration of synthesizer levelling in seconds. After this time, AM levelling takes over"
+levelling_settings,max_source_power_change_dB,,,0.5,float,rf power will not change by more than this ammount in a levelling step
+levelling_settings,AM_HARDMAX,,,0.2,float,in volts. Maximum amplitude modulation voltage.
+levelling_settings,V_off_slow_min,,,2,float,"in volts. If V_off slow is less than this number, assume an error has occurred and stop the experiment. Bolometers only."
+levelling_settings,V_off_slow_max,,,4,float,"in volts. If V_off slow is more than this number, assume an error has occurred and stop the experiment. Bolometers only."

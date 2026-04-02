@@ -1,0 +1,17 @@
+key_0,key_1,key_2,key_3,value,type,comment
+,,,,,,
+instruments,names,,,RF_source,str,human-readable name (arbitrary and unique)
+,,,,,,
+instruments,RF_source,model,,Anritsu_MG362x1A,str,model number
+instruments,RF_source,*IDN?,,"Anritsu,MG36271A,2544002,V2024.6.3",str,string
+instruments,RF_source,GPIB_address,,GPIB1::5::INSTR,str,GPIB address
+instruments,RF_source,role,,RF_source,str,an instrument's role is its specific use in the context of this measurement
+instruments,RF_source,output_column,,rf_power_setting,str,Column associated with the instrument
+instruments,RF_source,monitor_mode_settings,dBm,-20,float,settings for this instrument in monitor mode
+instruments,RF_source,initial_settings,dBm_limit,20,float,hardware limit on source
+instruments,RF_source,initial_settings,f_GHz,1,float,initial frequency setting
+instruments,RF_source,initial_settings,AM,TRUE,bool,turn amplitude modulation on or off
+instruments,RF_source,initial_settings,AM_ext_port,1,int,external input for DC signal that modulates the signal
+instruments,RF_source,initial_settings,AM_ext_sensitivity_percent_per_volt,10,float,linear sensitivity (percent per volt) of the modulated signal to the dc input
+instruments,RF_source,serial,,SERIAL,str,serial number
+measurement_description,RF_source_type,,,signal_generator,str,"options are: signal_generator, VNA"

@@ -1,0 +1,65 @@
+key_0,key_1,key_2,key_3,value,type,comment
+,,,,,,
+run_settings_columns,names,,,Frequency_GHz,str,Required. column name in run settings file (order must match run settings file)
+run_settings_columns,names,,,Initial_source_power_dBm,str,Required. column name in run settings file (order must match run settings file)
+run_settings_columns,names,,,Target_source_power_dBm,str,Required. column name in run settings file (order must match run settings file)
+run_settings_columns,names,,,Source_power_limit_dBm,str,Required. column name in run settings file (order must match run settings file)
+,,,,,,
+run_settings_columns,types,,,float,str,Required. column data type in run settings file (order must match run settings file)
+run_settings_columns,types,,,float,str,Required. column data type in run settings file (order must match run settings file)
+run_settings_columns,types,,,float,str,Required. column data type in run settings file (order must match run settings file)
+run_settings_columns,types,,,float,str,Required. column data type in run settings file (order must match run settings file)
+,,,,,,
+gpib_interface,,,,GPIB1::INTFC,str,"Interface used for GPIB. Typically 0, used for group triggering when needed."
+,,,,,,
+output_settings,maxlen,,,5000,int,maximum length of internal data record
+output_settings,minlen,,,3000,int,minimum length of internal data record
+,,,,,,
+,,,,,,
+output_settings,out_file_name,,,data.csv,str,in seconds
+output_settings,metadata_file_name,,,metadata.csv,str,time between updating plots in seconds
+output_settings,short_plot_time_window,,,1800,float,plot time window
+output_settings,plot_interval,,,1000,float,how often to generate internal plots
+,,,,,,
+signal_config,DUT_power,type,,bolometer,str,sensor type of the DUT
+signal_config,DUT_power,units,,W,str,units should be W
+signal_config,DUT_power,can_level,,TRUE,bool, whether or not sensor can level
+signal_config,DUT_power,resistance,,200,float,resistance of the DUT
+signal_config,DUT_power,input_signals,,vdc,str,data signals used to estimat power
+signal_config,DUT_power,vdc,units,V,str,units of input voltage
+signal_config,DUT_power,vdc,column,DVM_volts,str,column name corresponding to voltage
+signal_config,DUT_power,vdc,instrument,DVM1,str,instrument associated with this column
+,,,,,,
+signal_config,calorimeter_power,type,,thermoelectric,str,thermoelectric sensor of the calorimeter
+signal_config,calorimeter_power,units,,W,str,units produced from derived signal always W
+signal_config,calorimeter_power,can_level,,FALSE,bool,cant level to the calorimeter
+signal_config,calorimeter_power,coeffs,,0.033,float,voltage / W of the calorimeter's thermopile (can be an estimate)
+signal_config,calorimeter_power,input_signals,,e,str,input signals from data record to derive calorimeter power estimate
+signal_config,calorimeter_power,e,units,V,str, units of input signal
+signal_config,calorimeter_power,e,column,NVM_volts,str, column corresponding to input signal
+signal_config,calorimeter_power,e,instrument,NVM1,str, name of instrument associated with the signal
+,,,,,,
+signal_config,RF_source_power,type,,RF_source,str, Type of signal for RF source is always RF source
+signal_config,RF_source_power,units,,W,str, units always W
+signal_config,RF_source_power,can_level,,FALSE,bool, whether signal can be levelled to
+signal_config,RF_source_power,input_signals,,vdc,str, input voltage signal from AM
+signal_config,RF_source_power,input_signals,,power,str, commanded power over GPIB
+signal_config,RF_source_power,power,units,dBm,str, units of input power signal over GPIB always dBm
+signal_config,RF_source_power,power,column,rf_power_setting,str, column where power originates
+signal_config,RF_source_power,power,instrument,RF_source,str, instrument associated with column
+signal_config,RF_source_power,vdc,units,V,str, units of input AM voltage signal
+signal_config,RF_source_power,vdc,column,AM_voltage,str, column storing the AM voltage
+signal_config,RF_source_power,vdc,instrument,RF_amplitude_adjuster,str, instrument associated with AM voltage signal
+,,,,,,
+measurement_description,connector_type,,,2.4 mm,str,for traditional file header
+measurement_description,system,,,System Name,str,measurement system name
+measurement_description,water_bath_temperature,,,23.5,float,water bath temperature in celsius
+measurement_description,notes,,,Notes,str,notes about measurement
+measurement_description,calorimeter_name,,,Calorimeter Name,str,name of calorimeter
+measurement_description,DUT_name,,,DUT Name,str,name of sensor inside calorimeter
+measurement_description,monitor_name,,,Monitor Name,str,name of sensor outside calorimeter (Fill with None if none is used)
+measurement_description,splitter_name,,,Splitter Name,str,name of splitter used for measurement (fill with NONE if none is used.)
+measurement_description,RF_source_name,,,RF Source Name,str,name of the source being used
+measurement_description,connect_number,,,0,int,connect number of internal sensor for calorimetry measurements. Corresponds to experimental data directory.
+measurement_description,lead_resistance,,,200,float,lead resistance in ohms. For header.
+measurement_description,DC_source_type,,,NTC_TYPE_IV,str,"options are: PTC_SMU, NTC_SMU, NTC_TYPE_IV, PTC_TYPE_IV"

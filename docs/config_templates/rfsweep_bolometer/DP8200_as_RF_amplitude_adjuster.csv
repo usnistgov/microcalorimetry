@@ -1,0 +1,12 @@
+key_0,key_1,key_2,key_3,value,type,comment
+,,,,,,
+instruments,names,,,RF_amplitude_adjuster,str,human-readable name (arbitrary and unique)
+,,,,,,
+instruments,RF_amplitude_adjuster,model,,DP8200,str,model number
+instruments,RF_amplitude_adjuster,GPIB_address,,GPIB1::26::INSTR,str,GPIB address
+instruments,RF_amplitude_adjuster,output_column,,AM_voltage,str,output column associated with instrument
+instruments,RF_amplitude_adjuster,role,,RF_amplitude_adjuster,str,an instrument's role is its specific use in the context of this measurement
+instruments,RF_amplitude_adjuster,monitor_mode_settings,v_range,10,float,settings for this instrument in monitor mode
+instruments,RF_amplitude_adjuster,initial_settings,v_range,10,float,initial frequency setting
+instruments,RF_amplitude_adjuster,initial_settings,source_level,0,float,power setting upper limit (dBm)
+instruments,RF_amplitude_adjuster,serial,,SERIAL,str,serial of the instrument

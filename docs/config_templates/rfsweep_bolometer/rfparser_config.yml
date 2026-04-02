@@ -1,0 +1,31 @@
+analysis_config:
+    DUT_power:
+        # there is a relative time delay in the time series of the raw data because
+        # the timing of each instrument is a little bit off relative to
+        # one another. The steps of the Off / On are used to try and
+        # align the time series within this tolerance, so keep this at about
+        # 5 seconds
+        instr_timing_tolerance: 5
+        # If the stats window isn't picking settled values correctly
+        # in the RF off section, you can set this field to override it
+        # and pick an averaging window that is appropriate. Usually leave
+        # this field turned off.
+        # stats_window_override: 500
+
+        # this determines the how long to average RF on measurements
+        RF_on_average_window: 1000
+        # this determines how to determine relative offset between
+        # times reported on each instrument. Keep as max_change for bolometer
+        # mounts.
+        RF_off_time_offset_method: 'max_change'
+
+        # these fields are required for bolometer sensors only
+        V_off_delay: 0.37 # determines when to fit to the V_off measurmeent for bolometers
+        V_off_function: 'linear' # determines what function to fit the offs to to determine v_off
+        V_off_fit_time_window: [1, 10] # time window relative to the RF offf for fitting
+
+    calorimeter_power:
+        instr_timing_tolerance: 5
+        RF_on_average_window: 1000
+        RF_off_time_offset_method: 'first_data_point'
+        stats_window_override: 300
