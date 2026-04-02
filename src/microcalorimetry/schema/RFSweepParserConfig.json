@@ -12,7 +12,7 @@
                 },
                 "V_off_function": {
                     "type": "string",
-                    "enume": [
+                    "enum": [
                         "single_sample",
                         "lin_plus_exp",
                         "linear"
@@ -34,7 +34,7 @@
                     "V_off_delay": ["V_off_delay","V_off_function","V_off_fit_time_window"]
                 }
             },
-            "ThermoelectricSensorAnalysisSettings": {
+            "ThermoelectricSensorParserSettings": {
                 "description": "Analysis settings specific to a thermoelectric sensor.",
                 "additionalProperties": false
             }
@@ -51,6 +51,12 @@
                     "type": "number",
                     "description": "Used for determining the relative time delays between the instrument signals for finding the 'correct' RF switching time. A typical value is 5 seconds."
                 },
+                "RF_off_time_offset_method": {
+                    "type": "string",
+                    "enum": ["max_change","first_data_point"],
+                    "examples":["max_change"],
+                    "description": "Method for determining the last time point in the averaging window. If 'max_change': look for a change in column values corresponding to the source being turned off. If 'first_data_point', pick the time when the RF source was turned off - instr_timing_tolerance."
+                },
                 "RF_on_average_window": {
                     "type": "number",
                     "description": "time window (in seconds) to average over when evaluating long timescale settled values."
@@ -60,7 +66,7 @@
                     "description": "Override the statswindow (in seconds) to average over when evaluating long timescale RF off values."
                 }
             },
-            "required":["instr_timing_tolerance","RF_on_average_window"]
+            "required":["instr_timing_tolerance","RF_on_average_window","RF_off_time_offset_method"]
         }
     }
 }

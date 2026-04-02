@@ -922,7 +922,7 @@ requires-dist = [
     { name = "pyside6", specifier = ">=6.9.1" },
     { name = "pyvisa", specifier = ">=1.14.0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "rmellipse", git = "https://github.com/usnistgov/rmellipse?branch=development" },
+    { name = "rmellipse", specifier = ">=0.4" },
     { name = "rminstr", specifier = ">=0.6.5" },
     { name = "rminstr-specs", specifier = ">=0.4.0" },
 ]
@@ -1481,8 +1481,8 @@ wheels = [
 
 [[package]]
 name = "rmellipse"
-version = "0.4.0b3"
-source = { git = "https://github.com/usnistgov/rmellipse?branch=development#68e46c430c7b0b1ea2f6f421ab7b6cbd2de92289" }
+version = "0.4.4"
+source = { registry = "https://gitlab.nist.gov/gitlab/api/v4/projects/10154/packages/pypi/simple" }
 dependencies = [
     { name = "cdcs" },
     { name = "click" },
@@ -1502,6 +1502,10 @@ dependencies = [
     { name = "semver" },
     { name = "tqdm" },
     { name = "xarray" },
+]
+sdist = { url = "https://gitlab.nist.gov/gitlab/api/v4/projects/10154/packages/pypi/files/acc4256a5b46ae7744548feba45ad185d79c50c2f66fc6709cc1d027bfb096dc/rmellipse-0.4.4.tar.gz", hash = "sha256:acc4256a5b46ae7744548feba45ad185d79c50c2f66fc6709cc1d027bfb096dc" }
+wheels = [
+    { url = "https://gitlab.nist.gov/gitlab/api/v4/projects/10154/packages/pypi/files/d4613816b56fad7353dfc7ae51622b3f8f725f1a6e0be5d305b59219c53f999a/rmellipse-0.4.4-py3-none-any.whl", hash = "sha256:d4613816b56fad7353dfc7ae51622b3f8f725f1a6e0be5d305b59219c53f999a" },
 ]
 
 [[package]]

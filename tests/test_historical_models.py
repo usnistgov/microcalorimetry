@@ -24,7 +24,7 @@ def test_historical_data(make_new_reference: bool = False):
     ]
 
     # generate a data defined model
-    data_model, fig = anl.make_eta_repeatability_model(
+    data_model, fig, coeffs = anl.make_eta_repeatability_model(
         historical_files, make_plots=True
     )
 

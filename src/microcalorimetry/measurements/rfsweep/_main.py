@@ -20,6 +20,7 @@ import json
 import click
 from itertools import cycle
 from decimal import Decimal
+from fnmatch import fnmatch
 
 __all__ = ['run', 'parse', 'view', 'generate_settled_runlist', 'runlist_from_loss']
 
@@ -98,11 +99,32 @@ def view(
     # metadata = r"O:\67201\Power\24Calor\rawdata\C24N129\040\cstd_run_0_incomplete\20250115_metadata.csv"
     # it will break the app if run normally
 
-    # if power levelling is happening, plot a summary of that
+
+    # if a folder is pointed to, use a filed with _metadata.csv
+    # in the name as the metadata file, so folders can be pointed to
+    # adjusted_metadata = []
+    # for md in [metadata]:
+    #     md = Path(md)
+    #     if not md.exists():
+    #         raise FileExistsError(f'{md} doesnt exist')
+    #     elif md.is_file():
+    #         adjusted_metadata.append(md)
+    #     # assume folders contain a single run
+    #     # 1 metadata file
+    #     elif md.is_dir():
+    #         new_md = [f for f in md.glob('*_metadata.csv')]
+    #         if len(new_md) == 1:
+    #             adjusted_metadata.append(new_md[0])
+    #         else:
+    #             raise ValueError(f'{md} must contain exactly 1 *_metadata files to be pointed to by parser.')
+    # metadata = adjusted_metadata[0]
+
+   # if power levelling is happening, plot a summary of that
 
     dr = ExistingRecord(metadata)
 
     d_full = dr.batch_read()
+
 
     try:
         ep = ExptParameters(dr.metadata['config_file'], dr.metadata['settings_file'])
@@ -403,6 +425,7 @@ def parse(
     make_plots: bool = False,
     plot_segments_analysis: list[int] = [0,-1],
     plot_all_segments_analysis: bool = False,
+    dataframe_results: Path = None,
     format_matlab: Path = None,
 ) -> tuple[dict[RMEMeas], list[plt.Figure]]:
     """
@@ -423,6 +446,10 @@ def parse(
     plot_all_segments_analysis : bool
         If True, when making plots plot every segments
         analysis.
+    dataframe_results : Path, optional
+        If provided, saves a csv of intermediate calculated values.
+    format_matlab : Path, optional
+        If provided, saves a matlab version of the output results.
 
     Returns
     -------
@@ -453,6 +480,26 @@ def parse(
     if type(metadata) is not list:
         metadata = [metadata]
 
+    # if a folder is pointed to, use a filed with _metadata.csv
+    # in the name as the metadata file, so folders can be pointed to
+    adjusted_metadata = []
+    for md in metadata:
+        md = Path(md)
+        if not md.exists():
+            raise FileExistsError(f'{md} doesnt exist')
+        elif md.is_file():
+            adjusted_metadata.append(md)
+        # assume folders contain a single run
+        # 1 metadata file
+        elif md.is_dir():
+            new_md = [f for f in md.glob('*_metadata.csv')]
+            if len(new_md) == 1:
+                adjusted_metadata.append(new_md[0])
+            else:
+                raise ValueError(f'{md} must contain exactly 1 *_metadata files to be pointed to by parser.')
+
+    metadata = adjusted_metadata
+
     runs = []
     for metadata_path in metadata:
         run_dir = Path(metadata_path).parent
@@ -477,6 +524,7 @@ def parse(
                     called_out = si in plot_segments_analysis
                     is_end = si == len(run.segments)-1 and (-1 in plot_segments_analysis)
                     if called_out or is_end or plot_all_segments_analysis:
+                        # plot the analysis for a single step
                         figure = analyzer.plot_analysis(segment)
                         figure.suptitle(f"{signal} signal \n run {Path(metadata_path).parent.name} ; segment {si}")
                         figures.append(figure)
@@ -502,23 +550,26 @@ def parse(
             for ins in input_signals:
                 # plot the deviation of the RF on value as a function
                 # of the step number
-                fig,ax = plt.subplots(1,1)
+                fig,ax = plt.subplots(2,1)
                 try:
                     column = sconfig[ins]['column']
-                    fig.suptitle(f'{signal} \n {column} standard deviation')
-                    ax.set_xlabel('Step Number')
-                    ax.set_ylabel(f'{ins} ({sconfig[ins]['units']})')
+                    fig.suptitle(f'{column} RF On standard deviation')
+
+
                     for mode in ['on']:
                         dev = data_df[f'{column}_{mode}_dev']
-                        mean = np.mean(dev)
-                        mean_str = r'$\mu$ = {:0.2E}'.format(Decimal(mean))
-                        ax.plot(dev, 'o', label = f'RF {mode.title()} : {mean_str}')
-    
-                    ax.legend(loc = 'best')
+                        mean = data_df[f'{column}_{mode}']
+                        ppm = dev/mean*1e6
+                        ax[0].plot(dev, 'o')
+                        ax[1].set_xlabel('Step Number')
+                        ax[1].plot(ppm, 'o')
+                        ax[0].set_ylabel(f'Column RF On std ({sconfig[ins]['units']})')
+                        ax[1].set_ylabel('Column RF On std (ppm)')
                     figures.append(fig)
                 except Exception as e:
                     plt.close(fig)
-                    print(f"Encountered error plotting signal {signal}:{ins} std \n {type(e)}: {e}")
+                    if verbose:
+                        print(f"Encountered error plotting signal {signal}:{ins} std \n {type(e)}: {e}")
 
 
                 fig,ax = plt.subplots(2, 1, figsize = (8,8))
@@ -541,9 +592,76 @@ def parse(
                     fig.tight_layout()
                     figures.append(fig)
                 except Exception as e:
-                    plt.close('fig')
-                    print(f"Encountered error plotting  {signal}:{ins} segment off \n {type(e)}: {e}")
-                    
+                    plt.close(fig)
+                    if verbose:
+                        print(f"Encountered error plotting  {signal}:{ins} segment off \n {type(e)}: {e}")
+
+        # Plot if the source think it is in
+        # compression
+
+        compression = {}
+        freq = np.array([])
+        try:
+            for run in c.run_list:
+                for segment in run.segments:
+                    if segment.results['complete']:
+                        for step in segment.steps:
+                            signals = [k for k in step.raw_data.keys() if fnmatch(k, '*power_signal*') and 'timestamp' not in k and 'calorimeter' not in k]
+                            source = step.raw_data['RF_source_power_signal (W)']
+                            source = source[2:].astype(float)
+                            pow_signals = {s:step.raw_data[s] for s in signals if 'source' not in s}
+
+                            # calculate compression
+                            good_freq = False
+                            for k,sig in pow_signals.items():
+                                sig = sig[2:].astype(float)
+                                max_i = np.argmax(sig)
+                                sig_dB_change = 10*np.log10(sig[max_i]/sig)
+
+                                #closest to 1dB of change
+                                sig_1dB_closest_i = np.argmin(abs(sig_dB_change - 1))
+                                sig_1dB_closest = sig_dB_change[sig_1dB_closest_i]
+
+                                # if the smalles changes was < 0.4, skip it
+                                # is that a good number? idk
+                                if sig_1dB_closest < 0.5:
+                                    continue
+
+                                # estimate the compression
+                                max_source = source[max_i]
+                                source_1dB_closest = source[sig_1dB_closest_i]
+                                compress_i = sig_1dB_closest - 10*np.log10(max_source/source_1dB_closest)
+                                # print(k.split('_power_signal')[0], sig_1dB_closest)
+                                try:
+                                    compression[k] = np.append(compression[k], compress_i)
+                                except KeyError:
+                                    compression[k] = np.array([compress_i])
+
+                                good_freq = True
+                            if good_freq:
+                                freq = np.append(freq, step.frequency)
+                            # print(k, step.frequency, compress_i)
+            fig,ax = plt.subplots(1,1)
+            for k in compression:
+                ax.plot(freq, compression[k],'o', label = f'Measured By: {k.split('_power_signal')[0]} Est.')
+
+            ax.axhline(0.4, color = 'r', ls = '--', lw = 3, label = 'Limit')
+            ax.legend(loc = 'best')
+            ax.set_xlabel('Frequency (GHz)')
+            ax.set_ylabel('Compression (dB)')
+            ax.set_title('Source Compression Check')
+            # plt.show()
+            figures.append(fig)
+        except Exception as e:
+            print(f"Warning: Couldn't estimate compression for : {e}")
+
+        ...
+
+    # output a the dataframe results
+    if dataframe_results:
+        df = c.output_dataframe()
+        df.to_csv(dataframe_results)
+
     # format fata for rmellipse calculataions
     data = c.output_segments(fmt_for='rmellipse', include_specs=True)
 
@@ -557,26 +675,26 @@ def parse(
     # do a little bit of post processing to calculate power
     # This calculates the inferred power flowing through the thermopile
     outputs = {}
-    
+
     cal_coeffs = configs.ThermoelectricFitCoefficients(
         signal_config['calorimeter_power']['coeffs']
     ).load()
-    
+
     try:
         p_of_e_calorimeter = cal_coeffs.attrs['p_of_e']
 
         E_on = openloope_te_power(
             cal_coeffs, data.sel(col=e_col + '_on'), p_of_e=p_of_e_calorimeter
         )
-    
+
         E_off = openloope_te_power(
             cal_coeffs, data.sel(col=e_col + '_off'), p_of_e=p_of_e_calorimeter
         )
-        
+
         outputs.update({'E_on': E_on, 'E_off': E_off})
 
-    except AttributeError as e:
-        print("Warning: Can't compute power inferred b calorimeter, skipping.")
+    except AttributeError:
+        print("Warning: Can't compute power inferred by calorimeter, skipping. Likely a full data model of the sensitivity wasn't supplied.")
 
 
 
@@ -777,20 +895,22 @@ def parse(
         msg = f'{signal_config["monitor_power"]["type"]} not recognized'
         raise ValueError(msg)
 
-    # Make a bunch of plots against frequenecy and step number
-    # For 'at a glance' analysis
+    # plot parsed components
     if make_plots:
         plot_outputs = {k:v for k,v in outputs.items() if k in ['zeta']}
         for k, v in plot_outputs.items():
-            fig, ax = plt.subplots(1, 2)
-            lb, ub = v.confint(0.95)
-            ax[0].plot(v.nom.frequency, v.nom, 'ko')
-            ax[0].set_ylabel(k)
-            ax[0].set_xlabel('Frequency (GHz)')
+            fig, ax = plt.subplots(1, 1)
+            unc = v.stdunc().cov
+            ax.errorbar(
+                v.nom.frequency,
+                v.nom,
+                yerr = unc,
+                capsize = 3,
+                label = 'k=1',
+                ls = '')
+            ax.set_ylabel(k.replace('zeta','Uncorrected Eta'))
+            ax.set_xlabel('Frequency (GHz)')
 
-            ax[1].plot(v.nom, 'ko')
-            ax[1].set_ylabel(k)
-            ax[1].set_xlabel('Step Number')
             sidearm_name = None
             try:
                 sidearm_name = ep['measurement_description']['sidearm_name']
@@ -1050,8 +1170,8 @@ def runlist_from_loss(
     # interleave the frequency points
     initial_source = _interleave(initial_source)
     frequencies = _interleave(frequencies)
-    
-    
+
+
     if no_maximums:
         output_df = {
             'Frequency_GHz': [],
