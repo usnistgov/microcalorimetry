@@ -1,0 +1,25 @@
+{
+    "CALORIMETERS": [
+        "Calorimeter Name"
+    ],
+    "RFSOURCES":[
+        "RF Source Name"
+    ],
+    "COMMERCIAL_MOUNTS": [
+    ],
+    "SPECIAL_MOUNTS": [
+    ],
+    "THIN_FILM_MOUNTS": [
+    ],
+    "THERMISTOR_MOUNTS": [
+        "DUT Name"
+    ],
+    "KEYSIGHT_THERMOPILE_BALANCE_MOUNTS":[
+    ],
+    "EXPECTED_RESISTANCE": {
+        "DUT Name": 200.0
+    },
+    "EXPECTED_LINEAR_TERM_BOUNDS": {
+		"Calorimeter Name":[0.03,0.04]
+    }
+}

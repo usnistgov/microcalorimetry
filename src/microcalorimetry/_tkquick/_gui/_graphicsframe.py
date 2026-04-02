@@ -20,8 +20,10 @@ import os.path
 from microcalorimetry._tkquick._gui._themes import console_font
 import microcalorimetry.math.vna as vna
 import microcalorimetry.math.trig as trig
+import microcalorimetry.math.rmemeas_extras as rmemeas_extras
 from rmellipse.uobjects import RMEMeas
 from rmellipse.propagators import RMEProp
+from rmellipse.utils import load_object
 import microcalorimetry._gwex as gwex
 import xarray as xr
 
@@ -268,7 +270,7 @@ class HDF5GroupRow:
             )
             self.plot = ctk.CTkSegmentedButton(
                 master=master,
-                values=['+', ']'],
+                values=['+', ']','u'],
                 command=self.make_plot,
                 width=20,
                 height=20,
@@ -322,6 +324,11 @@ class HDF5GroupRow:
             output = plot_RMEMeas(self.hdf5_file, self.name, fig=figure)
             figure.canvas.draw()
             figure.canvas.flush_events()
+        elif value == 'u':
+            output = uncertainty_breakdown(self.hdf5_file, self.name)
+            for item in output:
+                if isinstance(item, plt.Figure):
+                    self.master.parent.graphicstabs.add_plot(item, 'plt')
 
     def make_meta(self):
         with h5py.File(self.master.hdf5_file, 'r') as f:
@@ -435,6 +442,49 @@ class HDF5viewer(customtkinter.CTkScrollableFrame):
                             HDF5GroupRow(i + 3, o, self, 0, hdf5_file=self.hdf5_file)
                         )
 
+def uncertainty_breakdown(file, hdf5_path):
+    """
+    Break down the uncertainties of a generic RMEMeas object.
+    """
+    with h5py.File(file, 'r') as f:
+        data = load_object(f[hdf5_path],load_big_objects = True)
+    # remove a trailing unitary dimension, it's fine
+    if (len(data.nom.shape) == 2 and data.nom.shape[1] == 1):
+        data = data[:, 0]
+
+    if len(data.nom.shape) == 1 and data.nom.dtype is not complex:
+        print('1d array, plotting as line')
+        fig, ax_budget = plt.subplots(1, 1)
+
+        xlabel = data.nom.dims[0]
+        ylabel = hdf5_path.split('/')[-1]
+        xvals = data.nom.coords[xlabel]
+        # break down uncertainty
+        utot = data.stdunc(k=1).cov
+
+        ax_budget.set_ylabel(r'Contributions to Standard Uncertainty (k=1)')
+        try:
+            data = rmemeas_extras.categorize_by(data, 'Origin')
+        except KeyError:
+            data = data
+        for ploc in data.umech_id:
+            unc = data.usel(umech_id=str(ploc)).stdunc()[0]
+            ax_budget.plot(xvals, unc, '--', lw=2, label=ploc)
+        ax_budget.plot(xvals, utot, 'k', lw=2, label='Total')
+        box = ax_budget.get_position()
+        ax_budget.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+        ax_budget.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        ax_budget.set_xlabel(xlabel)
+        ax_budget.set_ylabel(f'k=1 contribution to {ylabel}')
+        ax_budget.set_title(f'Uncertainty in {file}/{hdf5_path}')
+        ax_budget.legend(loc='best')
+        fig.tight_layout()
+
+    else:
+        print('Couldnt plot shape/dtype')
+        return None
+
+    return [fig]
 
 def plot_RMEMeas(file, hdf5_path, fig=None):
     """
@@ -461,7 +511,7 @@ def plot_RMEMeas(file, hdf5_path, fig=None):
 
         if 'dataformat' in data['cov'].attrs:
             dfm = data['cov'].attrs['dataformat']
-            data = RMEMeas.from_h5(f[hdf5_path])
+            data = load_object(f[hdf5_path],load_big_objects = True)
             print('has format, using plot function')
             if dfm == 's1p_c':
                 return review_s1p(file, hdf5_path)
@@ -502,20 +552,19 @@ def plot_RMEMeas(file, hdf5_path, fig=None):
                 else:
                     ax = fig.axes[0]
 
-                ub = data.uncbounds(k=1)[0]
-                lb = data.uncbounds(k=-1)[0]
+                stdunc = data.stdunc().cov
                 xlabel = data.nom.dims[0]
                 ylabel = hdf5_path.split('/')[-1]
                 xvals = data.nom.coords[xlabel]
-                ax.plot(
+                ax.errorbar(
                     xvals,
                     data.nom,
-                    'o-',
-                    lw=2,
+                    yerr=stdunc,
+                    fmt='o',
+                    capsize=3,
                     label='.../' + '/'.join(hdf5_path.split('/')[-2:]),
                 )
-                ax.plot(xvals, lb, '--k', label='k = 1')
-                ax.plot(xvals, ub, '--k')
+                
                 ax.set_xlabel(xlabel)
                 ax.set_ylabel(ylabel)
                 ax.set_title(hdf5_path)
@@ -533,20 +582,18 @@ def plot_RMEMeas(file, hdf5_path, fig=None):
                     figs.append(fig)
                 else:
                     ax = fig.axes[0]
-                ub = data.uncbounds(k=1)[0]
-                lb = data.uncbounds(k=-1)[0]
+                stdunc = data.stdunc().cov[:,1]
                 xlabel = data.nom.dims[0]
                 ylabel = hdf5_path.split('/')[-1]
                 xvals = data.nom.coords[xlabel]
-                ax.plot(
+                ax.errorbar(
                     xvals,
                     data.nom,
-                    'o-',
-                    lw=2,
+                    yerr=stdunc,
+                    fmt='o',
+                    capsize=3,
                     label='.../' + '/'.join(hdf5_path.split('/')[-2:]),
                 )
-                ax.plot(xvals, lb, '--k', label='k = 1')
-                ax.plot(xvals, ub, '--k')
                 ax.set_xlabel(xlabel)
                 ax.set_ylabel(ylabel)
                 ax.set_title(hdf5_path)

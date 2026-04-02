@@ -4,7 +4,59 @@ import xarray as xr
 import numpy as np
 
 
-def polyval(coord, coeffs, degree_dim: str = 'degree'):
+
+def polyderive(coeffs: xr.DataArray, degree_dim: str = 'deg') -> xr.DataArray:
+    """
+    Derive polynomial coefficients.
+
+    Parameters
+    ----------
+    coeffs : xr.DataArray
+        Coefficients along dim
+        'degree' as last dimension.
+
+    Returns
+    -------
+    derivative : xr.DataArray
+        Derivative of the derived coefficients
+
+    """
+    out = coeffs.copy()
+    new_degrees = []
+    drop_deg = []
+    for d in out.coords[degree_dim]:
+        new_degrees.append(d-1)
+        # and d close to zero will give a value close to zero,
+        # so drop dem
+        if np.isclose(d,0):
+            drop_deg.append(new_degrees[-1])
+        out.loc[...,d] = coeffs[...,d]*d
+    new_degrees = np.array(new_degrees)
+    out = out.assign_coords({degree_dim :np.array(new_degrees)})
+    keep = new_degrees[np.isin(new_degrees,drop_deg,invert=True)]
+    out = out.sel(**{degree_dim:keep})
+    return out
+
+def polyval(coord: xr.DataArray, coeffs: xr.DataArray, degree_dim: str = 'deg'):
+    """
+    Evaluate a polynomial.
+
+    Parameters
+    ----------
+    coord : xr.DataArray
+        Array to evaluate
+    coeffs : xr.DataArray
+        Coefficients along dim
+        'deg' as last dimension.
+    degree_dim : str, optional
+        Dimension that stores the degrees. The default is 'deg'.
+
+    Returns
+    -------
+    val : xr.DataArray
+        Array of results of evaluated polynomial.
+
+    """
     out = xr.polyval(coord, coeffs)
     out = out.transpose(..., *coord.dims)
     return out

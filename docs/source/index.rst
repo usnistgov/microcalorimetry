@@ -63,7 +63,7 @@ Configuration objects for measurements and analysis scripts are provided in a ``
 
 .. code-block:: python
 
-   import microcalorimetery.configs as configs
+   import microcalorimetry.configs as configs
 
 
 Mathematical operations compatable with
@@ -81,6 +81,7 @@ Table of Contents
 .. toctree::
    :maxdepth: 3
 
+   package_structure/index.rst
    schemas/index.rst
    auto_examples/index.rst
    cli.rst

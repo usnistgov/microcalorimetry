@@ -7,24 +7,23 @@ Data Model Containers
 This package contains high level analysis functions which take in data sets (S-parameter data,
 data collected from RF sweep measurements, etc) and operate on them with lower level functions following
 some mathematical algorithm. To facilitate both python scripting, and interacting the package through a
-user interface like a GUI or CLI, the package defines configuration objects called Data Models. Data Models
-are objects which can be supplied either pointers to a data set in a file, or the in memory representation
-of the file (like an RMEMeas object). The ``DataModelContainer`` configuration object can invoke the ``load()`` function
-which will return the preffered in-memory representation of whatever dataset is being requested by the function.
+user interface like a GUI or CLI, the package defines configuration objects called a ``DataModelContainer``.
+These can be supplied either pointers to a data set in a file, or the in memory representation
+of the file (like an RMEMeas object). The ``DataModelContainer`` can invoke the ``load()`` function
+which will return the preffered in-memory representation of whatever dataset is being requested by the function -
+provided a supported input was provided.
 
-All functions in the ``analysis`` submodule, and all congfiguration schema, will specify their dataset requirements
-as ``DataModelContainer`` objects
 
 For example, when scripting in python a function called ``fn`` may request a parameter called ``my_s11`` that is expected to be
 a ``S11`` data model container. This could be supplied as an in memory representation that was already loaded previously
-in the script,
+in the script, in this example called ``data``.
 
 .. code-block:: python
 
     fn(my_s11 = data)
 
 
-Importantly, in the case of a GUI or UI, the ``my_s11`` can be specified as path to the data set. In
+Importantly, in the case of a UX the value for ``my_s11`` can be specified as path to the data set. In
 this example  to a `.dut` file, a text format produced by NIST's S-parameter calibration service.
 
 .. code-block:: python
@@ -46,12 +45,10 @@ You could also provide a DataModelContainer itself.
     fn(my_s11 = microcalorimetry.configs.S11('path/to/my/file.hdf5/group/inside/file'))
 
 
-Inside the analysis function, the parameter ``my_s11`` can be cast into the correct container
-and call the ``.load()`` function
-and get the in-memory representation. The data set can be freed, (assuming the python intpreter isn't holding
-any references to the dataset outside of ``fn``) and the confguration object
-preserves a pointer to the data set that can be loaded in again later. If a pre-loaded
-dataset is provided to the function, then python garbage collector will keep the data set in memory since
+Inside the analysis function, the parameter ``my_s11`` can be cast into the correct container.
+The ``.load()`` function is used to load in and get the in-memory representation. The data set can be freed
+and the configuration object preserves a pointer that can be loaded in again later. If a pre-loaded
+dataset is provided to the function, then the python garbage collector will keep the data set in memory since
 ``my_s11`` preserves a reference to it.
 
 .. code-block:: python
@@ -65,20 +62,26 @@ dataset is provided to the function, then python garbage collector will keep the
     # re load if needed again
     s11_data = my_s11.load()
 
+This gives analysis scripts the ability
+to easily load and free memory as needed. It also gives
+a python script invoking the analysis function the ability to
+force the data set to stay in memory by pre-loading it, saving load time
+at the cost of increased memory usage.
 
 Serial Dictionaries
 -------------------
 
 Some measurement and analysis functions will request
-a dictionary object with a particular structure. Fields in the dictionary contain measurement settings,
-or analysis settings, or data sets used in an analysis. They can be supplied by giving either a
-manually created dictionary in a python script,
+a dictionary object with a particular structure, which are inherited
+from a base class called ``Serial Dictionary``. Fields in the dictionary contain measurement settings,
+or analysis settings, or a ``DataModelContainer``.
+They can be supplied by giving either a manually created dictionary in a python script,
 
 .. code-block:: python
 
     my_config = {'key': 'value', ... }
 
-Or can be written in a file using a standard markdown language dictionary format (YAML,  JSON, or ExperimentParameters).
+Or can be written in a file using a standard markdown format (YAML,  JSON, or ExperimentParameters).
 
 .. code-block:: yaml
 
@@ -93,26 +96,35 @@ configuration.
 
 
 In either case, either the file path or a dictionary constructed in a python
-script can be passed into a function requesting a type of Serial Dictionary. It
-can be cast into the correct type.
+script can be passed into a function requesting a type of Serial Dictionary.
 
 .. code-block:: python
 
     my_config = microcalorimetery.configs.MyConfigType(my_config)
 
-When cast, as Serial Dictionary is validated against schema presented here. They
-are defined using `json schema <https://json-schema.org/>`__. In JSON schema.
+When cast, as Serial Dictionary is validated against a schema to validate
+the structure. They are defined using `json schema <https://json-schema.org/>`__.
 
 This facilitates interoperability of analysis and measurmeent functions with Python
-scripting environments, and with user interfaces. It also provides some validation to
+scripting environments, and with user interfaces where a dictionary may need
+to be written into a file. It also provides some validation to
 complex configuration files.
+
+
+Configuration Templates
+-----------------------
+
+Templates for measurement and analysis configurations can be found in the github repo_.
+Make sure you pick out templates from the appropriate branch and or version.
+
+.. _repo: https://github.com/usnistgov/microcalorimetry/tree/development/docs
 
 Configuration Reference
 -----------------------
 
 This section includes detailed schema descriptions of every type of confguration object used in this package.
 This documentation is auto-generated based on the schema-definitions. Objects in this reference may also correspond
-to Python objects that can be imported in the ``microcalorimetery.configs`` submodule. See the API reference for
+to Python objects that can be imported in the ``microcalorimetry.configs`` submodule. See the API reference for
 more information on those objects.
 
 .. toctree::

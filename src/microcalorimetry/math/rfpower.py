@@ -7,6 +7,31 @@ import numpy as np
 from microcalorimetry.math import fitting
 
 
+def dcbias_eta_correction(
+    eta: xr.DataArray,
+    R_lead: float,
+    R_bolo: float,
+):
+    """
+    Correct an effective efficiency measurment for DC biases.
+
+    From CPEM 2010 paper.
+
+    Parameters
+    ----------
+    eta : xr.DataArray
+        Effective efficiency measurement.
+    R_lead : float
+        Lead resistance of the Force and Sense leads of the sensor
+        added together.
+    R_bolo : float
+        Resistance of the bolometer, typically 200 Ohms for thermistor
+        sensors.
+    """
+    epsDC = R_lead / (2 * R_bolo)
+    return eta / (1 + epsDC)
+
+
 def openloop_thermoelectric_power(
     coeffs: xr.DataArray,
     e: xr.DataArray,
@@ -44,7 +69,9 @@ def openloop_thermoelectric_power(
     else:
         # deg 2, solve root
         # this is faster than polyroot
-        if max(coeffs.deg == 2):
+        # deg 2, solve root
+        # this is faster than polyroot
+        if max(coeffs.deg) == 2:
             p = e.copy()
             a = coeffs.sel(deg=[2]).data
             b = coeffs.sel(deg=[1]).data
@@ -58,6 +85,59 @@ def openloop_thermoelectric_power(
                 p.data[..., :] = root1
             else:
                 p.data[..., :] = root2
+        # cubic root formula
+        elif max(coeffs.deg) == 3:
+            p = e.copy()
+            a = coeffs.sel(deg=[3]).data
+            b = coeffs.sel(deg=[2]).data
+            c = coeffs.sel(deg=[1]).data
+            # if the 0th term isnt there, assume its zero
+            try:
+                d = coeffs.sel(deg=[0]).data - e.data
+            except KeyError:
+                d = coeffs.sel(deg=[1]).data * 0 - e.data
+            # intermediate values
+            delta_0 = (b**2 - 3 * a * c).astype(complex)
+            delta_1 = (2 * b**3 - 9 * a * b * c + 27 * a**2 * d).astype(complex)
+
+            C_root = np.sqrt(delta_1**2 - 4 * delta_0**3)
+            C = np.power((delta_1 + C_root) / 2, 1 / 3)
+            if np.isclose(np.min(C), 0):
+                C = np.power((delta_1 - C_root) / 2, 1 / 3)
+
+            # if zero at this point, then fraction is zero
+            x = [np.nan] * 3
+            zeta = (-1.0 + (-3.0) ** (1.0 / 2)) / 2.0
+            for k in range(3):
+                if np.isclose(np.min(C), 0):
+                    print(0)
+                    xk = -1 / (3 * a) * (b + zeta**k * C + 0)
+                else:
+                    xk = -1 / (3 * a) * (b + zeta**k * C + delta_0 / (zeta**k * C))
+                x[k] = xk
+            # check for the real root between 0 and 100
+            # that should be the one that indicates the power
+            # reading
+            # pick the right root:
+            # iterate over every single value and do the thing
+            # this could be optimizid probably idk
+            out_data = np.zeros(p.data.shape)
+            for idx, _ in np.ndenumerate(out_data):
+                for k in range(3):
+                    xi = x[k][idx]
+                    # solution shoul be aproimatley real
+                    # and provide a value that is close
+                    # to what we expect to see
+                    if np.isclose(np.imag(xi), 0, atol=1e-10):
+                        if np.real(xi) > -1e-3 and np.real(xi) < 50e-3:
+                            good_root = k
+                            out_data[idx] = np.real(x[k][idx])
+                            # print(x[k][idx])
+
+                if good_root is None:
+                    raise Exception('Failed to pick a root.')
+            p.data[..., :] = out_data
+
         else:
             p = fitting.polyroot2(coeffs, y=e)
 
@@ -245,7 +325,9 @@ def zeta_dcsub(
 
 
 def effective_efficiency(
-    uncorrected_eta: xr.DataArray, gamma_s: xr.DataArray, gc: xr.DataArray
+    uncorrected_eta: xr.DataArray,
+    gamma_s: xr.DataArray,
+    gc: xr.DataArray,
 ) -> xr.DataArray:
     """
     Calculate effective efficiency.
@@ -561,6 +643,10 @@ def gc_device_row(
     solution = solution.rename({old_d: 'row'})
     solution = solution.assign_coords({'row': [0]})
     solution = solution.expand_dims({'col': [0]}, axis=-1)
+    # drop unused scalar coords, dont want them.
+    for k in solution.coords:
+        if k not in solution.dims:
+            solution = solution.drop_vars(k)
 
     # common function for building a single observation in matrix
     def obs(cxi, csi, i):

@@ -20,11 +20,13 @@ npdoc_typedict = {
     'Path': Path,
     'ndarray[float]': np.ndarray[float],
     'np.ndarray[float]': np.ndarray[float],
+    'configs.PythonFunction': str,
     'list[Path]': list[Path],
     'Folder': dtypes.Folder,
     'list[int]': list[int],
     'list[str]': list[str],
     'list[float]': list[float],
+    'list[configs.EtaHistorical]': list[Path],
     'RFSweepParserConfig': Path,
     'RFSweepSignalConfig': Path,
     'configs.Eta': Path,
@@ -44,6 +46,7 @@ npdoc_defaults = {
     'dict': None,
     'tuple': '0, 0',
     'list': '0, 0',
+    'configs.PythonFunction': 'module:function or file.py:function',
     'ndarray[float]': '0.0, 1.0',
     'np.ndarray[float]': '0.0, 1.0',
     'Path': 'Path/To/Thing.ext',
@@ -57,6 +60,7 @@ npdoc_defaults = {
     'configs.ParsedRFSweep': 'path.(h5)',
     'configs.ThermoelectricFitCoefficients': 'path.(h5)',
     'list[Path]': 'paths/to/thing.ext, path/to/thing2.ext',
+    'list[configs.EtaHistorical]': 'paths/to/thing.yml, path/to/thing.yml',
     'Folder': 'path/to/folder',
     'list[int]': '0, 1, 2, 3',
     'list[str]': 'item1, item2, item3',
@@ -85,7 +89,7 @@ def get_form_field(master, row, npparam, default, level=0):
         print(npparam)
         raise (e)
 
-    print(fieldname, type_str, dtype)
+    # print(fieldname, type_str, dtype)
 
     if dtype is str or dtype is float or dtype is int:
         if 'Options Format' in p.desc and '-' * 14 in p.desc:
@@ -99,7 +103,13 @@ def get_form_field(master, row, npparam, default, level=0):
             default = 0
         field = BooleanBox(master, row, fieldname, default)
 
-    elif dtype is Path or 'Path' in type_str or 'Folder' in type_str:
+    elif (
+        dtype is Path
+        or 'Path' in type_str
+        or 'Folder' in type_str
+        or 'list[configs.EtaHistorical]' in type_str
+    ):
+        print(type_str, dtype)
         field = PathBox(master, row, fieldname, p.type, default)
 
     elif dtype is dict:
@@ -180,23 +190,35 @@ class PathBox:
             else:
                 print('no folder selected.')
 
-        # treat it as a special type of file if not a generic path
-        else:
+        # treat it as a list if list is present
+        elif 'list' in self.dtype:
             filename = ctk.filedialog.askopenfilename(
-                title='Pick File(s)', multiple=False
+                title='Pick File(s)', multiple=True
             )
+            if filename != '':
+                filename = str(filename).replace("'", '')[1:-1]
+                if filename[-1] == ',':
+                    filename = filename[0:-1]
+                self.setfield(filename)
+                # print(filename)
+            else:
+                print('no file selected.')
+        else:
+            filename = ctk.filedialog.askopenfilename(title='Pick File', multiple=False)
+            print(filename)
             if filename != '':
                 self.setfield(filename)
                 # print(filename)
             else:
                 print('no file selected.')
+            raise Exception(f'{self.dtype} not a recognized pathbox type')
 
     def get(self):
         text = self.box.get()
         # print(self.label._text, text)
         if text == '':
             return None
-        if self.dtype == 'list[Path]':
+        if 'list' in self.dtype:
             return text.replace('"', '').replace("'", '').split(', ')
         else:
             return text
@@ -234,7 +256,7 @@ class LabelledEntryBox:
 
     def get(self):
         text = self.box.get()
-        print(self.label._text, text)
+        # print(self.label._text, text)
         if text == '':
             return None
         return self.dtype(text)

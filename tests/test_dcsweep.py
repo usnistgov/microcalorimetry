@@ -9,6 +9,8 @@ be executed manually at a lab station.
 """
 
 import microcalorimetry.measurements.dcsweep as dcsweep
+import microcalorimetry.math as ucalmath
+import microcalorimetry.configs as configs
 from pathlib import Path
 
 LOCAL = Path(__file__).parents[0]

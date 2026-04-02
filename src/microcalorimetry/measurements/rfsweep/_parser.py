@@ -55,6 +55,7 @@ import os.path
 import xarray as xr
 from rmellipse.uobjects import RMEMeas
 import pylab as pl
+import microcalorimetry.configs as configs
 import rminstr_specs.K2450 as k2450
 import rminstr_specs.HP3458A as HP3458A
 import rminstr_specs.HP34420A as HP34420A
@@ -289,9 +290,47 @@ class Campaign:
             for j, segment_j in enumerate(run_i.segments):
                 segment_j.write_file(self.output_dir)
 
+    def output_dataframe(self) -> pd.DataFrame:
+        """
+        Outputs data in a columnated dataframe format for pandas.
+
+        Dataframe is indexed by segment number and row number in a
+        multilevel index.
+
+        Removes incomplete sets.
+        Returns
+        -------
+            pd.DataFrame
+
+        """
+        output = {
+            'frequency':[],
+            'run': [],
+            'segment':[],
+            'step':[]
+            }
+        for ri, run in enumerate(self.run_list):
+            for seg_i, segment in enumerate(run.segments):
+                for step_i, step in enumerate(segment.steps):
+                    output['step'].append(step_i)
+                    output['run'].append(ri)
+                    output['segment'].append(seg_i)
+                    output['frequency'].append(step.frequency)
+                    for column, val in step.results.items():
+                        try:
+                            output[column].append(val)
+                        except KeyError:
+                            output[column] = [val]
+        output = pd.DataFrame(output)
+        output = output[output.complete]
+        output = output.drop(columns = 'complete')
+        output = output.astype(float)
+
+        return output
+
     def output_RMEmeas(
         self, include_time_std: bool = False, include_specs: bool = True
-    ):
+    )->RMEMeas:
         """
         Output the measurement records in RMEmeas format.
 
@@ -319,14 +358,12 @@ class Campaign:
                 return_value = True
             return return_value
 
-        def get_umech_id(col, index, step):
-            if '_spec' in col:
-                # pert_name = cdev + '_step' + str(s)
-                instr = step.metadata[col]['instrument_name']
-                umech_id = col + ':' + instr + ':spec:' + campaign_name
-            elif '_dev' in col:
-                umech_id = col + '_step_' + str(index)
+        def get_dev_umech_id(col, index, step, campaign_name,campaign_uid):
+            umech_id = col + '_step_' + str(index) + campaign_name + campaign_uid
+
             return umech_id
+
+
 
         def get_associated_column(col):
             if '_spec' in col:
@@ -335,14 +372,18 @@ class Campaign:
                 associated_col = col.replace('_dev', '')
             return associated_col
 
+
         # make a nominal array
         campaign_name = self.campaign_name
         if self.campaign_name is None:
             campaign_name = basename(self.run_list[-1].name).split('.')[0]
 
+
+        # make a uid for campaign
+        campaign_uid = str(hash(str(self.run_list[-1])))[:5]
+
         # count frequencies, columns, uncertainty mechanisms
         columns = set()
-        umech_ids = set()
         frequencies = []
         for i, step in enumerate(self._generate_steps()):
             f = step.frequency
@@ -350,13 +391,7 @@ class Campaign:
             columns_for_step = [
                 col for col in list(step.results.keys()) if not col_is_perturbation(col)
             ]
-            umech_ids_for_step = [
-                get_umech_id(col, i, step)
-                for col in list(step.results.keys())
-                if col_is_perturbation(col)
-            ]
             columns.update(columns_for_step)
-            umech_ids.update(umech_ids_for_step)
 
         # initialize nominal array
         columns = list(columns)
@@ -377,12 +412,11 @@ class Campaign:
         # initialize meas object from nominal
         out = RMEMeas.from_nom(name='calorimetercampaign', nom=nom)
 
-        # assign independent uncertanity mechanisms
+        # categories from the uncertainty mechanisms
         a_cats = {
             'Type': 'A',
             'Origin': 'Cal Run Noise',
             'Experiment': 'Calorimeter Run',
-            'Instrument': 'Calorimeter',
         }
         b_cats = {
             'Type': 'B',
@@ -390,35 +424,71 @@ class Campaign:
             'Experiment': 'Calorimeter Run',
         }
 
-        # add uncertainty mechanisms
-
+        # add the uncertainty associated with
+        # taking the average of a time series
         for i, step in enumerate(self._generate_steps()):
             f = step.frequency
             pert_cols = [col for col in step.results.keys() if col_is_perturbation(col)]
             for col in pert_cols:
                 val = step.results[col]
-                umech_id = get_umech_id(col, i, step)
-                associated_col = get_associated_column(col)
-                pert = nom.copy()
-                pert.sel(col=associated_col).data[i] += val
-
+                umech_id = get_dev_umech_id(col, i, step, campaign_name,campaign_uid)
                 # Time series standard deviaion uncertainty
                 if 'dev' in umech_id:
+                    associated_col = get_associated_column(col)
+                    pert = nom.copy()
+                    pert.sel(col=associated_col).data[i] += val
+                    # this needs to be inside this loop or if will cause
+                    # the else statement to crash
                     if include_time_std:
                         out.add_umech(umech_id, pert, category=a_cats)
 
-                # uncertainty associated with machine specifications
-                elif 'spec' in umech_id:
+        # add the influence of each instruments
+        # traceability uncertainties, correlate
+        # across segments which last a couple days
+        # and the instru,ent likely hasn't drifted signifigantly
+        # between segments
+        def get_spec_umech_id(col, instr,run_count, segment_count, campaign_name,campaign_uid):
+            #we shouldnt assume that campaign names are unique
+            umech_id = col + ':' + instr + ':run:'+str(run_count)+':seg:'+str(segment_count) +':cam:' + campaign_name + campaign_uid
+            return umech_id
+
+        pert_cols = [col for col in step.results.keys() if col_is_perturbation(col)]
+        use_cols = set([get_associated_column(c) for c in pert_cols])
+        instr_col_prefixes = set(['_'.join(c.split('_')[:-1]) for c in use_cols])
+
+        for instr_col_prefix in instr_col_prefixes:
+            row_count = 0
+            use_pert_cols = [pc for pc in pert_cols if instr_col_prefix in pc and 'spec' in pc]
+            # use_pert columns is empty
+            # so dont add a mechanishsm
+            if not use_pert_cols:
+                continue
+            # this instrument has a spec associated
+            # so perturb every segment of data
+            for ri,run in enumerate(self.run_list):
+                for si,segment in enumerate(run.segments):
+                    pert = nom.copy()
+                    first_step = segment.steps[0]
+                    instrument_name = first_step.metadata[use_pert_cols[0]]['instrument_name']
+                    umech_id = get_spec_umech_id(instr_col_prefix, instrument_name, ri, si, campaign_name,campaign_uid)
+                    # perturb each dataset originating
+                    # from this instrument
+                    for sti, step in enumerate(segment.steps):
+                        for pert_col in use_pert_cols:
+                            val = step.results[pert_col]
+                            associated_col = get_associated_column(pert_col)
+                            pert.sel(col=associated_col).data[row_count] += val
+
+                        row_count+=1
+
+
+                    # add this as an uncertainty mechanism
                     out.add_umech(
                         umech_id,
                         pert,
-                        category=dict(**b_cats, Instrument=umech_id.split(':')[1]),
+                        category=dict(**b_cats, Instrument=umech_id.split(':')[1])
                     )
 
-                else:
-                    raise Exception(
-                        f'Uncertainty {umech_id} doesnt have a defined category for RF sweeps.'
-                    )
 
         return out
 
@@ -439,7 +509,7 @@ class Campaign:
 
         include_time_std : bool, optional
             Used if fmt_for = rmellipse. If True, includes the timeseries standard deviation of ON/OFF values
-            as an uncertainty mechanism. An overestimation of uncertainy that
+            as an uncertainty mechanism. An overestimation of uncertainty that
             can be used as a substitute for repeated measurments if not possible
             to do so. Default is False. The default is False.
 
@@ -463,6 +533,9 @@ class Campaign:
             return self.output_RMEmeas(
                 include_time_std=include_time_std, include_specs=include_specs
             )
+
+        elif fmt_for == 'pandas':
+            return self.output_dataframe()
 
         else:
             raise Exception('fmt_for ' + fmt_for + ' not recognized.')
@@ -532,7 +605,7 @@ class Run(abc.ABC):
         """
         signal_classes = {
             'special': None,
-            'commercial': PowerMeterAnalyzer,
+            'commercial': CommercialPowerMeterAnalyzer,
             'thermoelectric': ThermoelectricAnalyzer,
             'bolometer': BolometerAnalyzer,
             'rf_source': None,
@@ -544,9 +617,13 @@ class Run(abc.ABC):
             signal_config = self.parsed_config['signal_config'][signal]
             analysis_config = self.parsed_config['analysis_config'][signal]
             analysis_config['time_zero'] = self.results['time_zero']
-            input_signal_names = self.parsed_config['signal_config'][signal][
-                'input_signals'
-            ]
+
+            try:
+                input_signal_names = self.parsed_config['signal_config'][signal][
+                    'input_signals'
+                ]
+            except KeyError as e:
+                raise KeyError(f"input_signals for signal = {signal}") from e
 
             input_signal_config = {}
             instruments = {}
@@ -573,8 +650,12 @@ class Run(abc.ABC):
                 raise ValueError(
                     f'Signal type {signal_type} assigned to {signal} has no defined SignalAnalyzer.'
                 )
+
             analyzer = signal_class(
-                analysis_config, signal_config, input_signal_config, instruments
+                analysis_config,
+                signal_config,
+                input_signal_config,
+                instruments
             )
             self.analyzers[signal] = analyzer
 
@@ -1719,6 +1800,25 @@ class SignalAnalyzer(abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def plot_analysis(self, segment: Segment) -> pl.Figure | tuple[pl.Figure]:
+        """
+        Plot the analysis performed on a segment.
+
+        The plot should demonstrate the analysis being performed ont he raw
+        data (like highlighting the samples taken on a time series which
+              are being averaged.)
+
+        Parameters
+        ----------
+        segment : Segment
+            segment to be analyed.
+
+        Returns
+        -------
+        None.
+
+        """
 
 class ThermoelectricAnalyzer(SignalAnalyzer):
     """Analyzes thermopile voltage timeseries."""
@@ -1732,6 +1832,12 @@ class ThermoelectricAnalyzer(SignalAnalyzer):
         )
         self.RF_on_average_window = self.analysis_config['RF_on_average_window']
         self.column = self.input_signal_config['e']['column']
+        self.instr_timing_tolerance = self.analysis_config['instr_timing_tolerance']
+
+        try:
+            self.stats_window_override = self.analysis_config['stats_window_override']
+        except KeyError:
+            self.stats_window_override = None
 
     def analyze_segment(self, segment: Segment) -> tuple:
         """
@@ -1763,7 +1869,7 @@ class ThermoelectricAnalyzer(SignalAnalyzer):
         """
         results = {}
         metadata = {}
-        slow_results = _analyze_off_period(segment, self.column)
+        slow_results = _analyze_off_period(segment, self.column, stats_window_override = self.stats_window_override)
         results.update(slow_results)
         return results, metadata
 
@@ -1795,7 +1901,7 @@ class ThermoelectricAnalyzer(SignalAnalyzer):
         results[self.column + '_off'] = off_val
         spec = self.specs['e']
 
-        on_results = _average_pre_fastoff(step, self.column, self.RF_on_average_window)
+        on_results = _average_pre_fastoff(step, self.column, self.instr_timing_tolerance, self.RF_on_average_window,self.analysis_config['RF_off_time_offset_method'])
         results.update(on_results)
         on_val = results[self.column + '_on']
 
@@ -1888,7 +1994,7 @@ class ThermoelectricAnalyzer(SignalAnalyzer):
                 color=MIDDLE_STABLE_TRACE_COLOR,
             )  # PLOT_COLORS[i % len(PLOT_COLORS)])
 
-            RF_off_time = step_i.results['RF_off_time'] - start_time
+            RF_off_time = step_i.results['RF_off_time'] - start_time + step_i.results[column + '_off_time_delta']
             NVM_volts_on = step_i.results[column + '_on']
             NVM_volts_off = step_i.results[column + '_off']
             ax.plot(
@@ -1934,6 +2040,11 @@ class BolometerAnalyzer(SignalAnalyzer):
         V_off_fit_time_window = self.analysis_config['V_off_fit_time_window']
         RF_on_average_window = self.analysis_config['RF_on_average_window']
 
+        try:
+            self.stats_window_override = self.analysis_config['stats_window_override']
+        except KeyError:
+            self.stats_window_override = None
+
         self.column = column
         self.instr_timing_tolerance = instr_timing_tolerance
         self.V_off_function = V_off_function
@@ -1971,7 +2082,7 @@ class BolometerAnalyzer(SignalAnalyzer):
             Descriptive information reported with analysis results.
         """
         metadata = {}
-        results = _analyze_off_period(segment, self.column)
+        results = _analyze_off_period(segment, self.column, stats_window_override = self.stats_window_override)
         return results, metadata
 
     def analyze_step(self, step: Step) -> tuple:
@@ -2005,7 +2116,14 @@ class BolometerAnalyzer(SignalAnalyzer):
             self.V_off_fit_time_window,
         )
 
-        on_results = _average_pre_fastoff(step, self.column, self.RF_on_average_window)
+        on_results = _average_pre_fastoff(
+            step,
+            self.column,
+            self.instr_timing_tolerance,
+            self.RF_on_average_window,
+            'first_data_point'
+            )
+
         on_val = on_results[self.column + '_on']
         results.update(on_results)
 
@@ -2103,6 +2221,12 @@ class BolometerAnalyzer(SignalAnalyzer):
             V_DVM_step = step_i.raw_data[self.column]
 
             t_off = step_i.results['RF_off_time'] - start_time + off_time_delta
+            initial_stable = step_i.results[self.column + '_initial_stable']
+            final_stable = step_i.results[self.column + '_final_stable']
+
+            stable = np.logical_and(
+                step_i.index >= initial_stable, step_i.index <= final_stable
+            )
             eval_time = t_off + self.V_off_delay
 
             V_off_slow = step_i.results[self.column + '_off_slow']
@@ -2159,6 +2283,14 @@ class BolometerAnalyzer(SignalAnalyzer):
                 markersize=RESAMPLE_POINTS_SIZE,
             )
 
+            # i want to plot what samples were used but doesn't seem to be working.
+            # pl.plot(
+            #     plot_time_step[stable],
+            #     V_DVM[stable],
+            #     linewidth=STABLE_TRACE_LINEWIDTH,
+            #     color=MIDDLE_STABLE_TRACE_COLOR,
+            # )  # PLOT_COLORS[i % len(PLOT_COLORS)])
+
         ax.plot(
             plot_time[initial_off_start:initial_off_stop],
             V_DVM[initial_off_start:initial_off_stop],
@@ -2174,7 +2306,6 @@ class BolometerAnalyzer(SignalAnalyzer):
 
         pl.xlabel('Time (s)')
         pl.ylabel('Bias Voltage (V)')
-        pl.show()
         return fig
 
 
@@ -2268,10 +2399,10 @@ class SMUPowerMeterAnalyzer(SignalAnalyzer):
         )
 
         on_v_results = _average_pre_fastoff(
-            step, self.v_column, self.RF_on_average_window
+            step, self.v_column, self.instr_timing_tolerance, self.RF_on_average_window,self.analysis_config['RF_off_time_offset_method']
         )
         on_i_results = _average_pre_fastoff(
-            step, self.i_column, self.RF_on_average_window
+            step, self.i_column, self.instr_timing_tolerance, self.RF_on_average_window,self.analysis_config['RF_off_time_offset_method']
         )
 
         results.update(off_v_results)
@@ -2283,12 +2414,12 @@ class SMUPowerMeterAnalyzer(SignalAnalyzer):
         return results, metadata
 
 
-class PowerMeterAnalyzer(SignalAnalyzer):
+class CommercialPowerMeterAnalyzer(SignalAnalyzer):
     def __init__(
         self, analysis_config, signal_config, input_signal_config, instruments
     ):
         """
-        Initialize a PowerMeter analyzer.
+        Initialize a Commercial PowerMeter analyzer.
 
         Parameters
         ----------
@@ -2308,7 +2439,12 @@ class PowerMeterAnalyzer(SignalAnalyzer):
         )
         self.column = self.input_signal_config['power']['column']
         self.instr_timing_tolerance = self.analysis_config['instr_timing_tolerance']
+        self.RF_off_time_offset_method = self.analysis_config['RF_off_time_offset_method']
         self.RF_on_average_window = self.analysis_config['RF_on_average_window']
+        try:
+            self.stats_window_override = self.analysis_config['stats_window_override']
+        except KeyError:
+            self.stats_window_override = None
 
     def analyze_segment(self, segment: Segment) -> tuple:
         """
@@ -2338,9 +2474,8 @@ class PowerMeterAnalyzer(SignalAnalyzer):
             Descriptive information reported with analysis results.
         """
         # this should envoke analyze_step?
-        pass
         metadata = {}
-        results = _analyze_off_period(segment, self.column)
+        results = _analyze_off_period(segment, self.column, stats_window_override = self.stats_window_override)
         return results, metadata
 
     def analyze_step(self, step: Step) -> tuple:
@@ -2361,11 +2496,117 @@ class PowerMeterAnalyzer(SignalAnalyzer):
             Descriptive information reported with analysis results.
         """
         metadata = {}
-        results = _average_pre_fastoff(step, self.column, self.RF_on_average_window)
+        results = _average_pre_fastoff(step, self.column, self.instr_timing_tolerance, self.RF_on_average_window,self.analysis_config['RF_off_time_offset_method'])
         return results, metadata
 
+    def plot_analysis(self, segment: Segment, *args):
+        """
+        Generate plot of the power meter to allow user to see if the measurements look normal.
 
-def _average_pre_fastoff(step: Step, column: str, RF_on_average_window: float) -> dict:
+        Parameters
+        ----------
+        segment : Segment
+            Segment to analyze.
+
+        Returns
+        -------
+        fig : matplotlib figure object
+
+        """
+        column = self.column
+        fig, ax = pl.subplots()
+        segment_results = segment.results
+        segment_raw_data = segment.raw_data
+
+        # specific results
+        initial_off_start = segment_results['initial_off_start']
+        initial_off_stop = segment_results['initial_off_stop']
+        final_off_start = segment_results['final_off_start']
+        final_off_stop = segment_results['final_off_stop']
+
+        start_time = segment_raw_data[column + '_timestamp'][0]
+        plot_time = segment_raw_data[column + '_timestamp'] - start_time
+        V_NVM = segment_raw_data[column]
+
+        ax.plot(
+            plot_time, V_NVM, color=MAIN_TRACE_COLOR, linewidth=MAIN_TRACE_LINEWIDTH
+        )
+        # e_i_fit = _linear(segment_raw_data["NVM_volts_timestamp"] - segment_results["time_zero_NVM_volts_i"], segment_results["NVM_volts_off_i_drift"], segment_results["NVM_volts_off_i"])
+        # e_f_fit = _linear(segment_raw_data["NVM_volts_timestamp"] - segment_results["time_zero_NVM_volts_f"], segment_results["NVM_volts_off_f_drift"], segment_results["NVM_volts_off_f"])
+        e_off_fit = _linear(
+            segment_raw_data[column + '_timestamp']
+            - segment_results['segment_time_zero'],
+            segment_results[column + '_off_a'],
+            segment_results[column + '_off_b'],
+        )
+
+        # ax.plot(plot_time, e_i_fit, color=INITIAL_STABLE_TRACE_COLOR, linewidth=STABLE_TRACE_LINEWIDTH)
+        # ax.plot(plot_time, e_f_fit, color=FINAL_STABLE_TRACE_COLOR, linewidth=STABLE_TRACE_LINEWIDTH)
+        ax.plot(
+            plot_time,
+            e_off_fit,
+            color=MIDDLE_STABLE_TRACE_COLOR,
+            linewidth=STABLE_TRACE_LINEWIDTH,
+        )
+
+        for i, step_i in enumerate(segment.steps):
+            step_i_raw_data = step_i.raw_data
+            plot_time_step = step_i_raw_data[column + '_timestamp'] - start_time
+            V_NVM_step = step_i_raw_data[column]
+            initial_stable = step_i.results[column + '_initial_stable']
+            final_stable = step_i.results[column + '_final_stable']
+            stable = np.logical_and(
+                step_i.index >= initial_stable, step_i.index <= final_stable
+            )
+
+            ax.plot(
+                plot_time_step,
+                V_NVM_step,
+                linewidth=MAIN_TRACE_LINEWIDTH,
+                color=PLOT_COLORS[i % len(PLOT_COLORS)],
+            )
+            ax.plot(
+                plot_time_step[stable],
+                V_NVM_step[stable],
+                linewidth=STABLE_TRACE_LINEWIDTH,
+                color=MIDDLE_STABLE_TRACE_COLOR,
+            )  # PLOT_COLORS[i % len(PLOT_COLORS)])
+
+            RF_off_time = step_i.results['RF_off_time'] - start_time
+            P_on = step_i.results[column + '_on']
+            # NVM_volts_off = step_i.results[column + '_off']
+            ax.plot(
+                [RF_off_time],
+                [P_on],
+                marker='o',
+                markersize=FIT_POINT_SIZE,
+                color=PLOT_COLORS[i % len(PLOT_COLORS)],
+            )
+
+        ax.plot(
+            plot_time[initial_off_start:initial_off_stop],
+            V_NVM[initial_off_start:initial_off_stop],
+            color=INITIAL_STABLE_TRACE_COLOR,
+            linewidth=STABLE_TRACE_LINEWIDTH,
+        )
+        ax.plot(
+            plot_time[final_off_start:final_off_stop],
+            V_NVM[final_off_start:final_off_stop],
+            color=FINAL_STABLE_TRACE_COLOR,
+            linewidth=STABLE_TRACE_LINEWIDTH,
+        )
+
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Power (W)')
+        return fig
+
+
+def _average_pre_fastoff(
+        step: Step, column: str,
+        instr_timing_tolerance: float,
+        RF_on_average_window: float,
+        RF_off_time_offset_method: str
+        ) -> dict:
     """
     Average samples just prior to the fast offs.
 
@@ -2381,8 +2622,17 @@ def _average_pre_fastoff(step: Step, column: str, RF_on_average_window: float) -
     column : str
         Name of column to analyze.
 
+    instr_timing_tolerance : float
+        Max delay between RF off and instrument response.
+
     RF_on_average_window : float
         How long to average just prior to fast RF off in seconds.
+
+    RF_off_time_offset_method: str, {'max_change', 'first_data_point'}
+        Method for determining the last time point in the averaging window.
+        If 'max_change': look for a change in column values corresponding to
+        the source being turned off. If 'first_data_point', pick the time
+        when the RF source was turned off - instr_timing_tolerance.
 
     Returns
     -------
@@ -2396,15 +2646,32 @@ def _average_pre_fastoff(step: Step, column: str, RF_on_average_window: float) -
     timestamps = step.raw_data[column + '_timestamp']
     index = np.arange(len(timestamps))
 
+    try:
+        rf_off_delta = step.results[column + '_off_time_delta']
+    except KeyError:
+        if RF_off_time_offset_method == 'max_change':
+            rf_off_delta = _find_rf_off_delta(step, column, instr_timing_tolerance)
+        elif RF_off_time_offset_method == 'first_data_point':
+            rf_off_delta = -instr_timing_tolerance
+        results[column + '_off_time_delta'] = rf_off_delta
+
     logical_index = np.logical_and(
         timestamps >= RF_off_time - RF_on_average_window,
         timestamps
         < RF_off_time
-        - 0.01,  # just to help avoid collisions with a step that is right after the step
+        + rf_off_delta,  # just to help avoid collisions with a step that is right after the step
     )
     indexed_vals = step.raw_data[column][logical_index]
     # filler value, doesn't mean anything for these sensors
-    results[column + '_initial_stable'] = index[logical_index][0]
+    try:
+       results[column + '_initial_stable'] = index[logical_index][0]
+    except IndexError as e:
+        # this happens is the window to average over was too tight.
+        # so print a helpful message.
+        if not logical_index.any():
+            raise IndexError("No values found in the RF_on_average window. It may be too tight of an averaging window.") from e
+        else:
+            raise e from e
     results[column + '_final_stable'] = index[logical_index][-1]
 
     results[column + '_on'] = np.mean(indexed_vals)
@@ -2415,7 +2682,11 @@ def _average_pre_fastoff(step: Step, column: str, RF_on_average_window: float) -
     return results
 
 
-def _analyze_off_period(segment: Segment, column: str) -> dict:
+def _analyze_off_period(
+        segment: Segment,
+        column: str,
+        stats_window_override: float | None = None
+    ) -> dict:
     """
     Analyze segment.
 
@@ -2437,6 +2708,12 @@ def _analyze_off_period(segment: Segment, column: str) -> dict:
 
     column : str
         Column to analyze.
+
+    stats_window_override : float | None, optional
+        Can be used to manually set the stats window rather then
+        use the one defined in the measurement sweep. Useful if the stats
+        windows indicates stability too early. If None, then uses
+        the stats window of the measurment. The default is None.
 
     Returns
     -------
@@ -2460,7 +2737,7 @@ def _analyze_off_period(segment: Segment, column: str) -> dict:
     final_off_stable = np.logical_and(final_off, stable)
 
     if not np.any(initial_off_stable) or not np.any(final_off_stable):
-        print(np.sum(initial_off_stable), np.sum(final_off_stable))
+        print("step incomplete")
         results['complete'] = False
         return results
 
@@ -2469,8 +2746,11 @@ def _analyze_off_period(segment: Segment, column: str) -> dict:
         # on duration of measurements (in seconds),
         # rather than number of samples
         stats_window_seconds = run.parsed_config['stats_settings']['stats_window']
+        if stats_window_override:
+            stats_window_seconds = stats_window_override
+
         initial_off_start_time = (
-            segment.raw_data['timestamp'][initial_off_stable][0] - stats_window_seconds
+            segment.raw_data['timestamp'][initial_off_stable][-1] - stats_window_seconds
         )
         initial_off_start = index[
             segment.raw_data['timestamp'] >= initial_off_start_time
@@ -2675,7 +2955,7 @@ def _fit_fast_off_timeseries(
     try:
         initial_fit_region = index[same_point][0]
         final_fit_region = index[same_point][-1]
-        print(initial_fit_region, final_fit_region)
+        print(f"{column} fit region index: ", initial_fit_region, final_fit_region)
 
     except IndexError:
         print('Caught IndexError Trying to fit. Error for :')
@@ -2710,6 +2990,7 @@ def _fit_fast_off_timeseries(
 
             V_off_fast = _lin_plus_exp(fit_eval_time, *popt)
             a, b, vscale, tscale = popt
+            V_off_fast = a * V_off_delay + b
 
         elif V_off_function == 'linear':
             popt, pcov = scipy.optimize.curve_fit(

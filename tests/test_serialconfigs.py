@@ -17,6 +17,10 @@ LOCAL = Path(__file__).parents[0]
 MUTABLE = LOCAL / 'mutable_datafiles'
 
 
+def return_two():
+    return 2
+
+
 def test_DataModelPointer():
     DMP = configs.DataModelContainer
     DMP('my-path1')
@@ -56,6 +60,31 @@ def test_loading_config_interoperability():
         assert (vloaded.cov == vsloaded.cov).all()
 
 
+def test_pythonfunction():
+    # just pass a function
+    assert 2 == configs.PythonFunction(return_two)()
+
+    # pass a path to a function
+    assert (
+        1
+        == configs.PythonFunction(
+            LOCAL / 'reference_configs/sample_module.py:return_one'
+        )()
+    )
+
+    # pass a function spec
+    import numpy as np
+
+    flist = np.linspace(0, 50, 50)
+    assert (
+        3
+        == configs.PythonFunction(
+            'microcalorimetry._helpers._test_collections:return_three'
+        )()
+    )
+
+
 if __name__ == '__main__':
-    test_DataModelPointer()
-    test_loading_config_interoperability()
+    # test_DataModelPointer()
+    # test_loading_config_interoperability()
+    test_pythonfunction()

@@ -207,7 +207,7 @@ def plot_coeffs(propagator, v, i, e, coeffs, p_of_e, ename):
         xname = 'Power'
         xunits = 'mW'
         y = e
-        yscale = 1
+        yscale = 1e6
         yname = 'e'
         yunits = r'$\mu$V'
 
@@ -223,7 +223,7 @@ def plot_coeffs(propagator, v, i, e, coeffs, p_of_e, ename):
     y_fit = y_fit.isel(steps=sortind)
     delta = delta.isel(steps=sortind)
 
-    fig, ax = plt.subplots(2, 1, figsize=(8, 8))
+    fig, ax = plt.subplots(2, 1, sharex = True)
     upper = y_fit.uncbounds(k=k)[0]
     lower = y_fit.uncbounds(k=-k)[0]
 
@@ -272,23 +272,22 @@ def plot_coeffs(propagator, v, i, e, coeffs, p_of_e, ename):
         alpha=0.2,
         label='k = 2 Uncertainty',
     )
-    ax[1].set_ylabel(f'{yname} ({yunits})')
+    ax[0].set_ylabel(f'{yname} ({yunits})')
     ax[1].set_ylabel(f'Fit - Measured ({yunits})')
     ax[1].set_xlabel(f'{xname} ({xunits})')
-    ax[1].set_xlabel(f'{xname} ({xunits})')
+
     for a in ax:
         a.legend(loc='best')
     fig.suptitle(f'Sensitivity Fit {ename}')
-    msg = 'coeffs (units V/W^i or W/V^i) \n'
-    for i in coeffs.nom.deg:
-        msg += r'c_' + str(int(i)) + ' = ' + str(float(coeffs.nom.sel(deg=i))) + '\n'
-
-    ax[0].text(
-        0.9,
-        0.01,
-        msg,
-        ha='center',
-        fontsize=12,
-        bbox={'facecolor': 'orange', 'alpha': 0.5, 'pad': 5},
-    )
+    # msg = 'coeffs (units V/W^i or W/V^i) \n'
+    # for i in coeffs.nom.deg:
+    #     msg += r'c_' + str(int(i)) + ' = ' + str(float(coeffs.nom.sel(deg=i))) + '\n'
+    # ax[0].text(
+    #     0.9,
+    #     0.01,
+    #     msg,
+    #     ha='center',
+    #     fontsize=12,
+    #     bbox={'facecolor': 'orange', 'alpha': 0.5, 'pad': 5},
+    # )
     return fig

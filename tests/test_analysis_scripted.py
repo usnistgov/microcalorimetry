@@ -20,7 +20,7 @@ SRUNS = LOCAL / 'sample_sensitivity_runs'
 S1P_FILES = LOCAL / 's1p_files'
 ETA_REFS = LOCAL / 'eta_references'
 
-
+HISTORICAL_MODEL = LOCAL / 'sample_historical_data/model.h5/24histmodel'
 HISTORICAL_DATA = configs.EtaHistorical(
     {
         '077': ETA_REFS / 'C24N118_077.eff',
@@ -50,6 +50,7 @@ def test_C24N118_from_scratch(
         (if any) inside the 'tests/mutable' directory which
         is ignored by git. By defualt 'C24N118'
     """
+
     dir = LOCAL / 'mutable_datafiles' / mutable_dir
     dir.mkdir(exist_ok=True, parents=True)
 
@@ -65,7 +66,7 @@ def test_C24N118_from_scratch(
     print(dc_parsed.keys())
     # make sensitivity coeffs for each NVM column
     C24S002_coeffs, fig = anl.make_k_coeffs(
-        dc_parsed, p_of_e=True, deg=2, make_plots=False
+        dc_parsed, p_of_e=False, deg=2, make_plots=False
     )
 
     if resave_reference_results:
@@ -86,14 +87,17 @@ def test_C24N118_from_scratch(
                 'V_off_function': 'linear',
                 'V_off_fit_time_window': (1, 10),
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'max_change',
             },
             'monitor_power': {
                 'instr_timing_tolerance': 5,
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'max_change',
             },
             'calorimeter_power': {
                 'instr_timing_tolerance': 5,
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'first_data_point',
             },
         },
         'signal_config': {
@@ -163,10 +167,12 @@ def test_C24N118_from_scratch(
             'monitor_power': {
                 'instr_timing_tolerance': 5,
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'max_change',
             },
             'calorimeter_power': {
                 'instr_timing_tolerance': 5,
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'first_data_point',
             },
         },
         'signal_config': {
@@ -233,10 +239,12 @@ def test_C24N118_from_scratch(
             'monitor_power': {
                 'instr_timing_tolerance': 5,
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'max_change',
             },
             'calorimeter_power': {
                 'instr_timing_tolerance': 5,
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'first_data_point',
             },
         },
         'signal_config': {
@@ -345,7 +353,11 @@ def test_C24N118_from_scratch(
 
     # calculate the effective efficiency
     fig, eta = anl.make_eta(
-        gc, C24N118_s1p_config, C24N118_parsed, HISTORICAL_DATA, make_plots=True
+        gc,
+        C24N118_s1p_config,
+        C24N118_parsed,
+        historical_data=HISTORICAL_DATA,
+        make_plots=True,
     )
 
     if resave_reference_results:
@@ -400,14 +412,17 @@ def test_S24P02_from_scratch(
                 'RF_on_average_window': 1800,
                 # needs to be replaced with coeffs after they are calculated
                 'coeffs': None,
+                'RF_off_time_offset_method': 'max_change',
             },
             'monitor_power': {
                 'instr_timing_tolerance': 5,
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'max_change',
             },
             'calorimeter_power': {
                 'instr_timing_tolerance': 5,
                 'RF_on_average_window': 1800,
+                'RF_off_time_offset_method': 'first_data_point',
             },
         },
         'signal_config': {
@@ -481,6 +496,15 @@ def test_S24P02_from_scratch(
 
     # Points to the RF and DC metadata needed for each sensor
     big_config = {
+        'S24P02': {
+            'is_load': True,
+            'dc_sweep_metadata': LOCAL
+            / Path(
+                r'sample_sensitivity_runs/S24P02_c000_krun__2/c000_krun__metadata.csv'
+            ),
+            'rf_sweep_metadata': LOCAL
+            / Path(Path(r'sample_calruns/S24P02/c000_gc_r000/20250627_metadata.csv')),
+        },
         'S24S03': {
             'is_load': False,
             'dc_sweep_metadata': LOCAL
@@ -516,15 +540,6 @@ def test_S24P02_from_scratch(
                 / Path(r'sample_calruns/S24S01/c000_calrun_2/20250409_metadata.csv'),
             ],
         },
-        'S24P02': {
-            'is_load': True,
-            'dc_sweep_metadata': LOCAL
-            / Path(
-                r'sample_sensitivity_runs/S24P02_c000_krun__2/c000_krun__metadata.csv'
-            ),
-            'rf_sweep_metadata': LOCAL
-            / Path(Path(r'sample_calruns/S24P02/c000_gc_r000/20250627_metadata.csv')),
-        },
     }
 
     # this parses the RF and DC sweeps
@@ -540,10 +555,17 @@ def test_S24P02_from_scratch(
         output_capture = io.StringIO()
         with redirect_stdout(output_capture):
             # parse the DC sweep and calculate the sensitivity
-            parsed_dc, figs = dcsweep.parse(Path(sweep_configs['dc_sweep_metadata']))
+            parsed_dc, figs = dcsweep.parse(
+                Path(sweep_configs['dc_sweep_metadata']),
+                repeatability_id=Path(sweep_configs['dc_sweep_metadata']).stem,
+            )
 
             k, figs = anl.make_k_coeffs(
-                parsed_dc, constrain_zero=True, p_of_e=True, deg=2, make_plots=False
+                parsed_dc,
+                constrain_zero=False,
+                p_of_e=False,
+                deg=2,
+                make_plots=True,
             )
 
             # assign the coefficients we just calculated
@@ -641,9 +663,11 @@ def test_S24P02_from_scratch(
         gc,
         S1P_FILES / 'S24P02.dut',
         results['S24P02']['parsed_rf'],
-        HISTORICAL_DATA,
+        historical_data=None,
         make_plots=True,
     )
+
+    eta = anl.apply_uncertainty_model(eta, HISTORICAL_MODEL)
 
     if resave_reference_results:
         with h5py.File(reference_results, 'a') as f:
@@ -656,15 +680,13 @@ if __name__ == '__main__':
     import matplotlib as mpl
     import matplotlib.pyplot as plt
 
-    re_calculate = True
     mpl.use('QtAgg')
-    if re_calculate:
-        fig = test_C24N118_from_scratch(resave_reference_results=True)
+    fig = test_C24N118_from_scratch(resave_reference_results=False)
 
-        fig = test_S24P02_from_scratch(
-            # dont switch this to True unless you want to override reference data.
-            resave_reference_results=True,
-            make_plots=True,
-        )
+    fig = test_S24P02_from_scratch(
+        # dont switch this to True unless you want to override reference data.
+        resave_reference_results=False,
+        make_plots=True,
+    )
     # anl.review_eta(MUTABLE / "test_C24N118_from_scratch.h5/new_eta", HISTORICAL_DATA)
     plt.show()

@@ -1,4 +1,4 @@
-# Rocky Mountain Instruments
+# Microcalorimetry
 
 > [!NOTE]
 > This software is in active and early development by the RF power calibrations service at NIST to support
@@ -16,7 +16,7 @@ this package is:
 This package is built using Rocky Mountain Ellipse ([RME](https://github.com/usnistgov/rmellipse)), a project to develop tools for digital traceability at NIST.
 
 
-Please refer to the documentation ([here](https://github.com/usnistgov/microcalorimetry-ipages)) for detailed information on how to use the package.
+Please refer to the [docs](https://pages.nist.gov/microcalorimetry-ipages/development/index.html) for detailed information on how to use the package.
 
 ## Introduction
 Install with pip or preffered package manager.
@@ -62,13 +62,13 @@ import microcalorimetry.analysis as analysis
 
 Configuration objects for measurements and analysis scripts are provided in a ``microcalorimetry.configs`` module.
 ```Python
-import microcalorimetery.configs as configs
+import microcalorimetry.configs as configs
 ```
 
 Mathematical operations compatable with ([RMEMeas](https://pages.nist.gov/rmellipse-ipages/stable/index.html)) objects are stored in the ``microcalorimetry.math`` submodule.
 
 ```Python
-import microcalorimetery.math as mcmath
+import microcalorimetry.math as mcmath
 ```
 
 ## Authors

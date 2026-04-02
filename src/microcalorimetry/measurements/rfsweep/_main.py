@@ -19,6 +19,8 @@ import pandas as pd
 import json
 import click
 from itertools import cycle
+from decimal import Decimal
+from fnmatch import fnmatch
 
 __all__ = ['run', 'parse', 'view', 'generate_settled_runlist', 'runlist_from_loss']
 
@@ -96,6 +98,25 @@ def view(
     # plt.close('all')
     # metadata = r"O:\67201\Power\24Calor\rawdata\C24N129\040\cstd_run_0_incomplete\20250115_metadata.csv"
     # it will break the app if run normally
+
+    # if a folder is pointed to, use a filed with _metadata.csv
+    # in the name as the metadata file, so folders can be pointed to
+    # adjusted_metadata = []
+    # for md in [metadata]:
+    #     md = Path(md)
+    #     if not md.exists():
+    #         raise FileExistsError(f'{md} doesnt exist')
+    #     elif md.is_file():
+    #         adjusted_metadata.append(md)
+    #     # assume folders contain a single run
+    #     # 1 metadata file
+    #     elif md.is_dir():
+    #         new_md = [f for f in md.glob('*_metadata.csv')]
+    #         if len(new_md) == 1:
+    #             adjusted_metadata.append(new_md[0])
+    #         else:
+    #             raise ValueError(f'{md} must contain exactly 1 *_metadata files to be pointed to by parser.')
+    # metadata = adjusted_metadata[0]
 
     # if power levelling is happening, plot a summary of that
 
@@ -299,7 +320,7 @@ def run(
         of the configuration.
     """
     priority = [0] * len(configs)
-    if isinstance(settings, str):
+    if isinstance(settings, str) or isinstance(settings, Path):
         settings = [settings]
 
     for i in range(repeats):
@@ -400,6 +421,10 @@ def parse(
     analysis_config: configs.RFSweepParserConfig = None,
     verbose: bool = False,
     make_plots: bool = False,
+    plot_segments_analysis: list[int] = [0, -1],
+    plot_all_segments_analysis: bool = False,
+    dataframe_results: Path = None,
+    format_matlab: Path = None,
 ) -> tuple[dict[RMEMeas], list[plt.Figure]]:
     """
     Parse a microccalorimeter run to produce data with uncertainties.
@@ -414,6 +439,15 @@ def parse(
         If True, prints info about the analysis. Default is True
     make_plots : bool, optional
         Makes plots if True.
+    plot_segments_analysis : list[int]
+        What segment of each run to plot.
+    plot_all_segments_analysis : bool
+        If True, when making plots plot every segments
+        analysis.
+    dataframe_results : Path, optional
+        If provided, saves a csv of intermediate calculated values.
+    format_matlab : Path, optional
+        If provided, saves a matlab version of the output results.
 
     Returns
     -------
@@ -444,6 +478,28 @@ def parse(
     if type(metadata) is not list:
         metadata = [metadata]
 
+    # if a folder is pointed to, use a filed with _metadata.csv
+    # in the name as the metadata file, so folders can be pointed to
+    adjusted_metadata = []
+    for md in metadata:
+        md = Path(md)
+        if not md.exists():
+            raise FileExistsError(f'{md} doesnt exist')
+        elif md.is_file():
+            adjusted_metadata.append(md)
+        # assume folders contain a single run
+        # 1 metadata file
+        elif md.is_dir():
+            new_md = [f for f in md.glob('*_metadata.csv')]
+            if len(new_md) == 1:
+                adjusted_metadata.append(new_md[0])
+            else:
+                raise ValueError(
+                    f'{md} must contain exactly 1 *_metadata files to be pointed to by parser.'
+                )
+
+    metadata = adjusted_metadata
+
     runs = []
     for metadata_path in metadata:
         run_dir = Path(metadata_path).parent
@@ -455,6 +511,28 @@ def parse(
         run.load()
         run.analyze()
         metadata_dict.update({str(k): v for k, v in run.expt.config.items()})
+
+        # make detailed analysis plots
+        if make_plots:
+            for signal, analyzer in run.analyzers.items():
+                try:
+                    analyzer.plot_analysis
+                except AttributeError:
+                    print(f'{signal} {analyzer} has no plot analysis method. Skipping')
+                    continue
+                for si, segment in enumerate(run.segments):
+                    called_out = si in plot_segments_analysis
+                    is_end = si == len(run.segments) - 1 and (
+                        -1 in plot_segments_analysis
+                    )
+                    if called_out or is_end or plot_all_segments_analysis:
+                        # plot the analysis for a single step
+                        figure = analyzer.plot_analysis(segment)
+                        figure.suptitle(
+                            f'{signal} signal \n run {Path(metadata_path).parent.name} ; segment {si}'
+                        )
+                        figures.append(figure)
+
         runs.append(run)
 
     # use the last signal config
@@ -462,9 +540,161 @@ def parse(
 
     # format data output into rmellipse objects
     c = microparser.Campaign(runs, Path.cwd(), 'rfsweep')
-    data = c.output_segments(fmt_for='rmellipse', include_specs=True)
 
-    # generate QA plots
+    # generate noise plots
+    if make_plots:
+        # if make_plots:
+        data_df = c.output_segments(fmt_for='pandas')
+        for signal, sconfig in signal_config.items():
+            input_signals = sconfig['input_signals']
+            if isinstance(input_signals, str):
+                input_signals = [input_signals]
+            for ins in input_signals:
+                # plot the deviation of the RF on value as a function
+                # of the step number
+                fig, ax = plt.subplots(2, 1)
+                try:
+                    column = sconfig[ins]['column']
+                    fig.suptitle(f'{column} RF On standard deviation')
+
+                    for mode in ['on']:
+                        dev = data_df[f'{column}_{mode}_dev']
+                        mean = data_df[f'{column}_{mode}']
+                        ppm = dev / mean * 1e6
+                        ax[0].plot(dev, 'o')
+                        ax[1].set_xlabel('Step Number')
+                        ax[1].plot(ppm, 'o')
+                        ax[0].set_ylabel(f'Column RF On std ({sconfig[ins]["units"]})')
+                        ax[1].set_ylabel('Column RF On std (ppm)')
+                    figures.append(fig)
+                except Exception as e:
+                    plt.close(fig)
+                    if verbose:
+                        print(
+                            f'Encountered error plotting signal {signal}:{ins} std \n {type(e)}: {e}'
+                        )
+
+                fig, ax = plt.subplots(2, 1, figsize=(8, 8))
+                try:
+                    column = sconfig[ins]['column']
+                    fig.suptitle(f'{signal} \n {column} standard deviation')
+                    ax[1].set_xlabel('Before (left) and After (right)')
+                    ax[0].set_ylabel(f'STD of {ins} ({sconfig[ins]["units"]})')
+                    ax[1].set_ylabel(f'STD of {ins} (ppm)')
+                    for ir, run in enumerate(c.run_list):
+                        for iseg, segment in enumerate(run.segments):
+                            i_off = segment.results[f'{column}_off_i']
+                            f_off = segment.results[f'{column}_off_f']
+                            i_off_dev = segment.results[f'{column}_off_i_dev']
+                            f_off_dev = segment.results[f'{column}_off_f_dev']
+                            label = f'{run.name} : segment {iseg}'
+                            ax[0].plot(
+                                [0, 1], [i_off_dev, f_off_dev], 'o--', label=label
+                            )
+                            ax[1].plot(
+                                [0, 1],
+                                [i_off_dev / i_off * 1e6, f_off_dev / f_off * 1e6],
+                                'o--',
+                            )
+                    ax[0].legend(
+                        bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0
+                    )
+                    fig.tight_layout()
+                    figures.append(fig)
+                except Exception as e:
+                    plt.close(fig)
+                    if verbose:
+                        print(
+                            f'Encountered error plotting  {signal}:{ins} segment off \n {type(e)}: {e}'
+                        )
+
+        # Plot if the source think it is in
+        # compression
+
+        compression = {}
+        freq = np.array([])
+        try:
+            for run in c.run_list:
+                for segment in run.segments:
+                    if segment.results['complete']:
+                        for step in segment.steps:
+                            signals = [
+                                k
+                                for k in step.raw_data.keys()
+                                if fnmatch(k, '*power_signal*')
+                                and 'timestamp' not in k
+                                and 'calorimeter' not in k
+                            ]
+                            source = step.raw_data['RF_source_power_signal (W)']
+                            source = source[2:].astype(float)
+                            pow_signals = {
+                                s: step.raw_data[s]
+                                for s in signals
+                                if 'source' not in s
+                            }
+
+                            # calculate compression
+                            good_freq = False
+                            for k, sig in pow_signals.items():
+                                sig = sig[2:].astype(float)
+                                max_i = np.argmax(sig)
+                                sig_dB_change = 10 * np.log10(sig[max_i] / sig)
+
+                                # closest to 1dB of change
+                                sig_1dB_closest_i = np.argmin(abs(sig_dB_change - 1))
+                                sig_1dB_closest = sig_dB_change[sig_1dB_closest_i]
+
+                                # if the smalles changes was < 0.4, skip it
+                                # is that a good number? idk
+                                if sig_1dB_closest < 0.5:
+                                    continue
+
+                                # estimate the compression
+                                max_source = source[max_i]
+                                source_1dB_closest = source[sig_1dB_closest_i]
+                                compress_i = sig_1dB_closest - 10 * np.log10(
+                                    max_source / source_1dB_closest
+                                )
+                                # print(k.split('_power_signal')[0], sig_1dB_closest)
+                                try:
+                                    compression[k] = np.append(
+                                        compression[k], compress_i
+                                    )
+                                except KeyError:
+                                    compression[k] = np.array([compress_i])
+
+                                good_freq = True
+                            if good_freq:
+                                freq = np.append(freq, step.frequency)
+                            # print(k, step.frequency, compress_i)
+            fig, ax = plt.subplots(1, 1)
+            for k in compression:
+                ax.plot(
+                    freq,
+                    compression[k],
+                    'o',
+                    label=f'Measured By: {k.split("_power_signal")[0]} Est.',
+                )
+
+            ax.axhline(0.4, color='r', ls='--', lw=3, label='Limit')
+            ax.legend(loc='best')
+            ax.set_xlabel('Frequency (GHz)')
+            ax.set_ylabel('Compression (dB)')
+            ax.set_title('Source Compression Check')
+            # plt.show()
+            figures.append(fig)
+        except Exception as e:
+            print(f"Warning: Couldn't estimate compression for : {e}")
+
+        ...
+
+    # output a the dataframe results
+    if dataframe_results:
+        df = c.output_dataframe()
+        df.to_csv(dataframe_results)
+
+    # format fata for rmellipse calculataions
+    data = c.output_segments(fmt_for='rmellipse', include_specs=True)
 
     ep = run.expt.config
 
@@ -475,19 +705,28 @@ def parse(
     # do a little bit of post processing to calculate power
     # This calculates the inferred power flowing through the thermopile
     outputs = {}
+
     cal_coeffs = configs.ThermoelectricFitCoefficients(
         signal_config['calorimeter_power']['coeffs']
     ).load()
 
-    E_on = openloope_te_power(
-        cal_coeffs, data.sel(col=e_col + '_on'), p_of_e=cal_coeffs.attrs['p_of_e']
-    )
+    try:
+        p_of_e_calorimeter = cal_coeffs.attrs['p_of_e']
 
-    E_off = openloope_te_power(
-        cal_coeffs, data.sel(col=e_col + '_off'), p_of_e=cal_coeffs.attrs['p_of_e']
-    )
+        E_on = openloope_te_power(
+            cal_coeffs, data.sel(col=e_col + '_on'), p_of_e=p_of_e_calorimeter
+        )
 
-    outputs.update({'E_on': E_on, 'E_off': E_off})
+        E_off = openloope_te_power(
+            cal_coeffs, data.sel(col=e_col + '_off'), p_of_e=p_of_e_calorimeter
+        )
+
+        outputs.update({'E_on': E_on, 'E_off': E_off})
+
+    except AttributeError:
+        print(
+            "Warning: Can't compute power inferred by calorimeter, skipping. Likely a full data model of the sensitivity wasn't supplied."
+        )
 
     outputs.update(
         {'e_on': data.sel(col=e_col + '_on'), 'e_off': data.sel(col=e_col + '_off')}
@@ -620,7 +859,14 @@ def parse(
         raise ValueError(msg)
 
     # now calculate the relevant powers for the sidearm
-    if signal_config['monitor_power']['type'] == 'bolometer':
+    # it may n ot be peresent, check for it in the signal config
+    # first.
+    try:
+        signal_config['monitor_power']
+        calculate_monitor = True
+    except KeyError:
+        calculate_monitor = False
+    if calculate_monitor and signal_config['monitor_power']['type'] == 'bolometer':
         s3_v_col = signal_config['monitor_power']['columns']['v_col']
         if 'idc' in signal_config['monitor_power']:
             s3_i_col = signal_config['monitor_power']['columns']['i_col']
@@ -660,7 +906,7 @@ def parse(
 
     # no distinguishing between a fast and slow analysis
     # for a commercial power meter
-    elif signal_config['monitor_power']['type'] == 'commercial':
+    elif calculate_monitor and signal_config['monitor_power']['type'] == 'commercial':
         s3_p_col = signal_config['monitor_power']['power']['column']
         p3_slow = data.sel(col=s3_p_col + '_on')
         p3_fast = data.sel(col=s3_p_col + '_on')
@@ -672,26 +918,23 @@ def parse(
         )
         outputs.update()
 
-    elif signal_config['monitor_power']['type'] == 'special':
+    elif calculate_monitor and signal_config['monitor_power']['type'] == 'special':
         pass
 
-    else:
+    elif calculate_monitor:
         msg = f'{signal_config["monitor_power"]["type"]} not recognized'
         raise ValueError(msg)
 
-    # Make a bunch of plots against frequenecy and step number
-    # For 'at a glance' analysis
+    # plot parsed components
     if make_plots:
-        for k, v in outputs.items():
-            fig, ax = plt.subplots(1, 2)
-            lb, ub = v.confint(0.95)
-            ax[0].plot(v.nom.frequency, v.nom, 'ko')
-            ax[0].set_ylabel(k)
-            ax[0].set_xlabel('Frequency (GHz)')
+        plot_outputs = {k: v for k, v in outputs.items() if k in ['zeta']}
+        for k, v in plot_outputs.items():
+            fig, ax = plt.subplots(1, 1)
+            unc = v.stdunc().cov
+            ax.errorbar(v.nom.frequency, v.nom, yerr=unc, capsize=3, label='k=1', ls='')
+            ax.set_ylabel(k.replace('zeta', 'Uncorrected Eta'))
+            ax.set_xlabel('Frequency (GHz)')
 
-            ax[1].plot(v.nom, 'ko')
-            ax[1].set_ylabel(k)
-            ax[1].set_xlabel('Step Number')
             sidearm_name = None
             try:
                 sidearm_name = ep['measurement_description']['sidearm_name']
@@ -736,7 +979,9 @@ def runlist_from_loss(
     output_name: str = 'runlist.csv',
     n_samples: int = 1,
     frequencies: np.ndarray[float] = None,
-    segment_size: int = 5,
+    segment_size: int = 10,
+    off_step_length: int = 2,
+    safety_backoff_dBm: float = 3,
 ) -> list[plt.Figure]:
     """
     Generate a runlist from the approximate RF Loss of measurement signals.
@@ -765,6 +1010,13 @@ def runlist_from_loss(
         measurement. The default is None.
     segment_size : int, optional
         Number of frequencie points per segment. The default is 5.
+    off_step_length : int, optional
+        How many steps each off period should be. Typically 2, the default
+        it 2.
+    safety_backoff_dBm : float, optional
+        Back off the start value by this amount to avoid over sourcing.
+        The levelling feature will converge to the correct value during a
+        measurement. The default is 3.0.
 
     Returns
     -------
@@ -773,6 +1025,9 @@ def runlist_from_loss(
     """
     dr = ExistingRecord(metadata)
 
+    frequencies = np.sort(frequencies)
+
+    # PARSE THE MEASURMENT
     max_powers = {
         'DUT_power_signal (W)': DUT_power_max_dBm,
         'monitor_power_signal (W)': monitor_power_max_dBm,
@@ -853,8 +1108,9 @@ def runlist_from_loss(
         frequencies = read_frequencies
 
     interp_losses = {}
+
     for signal_name in signal_columns:
-        interp_losses[signal_name] = np.interp(
+        interp_losses[signal_name] = _smallest_neighbour(
             frequencies, read_frequencies, losses[signal_name]
         )
 
@@ -889,7 +1145,7 @@ def runlist_from_loss(
     for s in signal_columns:
         if level_to in s:
             level_to = s
-    initial_source = interp_losses[level_to] + max_powers[level_to]
+    initial_source = interp_losses[level_to] + max_powers[level_to] - safety_backoff_dBm
 
     # calculate expected powers
     expected_powers = {'RF_source_power_signal (W)': initial_source}
@@ -900,7 +1156,7 @@ def runlist_from_loss(
     fig, ax = plt.subplots()
     figs.append(fig)
     ax.set_xlabel('Frequency (GHz)')
-    ax.set_ylabel('Expected Power (dBm)')
+    ax.set_ylabel('Expected Initial Power (dBm)')
     for signal_name in signal_columns + ['RF_source_power_signal (W)']:
         color = next(colors)
         ax.plot(
@@ -932,6 +1188,10 @@ def runlist_from_loss(
             )
 
     # if no maximums hit, build a run list
+    # interleave the frequency points
+    initial_source = _interleave(initial_source)
+    frequencies = _interleave(frequencies)
+
     if no_maximums:
         output_df = {
             'Frequency_GHz': [],
@@ -944,7 +1204,7 @@ def runlist_from_loss(
             # insert zero rows
             if i % segment_size == 0:
                 for n in output_df:
-                    output_df[n] += [0]
+                    output_df[n] += [0] * off_step_length
             output_df['Frequency_GHz'].append(fi)
             output_df['Initial_source_power_dBm'].append(initial_source[i])
             output_df['Target_source_power_dBm'].append(max_powers[level_to])
@@ -954,15 +1214,51 @@ def runlist_from_loss(
 
         # append with a zero row
         for n in output_df:
-            output_df[n] += [0]
+            output_df[n] += [0] * off_step_length
         output_df = pd.DataFrame(output_df)
-        output_df.to_csv(Path(output_dir) / output_name)
+        output_df.to_csv(Path(output_dir) / output_name, index=False)
 
     return figs
 
 
+def _interleave(a):
+    out = np.append(a[0 : len(a) : 2], a[1 : len(a) : 2])
+    assert len(out) == len(a)
+    return out
+
+
+def _smallest_neighbour(x_interp: np.array, x: np.array, y: np.array):
+    """
+    Picks the smallest neighbour of y when interpolating x_interp to x.
+    """
+    # make sure input arrays are sorted
+    # and unique
+    sort_ind = np.argsort(x)
+    x = x[sort_ind]
+    y = y[sort_ind]
+    x, uniq_index = np.unique(x, return_index=True)
+    y = y[uniq_index]
+    # pick neighbour with smalles y value
+    out = np.zeros(len(x_interp))
+    for i, xi in enumerate(x_interp):
+        closest_i = np.argmin(abs(x_interp[i] - x))
+        f_closest = x[closest_i]
+        if f_closest < xi:
+            other_neighbour = closest_i + 1
+        else:
+            other_neighbour = closest_i - 1
+        ytest_1 = y[closest_i]
+        try:
+            ytest_2 = y[other_neighbour]
+        except IndexError:
+            ytest_2 = np.inf
+        out[i] = min(ytest_1, ytest_2)
+    return out
+
+
 def generate_settled_runlist(
     metadata: Path,
+    analysis_config: configs.RFSweepParserConfig = None,
     output_dir: Path = Path('.'),
     output_name: str = None,
     n_samples: int = 7,

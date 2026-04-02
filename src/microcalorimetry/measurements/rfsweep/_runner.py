@@ -14,6 +14,7 @@ import microcalorimetry.configs as configs
 from microcalorimetry._helpers._intf_tools import ConsoleManager
 
 # import any instrument that you might want here.
+from rminstr.instruments.Anritsu_MG362x1A import SignalGenerator as Anritsu_MG362x1A
 from rminstr.instruments.Anritsu_MG3696A import SignalGenerator as Anritsu_MG3696A
 from rminstr.instruments.RS_SMA100B import ArmedSignalGenerator as RS_SMA100B
 from rminstr.instruments.HP34420A import Voltmeter as HP34420A_Voltmeter
@@ -57,6 +58,7 @@ HARD_AM_MAX = 0.5  # 0.99999 # hard coded so you won't change it by accident
 
 # indexed by model, role
 INSTRUMENT_CLASSES = {
+    'Anritsu_MG362x1A':{'RF_source': Anritsu_MG362x1A},
     'Anritsu_MG3696A': {'RF_source': Anritsu_MG3696A},
     'RS_SMA100B': {'RF_source': RS_SMA100B},
     'KS_E8257D': {'RF_source': KS_E8257D},
@@ -231,6 +233,7 @@ class MicrocalorimeterRunner:
         global SPECIAL_MOUNTS, THIN_FILM_MOUNTS
         global THERMISTOR_MOUNTS, KEYSIGHT_THERMOPILE_BALANCE_MOUNTS
         global EXPECTED_RESISTANCE, ALL_MOUNTS, EXPECTED_LINEAR_TERM_BOUNDS
+        global CALORIMETERS
 
         SPECIAL_MOUNTS = sensor_master_list['SPECIAL_MOUNTS']
         print(SPECIAL_MOUNTS)
@@ -501,14 +504,18 @@ class MicrocalorimeterRunner:
 
         if (
             device_name in KEYSIGHT_THERMOPILE_BALANCE_MOUNTS
-            or device_name in EXPECTED_LINEAR_TERM_BOUNDS
+            or device_name in EXPECTED_LINEAR_TERM_BOUNDS or
+            device_name in CALORIMETERS
         ):
             if sensor_type != 'thermoelectric':
                 raise ValueError(
                     f'Expected sensor_type = thermoelectric for {port_name} {device_name} because sensor has an expected linear sensitivity term in master list'
                 )
 
-            expected_range = EXPECTED_LINEAR_TERM_BOUNDS[device_name]
+            try:
+                expected_range = EXPECTED_LINEAR_TERM_BOUNDS[device_name]
+            except KeyError as e:
+                raise KeyError(f"No expected linear coefficient bounds defined for {device_name} in master list.")
 
             # i could infer the min/max, but I want the
             # person writing the ranges to be explicit
@@ -549,7 +556,7 @@ class MicrocalorimeterRunner:
                 raise ValueError(
                     f"The provided coefficients of {
                         device_name
-                    } don't match the expected linar term."
+                    } don't match the expected linar term bounds."
                 )
 
             # reassign the linear term to the dictionairy.
@@ -849,6 +856,7 @@ class MicrocalorimeterRunner:
             elif mapping['type'] == 'thermoelectric':
                 e_quant = mapping[THERMOPILE_VOLTS_CMMKEY]
                 column = e_quant['column']
+                print(self.sensitivity_linear_term[sensor])
                 estimated_power = (
                     self.record[column] / self.sensitivity_linear_term[sensor]
                 )
@@ -1778,10 +1786,16 @@ class MicrocalorimeterRunner:
                 power_meter.setup(source='off')
 
             self.done = True
-            self.change_source_state(source_on=False)
+            try:
+                self.change_source_state(source_on=False)
+            except KeyError as e:
+                print(f"KeyError on source shutdown, likely not initialized : {e}.")
 
             # turn off anything else.
             for k, v in self.instruments.items():
                 print('shutting down ', k)
-                v.close()
+                try:
+                    v.close()
+                except Exception as e:
+                    print(f"Failed to shudown {k} - caught : {e}")
             self.closed = True
