@@ -19,7 +19,7 @@ a ``S11`` data model container. This could be supplied as an in memory represent
 in the script, in this example called ``data``.
 
 .. code-block:: python
-    
+
     fn(my_s11 = data)
 
 
@@ -47,10 +47,9 @@ You could also provide a DataModelContainer itself.
 
 Inside the analysis function, the parameter ``my_s11`` can be cast into the correct container.
 The ``.load()`` function is used to load in and get the in-memory representation. The data set can be freed
- and the confguration object
-preserves a pointer to the data set or file path that can be loaded in again later. If a pre-loaded
-dataset is provided to the function, then python garbage collector will keep the data set in memory since
-``my_s11`` preserves a reference to it. 
+and the configuration object preserves a pointer that can be loaded in again later. If a pre-loaded
+dataset is provided to the function, then the python garbage collector will keep the data set in memory since
+``my_s11`` preserves a reference to it.
 
 .. code-block:: python
 
@@ -110,6 +109,15 @@ This facilitates interoperability of analysis and measurmeent functions with Pyt
 scripting environments, and with user interfaces where a dictionary may need
 to be written into a file. It also provides some validation to
 complex configuration files.
+
+
+Configuration Templates
+-----------------------
+
+Templates for measurement and analysis configurations can be found in the github repo_.
+Make sure you pick out templates from the appropriate branch and or version.
+
+.. _repo: https://github.com/usnistgov/microcalorimetry/tree/development/docs
 
 Configuration Reference
 -----------------------

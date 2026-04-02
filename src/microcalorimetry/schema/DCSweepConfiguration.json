@@ -1,5 +1,5 @@
 {
-    "title": "Configuration of an RF Sweep",
+    "title": "Configuration of a DC Sweep",
     "type": "object",
     "properties": {
         "record_settings": {

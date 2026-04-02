@@ -120,7 +120,7 @@ def _load_yaml(path: Path | str):
 
 
 def __load_experiment_parameters(path: Path | str):
-    config = ExptParameters(str(path), '').config
+    config = ExptParameters(str(path)).config
     return config
 
 
@@ -667,6 +667,7 @@ class EtaHistorical(SerialDictionary):
                 if fail_on_error:
                     raise e from e
         return nominals
+
 
 # %% Mappings for the different inputs used to calculate a correction factor
 class CorrectionFactorModelInputs(SerialDictionary):
