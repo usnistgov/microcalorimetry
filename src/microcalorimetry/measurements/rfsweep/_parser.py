@@ -1834,10 +1834,20 @@ class ThermoelectricAnalyzer(SignalAnalyzer):
         self.column = self.input_signal_config['e']['column']
         self.instr_timing_tolerance = self.analysis_config['instr_timing_tolerance']
 
+
         try:
             self.stats_window_override = self.analysis_config['stats_window_override']
         except KeyError:
             self.stats_window_override = None
+        try:
+            self.initial_off_window = self.analysis_config['initial_off_window']
+        except KeyError:
+            self.initial_off_window = None
+
+        try:
+            self.final_off_window = self.analysis_config['final_off_window']
+        except KeyError:
+            self.final_off_window = None
 
     def analyze_segment(self, segment: Segment) -> tuple:
         """
@@ -1869,7 +1879,13 @@ class ThermoelectricAnalyzer(SignalAnalyzer):
         """
         results = {}
         metadata = {}
-        slow_results = _analyze_off_period(segment, self.column, stats_window_override = self.stats_window_override)
+        slow_results = _analyze_off_period(
+            segment,
+            self.column,
+            stats_window_override = self.stats_window_override,
+            initial_off_window = self.initial_off_window,
+            final_off_window = self.final_off_window
+            )
         results.update(slow_results)
         return results, metadata
 
@@ -1941,10 +1957,10 @@ class ThermoelectricAnalyzer(SignalAnalyzer):
         segment_raw_data = segment.raw_data
 
         # specific results
-        initial_off_start = segment_results['initial_off_start']
-        initial_off_stop = segment_results['initial_off_stop']
-        final_off_start = segment_results['final_off_start']
-        final_off_stop = segment_results['final_off_stop']
+        initial_off_start = segment_results[f'{self.column}_initial_off_start']
+        initial_off_stop = segment_results[f'{self.column}_initial_off_stop']
+        final_off_start = segment_results[f'{self.column}_final_off_start']
+        final_off_stop = segment_results[f'{self.column}_final_off_stop']
 
         start_time = segment_raw_data[column + '_timestamp'][0]
         plot_time = segment_raw_data[column + '_timestamp'] - start_time
@@ -2188,10 +2204,10 @@ class BolometerAnalyzer(SignalAnalyzer):
             plot_time, V_DVM, color=MAIN_TRACE_COLOR, linewidth=MAIN_TRACE_LINEWIDTH
         )
 
-        initial_off_start = segment_results['initial_off_start']
-        initial_off_stop = segment_results['initial_off_stop']
-        final_off_start = segment_results['final_off_start']
-        final_off_stop = segment_results['final_off_stop']
+        initial_off_start = segment_results[f'{self.column}_initial_off_start']
+        initial_off_stop = segment_results[f'{self.column}_initial_off_stop']
+        final_off_start = segment_results[f'{self.column}_final_off_start']
+        final_off_stop = segment_results[f'{self.column}_final_off_stop']
 
         ax.plot(
             plot_time, V_DVM, color=MAIN_TRACE_COLOR, linewidth=MAIN_TRACE_LINEWIDTH
@@ -2519,10 +2535,10 @@ class CommercialPowerMeterAnalyzer(SignalAnalyzer):
         segment_raw_data = segment.raw_data
 
         # specific results
-        initial_off_start = segment_results['initial_off_start']
-        initial_off_stop = segment_results['initial_off_stop']
-        final_off_start = segment_results['final_off_start']
-        final_off_stop = segment_results['final_off_stop']
+        initial_off_start = segment_results[f'{self.column}_initial_off_start']
+        initial_off_stop = segment_results[f'{self.column}_initial_off_stop']
+        final_off_start = segment_results[f'{self.column}_final_off_start']
+        final_off_stop = segment_results[f'{self.column}_final_off_stop']
 
         start_time = segment_raw_data[column + '_timestamp'][0]
         plot_time = segment_raw_data[column + '_timestamp'] - start_time
@@ -2681,11 +2697,12 @@ def _average_pre_fastoff(
 
     return results
 
-
 def _analyze_off_period(
         segment: Segment,
         column: str,
-        stats_window_override: float | None = None
+        stats_window_override: float | None = None,
+        initial_off_window: list[float] = None,
+        final_off_window: list[float] = None
     ) -> dict:
     """
     Analyze segment.
@@ -2714,6 +2731,21 @@ def _analyze_off_period(
         use the one defined in the measurement sweep. Useful if the stats
         windows indicates stability too early. If None, then uses
         the stats window of the measurment. The default is None.
+
+    initial_off_window : tuple[float], optional
+        Can be used to manually set the fitting window for the
+        initial of period of the segment. Otherwise utitlized the
+        stability of the calorimeter. Set relative to the first
+        on point (i.e. [-1000, 0] selects points from 1000 seconds before
+        the first on point up to the first on point.)
+
+    final_off_window : tuple[float], optional
+        Can be used to manually set the fitting window for the
+        final off period of the segment. Otherwise the
+        stability test of the calorimeter's thermopile signal
+        and the stats window will be used to pick samples.
+        Set relative to the last on point (i.e. [0, 1000] selects
+        from the last on point plus 1000 seconds.
 
     Returns
     -------
@@ -2752,18 +2784,46 @@ def _analyze_off_period(
         initial_off_start_time = (
             segment.raw_data['timestamp'][initial_off_stable][-1] - stats_window_seconds
         )
+
         initial_off_start = index[
             segment.raw_data['timestamp'] >= initial_off_start_time
         ][0]
+
         final_off_start_time = segment.raw_data['timestamp'][-1] - stats_window_seconds
         final_off_start = index[segment.raw_data['timestamp'] >= final_off_start_time][
             0
         ]
+
         initial_off_stop = index[initial_off][-1]
         final_off_stop = index[final_off][-1]
 
         results['initial_off_start_time'] = initial_off_start_time
         results['final_off_start_time'] = final_off_start_time
+
+        # if asked to, manually set the averaging window
+        if initial_off_window is not None:
+            # pick times relative to window
+            initial_off_times = segment.raw_data[column + '_timestamp'][initial_off]
+            initial_off_ind = np.where(
+                np.logical_and(
+                    segment.raw_data['timestamp'] > initial_off_times[-1] + initial_off_window[0],
+                    segment.raw_data['timestamp'] < initial_off_times[-1] + initial_off_window[1],
+                )
+            )[0]
+            initial_off_start = initial_off_ind[0]
+            initial_off_stop = initial_off_ind[-1]
+
+        if final_off_window is not None:
+            # pick times relative to window
+            final_off_times = segment.raw_data[column + '_timestamp'][final_off]
+            final_off_ind = np.where(
+                np.logical_and(
+                    segment.raw_data['timestamp'] > final_off_times[0] + final_off_window[0],
+                    segment.raw_data['timestamp'] < final_off_times[0] + final_off_window[1],
+                )
+            )[0]
+            final_off_start = final_off_ind[0]
+            final_off_stop = final_off_ind[-1]
 
     elif type(run) is LegacyRun or type(run) is CrowleyRun:
         stats_window = run.parsed_config['stats_window']
@@ -2772,10 +2832,10 @@ def _analyze_off_period(
         initial_off_stop = index[initial_off][-1]
         final_off_stop = index[final_off][-1]
 
-    results['initial_off_start'] = initial_off_start
-    results['final_off_start'] = final_off_start
-    results['initial_off_stop'] = initial_off_stop
-    results['final_off_stop'] = final_off_stop
+    results[f'{column}_initial_off_start'] = initial_off_start
+    results[f'{column}_final_off_start'] = final_off_start
+    results[f'{column}_initial_off_stop'] = initial_off_stop
+    results[f'{column}_final_off_stop'] = final_off_stop
 
     results['segment_time_zero'] = segment.raw_data['timestamp'][0]
 
@@ -2789,12 +2849,16 @@ def _analyze_off_period(
     off_times = (
         np.hstack((initial_off_times, final_off_times)) - results['segment_time_zero']
     )
+
     results['time_zero_' + column + '_i'] = initial_off_times[-1]
     results['time_zero_' + column + '_f'] = final_off_times[0]
 
     # get values of column
     initial_off_vals = segment.raw_data[column][initial_off_start:initial_off_stop]
     final_off_vals = segment.raw_data[column][final_off_start:final_off_stop]
+
+    print(column,'slow off initial fit time length', initial_off_times[-1] - initial_off_times[0])
+    print(column,'slow off final fit time length', final_off_times[-1] - final_off_times[0])
     vals = np.hstack((initial_off_vals, final_off_vals))
 
     # fit values of combined off regions

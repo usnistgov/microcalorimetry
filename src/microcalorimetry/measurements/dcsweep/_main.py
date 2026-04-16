@@ -238,7 +238,7 @@ def parse(
             fig, ax = plt.subplots(1, 1)
             ax.set_xlabel('Power (mW)')
             ax.set_ylabel(f'Uncertainty in  {nvm_name.replace("(V)", "(nV)")} (k = 1)')
-            ax.plot(power.nom, parsed[nvm_name].stdunc().cov * 1e9, 'ko')
+            ax.plot(power.nom*1000, parsed[nvm_name].stdunc().cov * 1e9, 'ko')
             fig_list.append(fig)
 
     # attatch metadata

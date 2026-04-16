@@ -574,10 +574,10 @@ def parse(
                             f'Encountered error plotting signal {signal}:{ins} std \n {type(e)}: {e}'
                         )
 
-                fig, ax = plt.subplots(2, 1, figsize=(8, 8))
+                fig, ax = plt.subplots(2, 1)
                 try:
                     column = sconfig[ins]['column']
-                    fig.suptitle(f'{signal} \n {column} standard deviation')
+                    fig.suptitle(f'{signal} \n {column} RF Off standard deviation')
                     ax[1].set_xlabel('Before (left) and After (right)')
                     ax[0].set_ylabel(f'STD of {ins} ({sconfig[ins]["units"]})')
                     ax[1].set_ylabel(f'STD of {ins} (ppm)')
