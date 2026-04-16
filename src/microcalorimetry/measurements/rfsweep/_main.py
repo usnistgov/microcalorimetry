@@ -27,172 +27,43 @@ __all__ = ['run', 'parse', 'view', 'generate_settled_runlist', 'runlist_from_los
 
 def view(
     metadata: Path,
-    signal_config: configs.RFSweepSignalConfig = None,
-    time_window: list[float] = None,
-    plot_p_est: bool = True,
-    plot_sensor_raw: bool = True,
-    down_sample_n: int = 1,
-    power_units: str = 'W',
-    time_units: str = 'hrs',
+    include_columns:list[str] = ['*'],
+    exclude_columns: list[str] = [],
 ) -> tuple[plt.Figure]:
     """
-    View an ongoing rfsweep experiment.
+    Generic plot columns in a data record.
 
     Parameters
     ----------
     metadata : Path
         Path to the metadata file of an active experiment
-    signal_config : RFSweepSignalConfig, optional
-        Path to a signal configuration of the measurement.
-        Will attempt to read the signal config from the measurement
-        files if not provided, if provided will overide what is in
-        the metadata files.
-    time_window : list[float], optional
-        Time window to look at (in units of time_units),
-        as [min, max]. If
-        not provided will plot entire time series. by default None
-    plot_p_est : bool, optional
-        Plots the estimate of each power signal, by default True
-    plot_sensor_raw : bool, optional
-        Plots the raw data that composes each signal, by default True
-    down_sample_n : int, optional
-        Down sample time series by n, by default 1
-    power_units : str, optional
-        Plot units for power, by default 'W'
-    time_units : str, optional
-        Plot units for time, by default 'hrs'
+    include_columns : list[str]
+        Columns to include with glob patters. Leave as ['*']
+        to include all.
 
     Returns
     -------
     figures : tuple[Figure]
         Tuple of output figures.
     """
-
-    def down_sample(ts, n=down_sample_n):
-        index = np.arange(0, len(ts[0]), down_sample_n)
-        t = ts[0][index]
-        y = ts[1][index]
-        return t, y
-
-    def zero_hour(ts, t0=None):
-        return ts / 3600
-
-    def punit(vals, origin: str = 'W'):
-        if origin == power_units:
-            return vals
-        if origin == 'W':
-            if power_units == 'mW':
-                return vals * 1000
-            elif power_units == 'dBm':
-                return 10 * np.log10(vals) + 30
-        elif origin == 'dBm':
-            if power_units == 'mW':
-                return 10 ** (vals / 10)
-            elif power_units == 'W':
-                return 10 ** (vals / 10) / 1000
-
-    # check that powerlevelling is functioning properly
-    # this is just for debugging inline
-
-    # mpl.use('tkagg')
-    # plt.close('all')
-    # metadata = r"O:\67201\Power\24Calor\rawdata\C24N129\040\cstd_run_0_incomplete\20250115_metadata.csv"
-    # it will break the app if run normally
-
-    # if a folder is pointed to, use a filed with _metadata.csv
-    # in the name as the metadata file, so folders can be pointed to
-    # adjusted_metadata = []
-    # for md in [metadata]:
-    #     md = Path(md)
-    #     if not md.exists():
-    #         raise FileExistsError(f'{md} doesnt exist')
-    #     elif md.is_file():
-    #         adjusted_metadata.append(md)
-    #     # assume folders contain a single run
-    #     # 1 metadata file
-    #     elif md.is_dir():
-    #         new_md = [f for f in md.glob('*_metadata.csv')]
-    #         if len(new_md) == 1:
-    #             adjusted_metadata.append(new_md[0])
-    #         else:
-    #             raise ValueError(f'{md} must contain exactly 1 *_metadata files to be pointed to by parser.')
-    # metadata = adjusted_metadata[0]
-
-    # if power levelling is happening, plot a summary of that
-
     dr = ExistingRecord(metadata)
 
     d_full = dr.batch_read()
+    d_full = {k:v for k,v in d_full.items() if any([fnmatch(k,pattern) for pattern in include_columns])}
 
-    try:
-        ep = ExptParameters(dr.metadata['config_file'], dr.metadata['settings_file'])
-
-    except FileNotFoundError:
-        newdir = dirname(metadata)
-        _config_file = join(newdir, basename(dr.metadata['config_file']))
-        _run_settings_file = join(newdir, basename(dr.metadata['settings_file']))
-        ep = ExptParameters(_config_file, _run_settings_file)
-
-    if time_window is not None:
-        raise NotImplementedError(
-            "Haven't added time windowing, zoom in to full plot for now."
-        )
-
-    cmm = signal_config
-    if cmm is None:
-        cmm = ep.config['signal_config']
-
-    time_coeffs = {'hrs': 1 / 3600, 'min': 1 / 60, 's': 1}
-    tcoeff = time_coeffs[time_units]
-
-    fig_ts = None
-    if plot_p_est:
-        fig_ts, ax_ts = plt.subplots(1, 1)
-        for ai, sensor in enumerate(dict(cmm)):
-            try:
-                # the e mapping corresponds to the thermopile voltage, it
-                # doesnt have a power estimate
-                pest = d_full[microrunner.format_pmeter_est_column((sensor))]
-                ax_ts.plot(
-                    pest.t * tcoeff, punit(pest.values, origin='W'), 'o-', label=sensor
-                )
-            except KeyError:
-                print(
-                    f'Missing Estimated Signal power from {sensor}. Possibly from an older version of the runner.'
-                )
-        ax_ts.set_ylabel(f'Estimated Metered Power {power_units}')
-        ax_ts.set_xlabel('Time (' + time_units + ')')
-        ax_ts.legend(loc='best')
-        fig_ts.suptitle('Estimated Metered Power of Sensors')
-        fig_ts.tight_layout()
     # otherwise, plot each sensors raw time series in a seperate window
     sensor_figs = []
-    if plot_sensor_raw:
-        for ai, sensor in enumerate(dict(cmm)):
-            sensor_map = cmm[sensor]
-            sensor_cols = {}
-            for k, v in dict(sensor_map).items():
-                try:
-                    sensor_cols.update({k: v['column']})
-                except (TypeError, KeyError):
-                    pass
-            N = len(sensor_cols)
-            fig_i, axs_i = plt.subplots(N, 1, sharex=True)
-            if N == 1:
-                axs_i = [axs_i]
-            fig_i.suptitle(f'{sensor} Raw Data')
-            for i, sc in enumerate(sensor_cols):
-                try:
-                    ts = d_full[sensor_cols[sc]]
-                    axs_i[i].plot(ts.t * tcoeff, ts.values, 'o-', ds='steps-post')
-                    axs_i[i].set_ylabel(sensor_cols[sc])
-                except KeyError as e:
-                    msg = f'{sensor_cols[sc]} not in data record, are the input_signals for {sensor} correct? maybe one of {list(d_full.keys())}'
-                    raise KeyError(msg) from e
-            axs_i[-1].set_xlabel('Time (' + time_units + ')')
-            sensor_figs.append(fig_i)
 
-    return fig_ts, *sensor_figs
+    for k in d_full:
+        fig_i, axs_i = plt.subplots(1, 1)
+        fig_i.suptitle(f'{k} : Raw Data')
+        ts = d_full[k]
+        axs_i.plot(ts.t, ts.values, 'o-', ds='steps-post')
+        axs_i.set_ylabel(k)
+        axs_i.set_xlabel('Time (s)')
+        sensor_figs.append(fig_i)
+
+    return tuple(sensor_figs)
 
 
 def run_gui(

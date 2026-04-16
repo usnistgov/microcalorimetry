@@ -2227,10 +2227,30 @@ class BolometerAnalyzer(SignalAnalyzer):
         ax.plot(
             plot_time,
             e_off_fit,
+            label = 'Slow Off Fit',
+            ls = '-.',
             color=MIDDLE_STABLE_TRACE_COLOR,
             linewidth=STABLE_TRACE_LINEWIDTH,
         )
+  
 
+        slow_sample_line = ax.plot(
+            plot_time[initial_off_start:initial_off_stop],
+            V_DVM[initial_off_start:initial_off_stop],
+            'v',
+            label = 'Slow Off Samples',
+            color=INITIAL_STABLE_TRACE_COLOR,
+            linewidth=STABLE_TRACE_LINEWIDTH,
+        )
+        ax.plot(
+            plot_time[final_off_start:final_off_stop],
+            V_DVM[final_off_start:final_off_stop],
+            'v',
+            color=FINAL_STABLE_TRACE_COLOR,
+            linewidth=STABLE_TRACE_LINEWIDTH,
+        )
+
+        len_step = len(segment.steps)
         for i, step_i in enumerate(segment.steps):
             off_time_delta = step_i.results[self.column + '_off_time_delta']
             plot_time_step = step_i.raw_data[self.column + '_timestamp'] - start_time
@@ -2283,43 +2303,46 @@ class BolometerAnalyzer(SignalAnalyzer):
                     color=MIDDLE_STABLE_TRACE_COLOR,
                 )
             pl.plot(plot_time_step, V_DVM_step)
+            label = None
+            if i == len_step-1:
+                label = 'Off/On Summary'
             pl.plot(
                 [t_off, t_off, t_off],
                 [V_off_fast, V_off_slow, V_on],
-                marker='o',
+                marker='*',
                 linestyle='--',
+                label = label,
                 color=FIT_TRACE_COLOR,
                 markersize=RESAMPLE_POINTS_SIZE,
             )
+            label = None
+            if i == len_step-1:
+                label = 'Fast Off'
             pl.plot(
                 [eval_time],
                 [V_off_fast],
-                marker='o',
+                marker='D',
+                ls = '',
+                label = label,
                 color=FIT_TRACE_COLOR,
                 markersize=RESAMPLE_POINTS_SIZE,
             )
 
             # i want to plot what samples were used but doesn't seem to be working.
-            # pl.plot(
-            #     plot_time_step[stable],
-            #     V_DVM[stable],
-            #     linewidth=STABLE_TRACE_LINEWIDTH,
-            #     color=MIDDLE_STABLE_TRACE_COLOR,
-            # )  # PLOT_COLORS[i % len(PLOT_COLORS)])
+            label = None
+            if i == len_step-1:
+                label = 'On Samples'
+            pl.plot(
+                plot_time_step[initial_stable:final_stable],
+                V_DVM_step[initial_stable:final_stable],
+                'x',
+                label = label,
+                linewidth=STABLE_TRACE_LINEWIDTH,
+                color=MIDDLE_STABLE_TRACE_COLOR,
+            )  # PLOT_COLORS[i % len(PLOT_COLORS)])
 
-        ax.plot(
-            plot_time[initial_off_start:initial_off_stop],
-            V_DVM[initial_off_start:initial_off_stop],
-            color=INITIAL_STABLE_TRACE_COLOR,
-            linewidth=STABLE_TRACE_LINEWIDTH,
-        )
-        ax.plot(
-            plot_time[final_off_start:final_off_stop],
-            V_DVM[final_off_start:final_off_stop],
-            color=FINAL_STABLE_TRACE_COLOR,
-            linewidth=STABLE_TRACE_LINEWIDTH,
-        )
 
+        pl.legend(loc = 'best')
         pl.xlabel('Time (s)')
         pl.ylabel('Bias Voltage (V)')
         return fig
@@ -2658,7 +2681,7 @@ def _average_pre_fastoff(
 
     """
     results = {}
-    RF_off_time = step.results['RF_off_time']
+   
     timestamps = step.raw_data[column + '_timestamp']
     index = np.arange(len(timestamps))
 
@@ -2670,12 +2693,11 @@ def _average_pre_fastoff(
         elif RF_off_time_offset_method == 'first_data_point':
             rf_off_delta = -instr_timing_tolerance
         results[column + '_off_time_delta'] = rf_off_delta
-
+    RF_off_time = step.results['RF_off_time']+results[column + '_off_time_delta']
     logical_index = np.logical_and(
         timestamps >= RF_off_time - RF_on_average_window,
         timestamps
-        < RF_off_time
-        + rf_off_delta,  # just to help avoid collisions with a step that is right after the step
+        < RF_off_time,  # just to help avoid collisions with a step that is right after the step
     )
     indexed_vals = step.raw_data[column][logical_index]
     # filler value, doesn't mean anything for these sensors
@@ -2685,7 +2707,7 @@ def _average_pre_fastoff(
         # this happens is the window to average over was too tight.
         # so print a helpful message.
         if not logical_index.any():
-            raise IndexError("No values found in the RF_on_average window. It may be too tight of an averaging window.") from e
+            raise IndexError(f"No values found in the {column} RF_on_average window of {RF_on_average_window}. It may be too tight of an averaging window.") from e
         else:
             raise e from e
     results[column + '_final_stable'] = index[logical_index][-1]
@@ -2797,8 +2819,8 @@ def _analyze_off_period(
         initial_off_stop = index[initial_off][-1]
         final_off_stop = index[final_off][-1]
 
-        results['initial_off_start_time'] = initial_off_start_time
-        results['final_off_start_time'] = final_off_start_time
+        results[f'{column}_initial_off_start_time'] = initial_off_start_time
+        results[f'{column}_final_off_start_time'] = final_off_start_time
 
         # if asked to, manually set the averaging window
         if initial_off_window is not None:
@@ -2836,6 +2858,10 @@ def _analyze_off_period(
     results[f'{column}_final_off_start'] = final_off_start
     results[f'{column}_initial_off_stop'] = initial_off_stop
     results[f'{column}_final_off_stop'] = final_off_stop
+
+    print(f'{column} fit indexes:')
+    print('   initial: ', initial_off_start, initial_off_stop)
+    print('     final: ', final_off_start, final_off_stop)
 
     results['segment_time_zero'] = segment.raw_data['timestamp'][0]
 
@@ -2942,7 +2968,7 @@ def _find_rf_off_delta(step: Step, column: str, instr_timing_tolerance: float) -
 
     step_size = np.max(diff[bool_in])
     i_step = np.where(diff == step_size)[0][-1]
-    return timestamps[i_step] - RF_off_time
+    return timestamps[i_step]-RF_off_time
 
 
 def _fit_fast_off_timeseries(
@@ -3010,7 +3036,6 @@ def _fit_fast_off_timeseries(
     RF_off_time = step.results['RF_off_time'] + off_time_delta
 
     # search for when the timeseries thinks RF was turned off
-
     same_point = np.logical_and(
         (timestamps - RF_off_time) > V_off_fit_time_window[0],
         (timestamps - RF_off_time) < V_off_fit_time_window[1],
@@ -3022,6 +3047,7 @@ def _fit_fast_off_timeseries(
         print(f"{column} fit region index: ", initial_fit_region, final_fit_region)
 
     except IndexError:
+        
         print('Caught IndexError Trying to fit. Error for :')
         print('fit window = ', V_off_fit_time_window)
         print(
@@ -3069,21 +3095,21 @@ def _fit_fast_off_timeseries(
 
     elif V_off_function == 'single_sample':
         if initial_fit_region != final_fit_region:
-            raise IndexError(
-                'Using single_sample analysis, but RF off region is longer than 1 sample: {} to {}'.format(
+            print(
+                'Using single_sample analysis, but RF off region is longer than 1 sample, averaging: {} to {}'.format(
                     initial_fit_region, final_fit_region
                 )
             )
 
-        fit_time_zero = timestamps[initial_fit_region]
+        fit_time_zero = np.mean(timestamps[initial_fit_region])
         fit_eval_time = fit_time_zero
         a = vals[initial_fit_region]
         b = 0
-        V_off_fast = vals[initial_fit_region]
+        V_off_fast = np.mean(vals[initial_fit_region])
 
     else:
         raise ValueError(
-            'Fitting function not recognized, Use "lin_plus_exp" or "linear".'
+            'Fitting function not recognized, Use "lin_plus_exp" or "linear" or "single_sample".'
         )
 
     results['initial_fit_region'] = initial_fit_region
