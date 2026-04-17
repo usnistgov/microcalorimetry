@@ -75,6 +75,7 @@ import pytz
 # import time
 import scipy
 from sphinx.builders.gettext import timestamp
+from functools import partial
 
 # from scipy.optimize import curve_fit
 local_tz = pytz.timezone('US/Mountain')
@@ -436,7 +437,11 @@ class Campaign:
                 if 'dev' in umech_id:
                     associated_col = get_associated_column(col)
                     pert = nom.copy()
-                    pert.sel(col=associated_col).data[i] += val
+                    try:
+                        pert.sel(col=associated_col).data[i] += val
+                    except TypeError as e:
+                        msg = str(e) + f' - value is {val} for {associated_col}'
+                        raise TypeError(msg) from e
                     # this needs to be inside this loop or if will cause
                     # the else statement to crash
                     if include_time_std:
@@ -608,7 +613,7 @@ class Run(abc.ABC):
             'commercial': CommercialPowerMeterAnalyzer,
             'thermoelectric': ThermoelectricAnalyzer,
             'bolometer': BolometerAnalyzer,
-            'rf_source': None,
+            'RF_source': RFSourceAnalyzer,
         }
 
         self.analyzers = {}
@@ -1569,11 +1574,33 @@ class Segment:
         for i, start in enumerate(step_start_indices):
             end = step_end_indices[i]
 
+            use_start = start
+            use_end = end
+
+            # first step needs to trim off the slow initial off
+            # otherwise it will get confused when it tries
+            # to find the fast off
+            if i == 0:
+                # look for second to last time it goes from stable to unstable
+                # this should be where RF turns on for the first time in a segment
+                rf_on_actually = np.diff(self.raw_data['stable_samples'][use_start:use_end],append = 0) < 0
+                use_start = np.arange(use_start,use_end)[rf_on_actually][-2]+2
+
+            # last step needs to trim off the slow starts at the end of the
+            # segment so they dont confuse the step analyzer
+            if i == len(step_start_indices) -1:
+                # cut off everything before the second stable period
+                # so the stable samples can still be use to check the fast offs
+                rf_on_actually = np.diff(self.raw_data['stable_samples'][use_start:use_end],append = 0) < 0
+                use_end = np.arange(use_start,use_end)[rf_on_actually][1]-1
+
+
             raw_data = {}
             for column in self.raw_data.keys():
                 # print("column:", column)
                 # print("column,start, end:", column, start, end)
-                raw_data[column] = np.array(self.raw_data[column])[start:end]
+
+                raw_data[column] = np.array(self.raw_data[column])[int(use_start):int(use_end)]
 
             new_step = Step(self, raw_data, step_frequencies[i])
             self.steps.append(new_step)
@@ -1746,6 +1773,7 @@ class SignalAnalyzer(abc.ABC):
         self.instruments = instruments
         self.specs = {}
         self.specs_metadata = {}
+        
         for item in self.input_signal_config.items():
             input_signal_name, config = item
             instrument_name = config['instrument']
@@ -1761,6 +1789,8 @@ class SignalAnalyzer(abc.ABC):
                 self.specs_metadata[input_signal_name] = {'instrument_name': instr}
             except KeyError:
                 print('NO SPEC CLASS FOR ', model, ' as ', role)
+
+        print(type(self), analysis_config)
 
     @abc.abstractmethod
     def analyze_segment(self, segment: Segment) -> tuple:
@@ -1917,7 +1947,11 @@ class ThermoelectricAnalyzer(SignalAnalyzer):
         results[self.column + '_off'] = off_val
         spec = self.specs['e']
 
-        on_results = _average_pre_fastoff(step, self.column, self.instr_timing_tolerance, self.RF_on_average_window,self.analysis_config['RF_off_time_offset_method'])
+        on_results = _average_pre_fastoff(
+            step,
+            self.column, 
+            self.stats_window_override,
+            )
         results.update(on_results)
         on_val = results[self.column + '_on']
 
@@ -2010,7 +2044,7 @@ class ThermoelectricAnalyzer(SignalAnalyzer):
                 color=MIDDLE_STABLE_TRACE_COLOR,
             )  # PLOT_COLORS[i % len(PLOT_COLORS)])
 
-            RF_off_time = step_i.results['RF_off_time'] - start_time + step_i.results[column + '_off_time_delta']
+            RF_off_time = plot_time_step[final_stable]
             NVM_volts_on = step_i.results[column + '_on']
             NVM_volts_off = step_i.results[column + '_off']
             ax.plot(
@@ -2135,9 +2169,7 @@ class BolometerAnalyzer(SignalAnalyzer):
         on_results = _average_pre_fastoff(
             step,
             self.column,
-            self.instr_timing_tolerance,
-            self.RF_on_average_window,
-            'first_data_point'
+            self.stats_window_override
             )
 
         on_val = on_results[self.column + '_on']
@@ -2277,6 +2309,11 @@ class BolometerAnalyzer(SignalAnalyzer):
                     'final_fit_region'
                 ]
             ]
+            fit_region_volts = step_i.raw_data[self.column][
+                step_i.results['initial_fit_region'] : step_i.results[
+                    'final_fit_region'
+                ]
+            ]
             fit_time_zero = step_i.results['fit_time_zero']
             fit_time = fit_region_time - fit_time_zero
 
@@ -2303,6 +2340,21 @@ class BolometerAnalyzer(SignalAnalyzer):
                     color=MIDDLE_STABLE_TRACE_COLOR,
                 )
             pl.plot(plot_time_step, V_DVM_step)
+
+
+            label = None
+            if i == len_step-1:
+                label = 'Fast Off Samples'
+            pl.plot(
+                fit_region_time - start_time,
+                fit_region_volts,
+                label = label,
+                marker = 'o',
+                ls = '',
+                color=FIT_TRACE_COLOR,
+                markersize=RESAMPLE_POINTS_SIZE,        
+            )
+
             label = None
             if i == len_step-1:
                 label = 'Off/On Summary'
@@ -2453,12 +2505,12 @@ class SMUPowerMeterAnalyzer(SignalAnalyzer):
         return results, metadata
 
 
-class CommercialPowerMeterAnalyzer(SignalAnalyzer):
+class RFSourceAnalyzer(SignalAnalyzer):
     def __init__(
         self, analysis_config, signal_config, input_signal_config, instruments
     ):
         """
-        Initialize a Commercial PowerMeter analyzer.
+        Analyzes the RF Source Signal.
 
         Parameters
         ----------
@@ -2472,6 +2524,165 @@ class CommercialPowerMeterAnalyzer(SignalAnalyzer):
         -------
         None.
 
+        """
+        SignalAnalyzer.__init__(
+            self, analysis_config, signal_config, input_signal_config, instruments
+        )
+        self.source_column = self.input_signal_config['power']['column']
+
+        try:
+            self.am_voltage_column = self.input_signal_config['vdc']['column']
+        except KeyError:
+            self.am_voltage_column = None
+
+        self.analysis_config = analysis_config
+        self.signal_config = signal_config
+        self.instruments = instruments
+        self.instr_timing_tolerance = None
+        self.stats_window_override = self.analysis_config['stats_window_override']
+        self.RF_on_average_window = None
+
+    def analyze_segment(self, segment: Segment) -> tuple:
+        """
+        Analyze segment.
+
+        Does nothing for an RF source.
+
+        Parameters
+        ----------
+        segment : Segment
+            Segment to analyze.
+
+        Returns
+        -------
+        results : dict
+            Quantities extracted from analysis.
+
+        metadata : dict
+            Descriptive information reported with analysis results.
+        """
+        # this should envoke analyze_step?
+        metadata = {}
+        results = {}
+        return results, metadata
+
+    def analyze_step(self, step: Step) -> tuple:
+        """
+        Analyze step, return dictionary of results.
+
+        Parameters
+        ----------
+        step: Step : int
+            Index of the segment in run.segments.
+
+        Returns
+        -------
+        results : dict
+            See _average_pre_fastoff.
+
+        metadata : dict
+            Descriptive information reported with analysis results.
+        """
+        metadata = {}
+
+        def dBm_mean_func(x): 
+            return 10*np.log10(np.mean(10**(x/10)))
+        def dBm_std_func(x):
+            # return a small number if we are using 1 sample
+            if len(x) == 1:
+                return -1000
+            return 10*np.log10(np.std(10**(x/10), ddof = 1))
+
+        # results for source
+        results = _average_pre_fastoff(
+            step,
+            self.source_column,
+            self.stats_window_override,
+            mean_func = dBm_mean_func,
+            std_func = dBm_std_func
+        )
+
+        # results for
+        
+        results = results | _average_pre_fastoff(
+            step,
+            self.am_voltage_column,
+            self.stats_window_override
+        )
+
+        return results, metadata
+
+    def plot_analysis(self, segment: Segment, *args)->pl.Figure:
+        """
+        Generate plot of the bias voltage to allow user to see if the measurements look normal.
+
+        Parameters
+        ----------
+        segment : Segment
+            Segment to analyze.
+
+        Returns
+        -------
+        fig : matplotlib figure object
+        """
+
+
+        fig, ax = pl.subplots()
+        segment_results = segment.results
+        segment_raw_data = segment.raw_data
+        start_time = segment_raw_data[self.source_column+ '_timestamp'][0]
+        plot_time = segment_raw_data[self.source_column + '_timestamp'] - start_time
+        source_setting = segment_raw_data[self.source_column]
+
+        pl.plot(
+            plot_time, source_setting, color=MAIN_TRACE_COLOR, linewidth=MAIN_TRACE_LINEWIDTH
+        )
+
+
+
+        len_step = len(segment.steps)
+        for i, step_i in enumerate(segment.steps):
+            plot_time_step = step_i.raw_data[self.source_column + '_timestamp'] - start_time
+            setting_step = step_i.raw_data[self.source_column]
+
+            initial_stable = step_i.results[self.source_column + '_initial_stable']
+            final_stable = step_i.results[self.source_column + '_final_stable']
+
+            # i want to plot what samples were used but doesn't seem to be working.
+            label = None
+            if i == len_step-1:
+                label = 'On Samples'
+            pl.plot(
+                plot_time_step[initial_stable:final_stable],
+                setting_step[initial_stable:final_stable],
+                'x',
+                label = label,
+                linewidth=STABLE_TRACE_LINEWIDTH,
+                color=MIDDLE_STABLE_TRACE_COLOR,
+            )  # PLOT_COLORS[i % len(PLOT_COLORS)])
+
+            label = None
+            if i == len_step-1:
+                label = 'On Average'
+            pl.plot(
+                plot_time_step[final_stable],
+                step_i.results[self.source_column + '_on'],
+                'o',
+                label = label,
+                linewidth=STABLE_TRACE_LINEWIDTH,
+                color=MIDDLE_STABLE_TRACE_COLOR,
+            )  # PLOT_COLORS[i % len(PLOT_COLORS)])
+
+        pl.legend(loc = 'best')
+        pl.xlabel('Time (s)')
+        pl.ylabel('RF Source Setting')
+        return fig
+
+class CommercialPowerMeterAnalyzer(SignalAnalyzer):
+    def __init__(
+        self, analysis_config, signal_config, input_signal_config, instruments
+    ):
+        """
         """
         SignalAnalyzer.__init__(
             self, analysis_config, signal_config, input_signal_config, instruments
@@ -2641,10 +2852,11 @@ class CommercialPowerMeterAnalyzer(SignalAnalyzer):
 
 
 def _average_pre_fastoff(
-        step: Step, column: str,
-        instr_timing_tolerance: float,
-        RF_on_average_window: float,
-        RF_off_time_offset_method: str
+        step: Step, 
+        column: str,
+        stats_window_override: float,
+        mean_func: callable = None,
+        std_func: callable = None
         ) -> dict:
     """
     Average samples just prior to the fast offs.
@@ -2664,14 +2876,17 @@ def _average_pre_fastoff(
     instr_timing_tolerance : float
         Max delay between RF off and instrument response.
 
-    RF_on_average_window : float
+    stats_window_override : float
         How long to average just prior to fast RF off in seconds.
 
-    RF_off_time_offset_method: str, {'max_change', 'first_data_point'}
-        Method for determining the last time point in the averaging window.
-        If 'max_change': look for a change in column values corresponding to
-        the source being turned off. If 'first_data_point', pick the time
-        when the RF source was turned off - instr_timing_tolerance.
+    mean_func : callable | None
+        Funciton to apply to the array of values to calculate the mean.
+        By defualt np.mean. Must taken in an array and return the mean.
+    
+    std_func : callable | None
+        Function to apply to the array of selected values to calculate
+        the standard deviatio. Be defautl np.std with DDOF = 1. Must
+        take in the array and return the standard deviation estimate.
 
     Returns
     -------
@@ -2680,40 +2895,36 @@ def _average_pre_fastoff(
         column + '_on_dev': standard deviation of readings.
 
     """
+    run = step.segment.run
+    stats_window = run.parsed_config['stats_settings']['stats_window']
+    if stats_window_override is not None:
+        stats_window = stats_window_override
+
     results = {}
-   
     timestamps = step.raw_data[column + '_timestamp']
     index = np.arange(len(timestamps))
 
-    try:
-        rf_off_delta = step.results[column + '_off_time_delta']
-    except KeyError:
-        if RF_off_time_offset_method == 'max_change':
-            rf_off_delta = _find_rf_off_delta(step, column, instr_timing_tolerance)
-        elif RF_off_time_offset_method == 'first_data_point':
-            rf_off_delta = -instr_timing_tolerance
-        results[column + '_off_time_delta'] = rf_off_delta
-    RF_off_time = step.results['RF_off_time']+results[column + '_off_time_delta']
+    # use the last stable sample to find the off switch
+    last_stable_sample = timestamps[step.raw_data['stable_samples']==1][-1]
     logical_index = np.logical_and(
-        timestamps >= RF_off_time - RF_on_average_window,
-        timestamps
-        < RF_off_time,  # just to help avoid collisions with a step that is right after the step
+        timestamps > last_stable_sample - stats_window,
+        timestamps <= last_stable_sample
     )
-    indexed_vals = step.raw_data[column][logical_index]
-    # filler value, doesn't mean anything for these sensors
-    try:
-       results[column + '_initial_stable'] = index[logical_index][0]
-    except IndexError as e:
-        # this happens is the window to average over was too tight.
-        # so print a helpful message.
-        if not logical_index.any():
-            raise IndexError(f"No values found in the {column} RF_on_average window of {RF_on_average_window}. It may be too tight of an averaging window.") from e
-        else:
-            raise e from e
+    use_vals = step.raw_data[column][logical_index]
+
+
+
+
+    results[column + '_initial_stable'] = index[logical_index][0]
     results[column + '_final_stable'] = index[logical_index][-1]
 
-    results[column + '_on'] = np.mean(indexed_vals)
-    results[column + '_on_dev'] = np.std(indexed_vals, ddof=1)
+    if mean_func is None:
+        mean_func = np.mean
+    if std_func is None:
+        std_func = partial(np.std, ddof = 1)
+
+    results[column + '_on'] = mean_func(use_vals)
+    results[column + '_on_dev'] = std_func(use_vals)
     if VERBOSE:
         print(column, ' on', results[column + '_on'])
 
@@ -2954,8 +3165,10 @@ def _find_rf_off_delta(step: Step, column: str, instr_timing_tolerance: float) -
         Time delay.
 
     """
-    timestamps = step.raw_data[column + '_timestamp']
-    vals = step.raw_data[column]
+    # throw away first point because it
+    # sometimes is actually during the off state?
+    timestamps = step.raw_data[column + '_timestamp'][1:]
+    vals = step.raw_data[column][1:]
     RF_off_time = step.results['RF_off_time']
     # look for max derivative (derivative of step is impulse) near
     # where the source thinks it was turned off.
@@ -2968,7 +3181,8 @@ def _find_rf_off_delta(step: Step, column: str, instr_timing_tolerance: float) -
 
     step_size = np.max(diff[bool_in])
     i_step = np.where(diff == step_size)[0][-1]
-    return timestamps[i_step]-RF_off_time
+    delta = timestamps[i_step]-RF_off_time
+    return delta
 
 
 def _fit_fast_off_timeseries(
@@ -3034,16 +3248,15 @@ def _fit_fast_off_timeseries(
         print('RF off time offset from source ', off_time_delta)
 
     RF_off_time = step.results['RF_off_time'] + off_time_delta
-
     # search for when the timeseries thinks RF was turned off
     same_point = np.logical_and(
-        (timestamps - RF_off_time) > V_off_fit_time_window[0],
-        (timestamps - RF_off_time) < V_off_fit_time_window[1],
+        (timestamps - RF_off_time) >= V_off_fit_time_window[0],
+        (timestamps - RF_off_time) <= V_off_fit_time_window[1],
     )
 
     try:
         initial_fit_region = index[same_point][0]
-        final_fit_region = index[same_point][-1]
+        final_fit_region = index[same_point][-1]+1
         print(f"{column} fit region index: ", initial_fit_region, final_fit_region)
 
     except IndexError:

@@ -22,6 +22,7 @@ def _gui(no_console_stdout: bool = False):
     import sys
     import microcalorimetry.measurements.dcsweep as dcsweep
     import microcalorimetry.measurements.rfsweep as rfsweep
+    import microcalorimetry.measurements as measurements
     import microcalorimetry.analysis as anl
     import microcalorimetry.export as export
 
@@ -34,52 +35,44 @@ def _gui(no_console_stdout: bool = False):
     )
 
     app.add_function_tab(
-        'dcsweep',
+        'measurements.',
         # view function is just parse but with out the ability to save.
         functions={
-            'parse': dcsweep.parse,
-            'run': dcsweep._main.run_gui,
-            'view': dcsweep.parse,
+            'view': measurements.view,
+            'dcsweep.parse': dcsweep.parse,
+            'dcsweep.run': dcsweep._main.run_gui,
+            'rfsweep.parse': rfsweep.parse,
+            'rfsweep.run': rfsweep._main.run_gui,
+            'rfsweep.make_settled_runlist': rfsweep.generate_settled_runlist,
+            'rfsweep.make_runlist_from_loss': rfsweep.runlist_from_loss,
         },
-        output_group_saveable=['parse'],
+        output_group_saveable=['dcsweep.parse','rfsweep.parse'],
     )
 
     app.add_function_tab(
-        'rfsweep',
+        'analysis.',
         functions={
-            'parse': rfsweep.parse,
-            'view': rfsweep.view,
-            'run': rfsweep._main.run_gui,
-            'make settled runlist': rfsweep.generate_settled_runlist,
-            'make runlist from loss': rfsweep.runlist_from_loss,
-        },
-        output_group_saveable=['parse'],
-    )
-
-    app.add_function_tab(
-        'analysis',
-        functions={
-            'make eta repeatability model': anl.make_eta_repeatability_model,
-            'make k coeffs': anl.make_k_coeffs,
-            'make eta': anl.make_eta,
-            'dc lead correction': anl.dc_lead_correction,
+            'make_eta_repeatability_model': anl.make_eta_repeatability_model,
+            'make_k_coeffs': anl.make_k_coeffs,
+            'make_eta': anl.make_eta,
+            'dc_lead_correction': anl.dc_lead_correction,
             'apply_uncertainty_model':anl.apply_uncertainty_model,
-            'review eta': anl.review_eta,
+            'review_eta': anl.review_eta,
 
         },
         output_group_saveable=[
-            'make k coeffs',
-            'make eta',
-            'make eta hist model',
-            'dc lead correction',
+            'make_k_coeffs',
+            'make_eta',
+            'make_eta_hist_model',
+            'dc_lead_correction',
             'apply_uncertainty_model'
         ],
     )
 
     app.add_function_tab(
-        'export',
+        'export.',
         functions={
-            'as doteff': export.as_doteff,
+            'as_doteff': export.as_doteff,
         },
         output_group_saveable=[],
     )

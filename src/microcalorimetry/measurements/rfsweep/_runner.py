@@ -858,7 +858,7 @@ class MicrocalorimeterRunner:
             elif mapping['type'] == 'thermoelectric':
                 e_quant = mapping[THERMOPILE_VOLTS_CMMKEY]
                 column = e_quant['column']
-                print(self.sensitivity_linear_term[sensor])
+                # print(self.sensitivity_linear_term[sensor])
                 estimated_power = (
                     self.record[column] / self.sensitivity_linear_term[sensor]
                 )
@@ -1656,7 +1656,11 @@ class MicrocalorimeterRunner:
             self._batch_trigger()
 
             # sleep to ensure that the Voltmeters capture the turn off
-            time.sleep(2)
+            try:
+                time.sleep(self.parameters['levelling_settings']['off_trigger_delay'])
+            except KeyError:
+                print("Cant find 'off trigger delay' in levellin_settings. Defaulting to 2 seconds.")
+                time.sleep(2)
             self.change_source_state(source_on=False)
             # sleep to ensure sensor catches the turn off
             self._fetch_data(all_power_data=True)
