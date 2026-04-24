@@ -8,6 +8,7 @@ from rmellipse.propagators import RMEProp
 from rmellipse.uobjects import RMEMeas
 from rminstr.utilities import importer, path  # , timer
 from rminstr.data_structures import ExptParameters, ActiveRecord, ExistingRecord
+from rminstr.instruments.communications import GPIBInterface, Instrument
 from numpy import ceil
 from os.path import join
 import matplotlib.pyplot as plt
@@ -18,8 +19,8 @@ import click
 import json
 import inspect
 from microcalorimetry._tkquick.dtypes import Folder
-from typing import TYPE_CHECKING
-
+from typing import TYPE_CHECKING, Mapping
+from datetime import timedelta
 if TYPE_CHECKING:
     pass
 import microcalorimetry.configs as configs
@@ -38,10 +39,20 @@ def time_delta(t, t0, unit: str):
         return tdel
 
 
+
 class MeasurementManager:
-    def __init__(self, smu, *instr):
-        self.smu = smu
-        self.instruments = [smu] + [i for i in instr]
+    def __init__(
+        self,
+        smus: Mapping[str,Instrument],
+        thermometers: Mapping[str, Instrument],
+        nvms: Mapping[str,Instrument],
+        interface: GPIBInterface
+        ):
+        self.smus: Mapping[str,Instrument] = smus
+        self.thermometers: Mapping[str,Instrument] = thermometers
+        self.nvms: Mapping[str,Instrument] = nvms
+        self.instruments: Mapping[Instrument] = smus | thermometers | nvms
+        self.interface: GPIBInterface = interface
 
     def __enter__(self):
         return self
@@ -49,9 +60,279 @@ class MeasurementManager:
     def __exit__(self, type, value, traceback):
         # clean up data outputs
         print('shutting down')
-        self.smu.setup(source='off')
-        for i in self.instruments:
-            i.close()
+        # turn off things sourceing
+        for smu in (list(self.smus.values()) + list(self.thermometers.values())):
+            smu.setup(source='off')
+        for instrument in self.instruments.values():
+            instrument.close()
+
+    def update_smu_dr(self, dr: ActiveRecord, data: dict, timestamp: float, name: str = 'SMU'):
+        # update fast data while smu is running slow
+        dr.update(
+            f'V_{name} (V)', data['Voltage (V)'][0], timestamp
+        )
+        dr.update(
+            f'I_{name} (A)', data['Current (A)'][0], timestamp
+        )
+
+    def arm_all(self):
+        for i in self.instruments.values():
+            i.arm()
+
+    def measure(
+            self,
+            dr: ActiveRecord,
+            source_value: float,
+            first_sample_delay: float,
+            step_duration: float,
+            print_label: str = 'Normal Mesurement'
+        ): 
+        step_count = 0
+        step_start = time.time() # sample until the step is done
+        while (time.time() - step_start < step_duration) or (step_count < 1):
+            # First sample of step delay
+            # by a bit
+            if step_count > 0:
+                self.arm_all()
+                t_trigger = self.interface.group_trigger(*self.instruments.values())
+        
+            # smu needs to be triggered first when the source
+            # is adjusted so that it has time to level out?
+            # idk why but it needs to work like this :(
+            else:
+                for smu in self.smus.values():
+                    smu.setup(
+                        source_trigger_levels=[source_value],
+                        level = source_value,
+                        )
+                self.arm_all()
+                for smu in self.smus.values():
+                    smu.trigger()
+                t_adjust = time.time()
+                time.sleep(first_sample_delay)
+                t_trigger = self.interface.group_trigger(*self.nvms.values(),*self.thermometers.values())
+
+            step_count +=1
+
+            # collect the samples and add to record
+            for nvm_name, nvm in self.nvms.items():
+                nvm.wait_until_data_available(timeout = 10)
+                data = nvm.fetch_data()
+                dr.update(
+                    f'V_{nvm_name} (V)',
+                    data['Voltage (V)'][0],
+                    t_trigger
+                )
+
+            for smu_name, smu in self.smus.items():
+                smu.wait_until_data_available(timeout = 10)
+                heater_data = smu.fetch_data()
+                self.update_smu_dr(dr, heater_data,timestamp= t_trigger, name = smu_name)
+
+            for thermometer_name, thermometer in self.thermometers.items():
+                thermometer.wait_until_data_available(timeout = 10)
+                self.update_smu_dr(
+                    dr, 
+                    thermometer.fetch_data(),
+                    timestamp= t_trigger, 
+                    name = thermometer_name
+                )
+
+            dr.update('SOURCE_SETTING (A)', source_value, t_trigger)
+            dr.update('time_since_source_adjust (s)',t_trigger - t_adjust, t_trigger)
+
+
+            # print record state results:
+            time_left_in_step = max(step_duration - (time.time() - step_start),0)
+            print('')
+            print(f'Status {print_label}')
+            print( '====================')
+            print(' ','time left in step: ', timedelta(seconds=time_left_in_step))
+            print(' ','time since adjust: ', dr['time_since_source_adjust (s)'])
+            print('Heater')
+            print('------')
+            print(' ',f'SOURCE_SETTING (A): ', dr[f'SOURCE_SETTING (A)'])
+            print(' ',f'V_SMU (V): ', dr[f'V_SMU (V)'])
+            print(' ',f'I_SMU (A): ', dr[f'I_SMU (A)'])
+            print(' ',f'P SMU (mW): ', dr[f'V_SMU (V)']*dr[f'I_SMU (A)']*1000)
+            print(' ',f'R SMU (kOhms): ', dr[f'V_SMU (V)']/dr[f'I_SMU (A)']/1000)
+            for thermometer_name in self.thermometers:
+                print('----------------')
+                print(' ',f'R {thermometer_name} (kOhms): ', dr[f'V_{thermometer_name} (V)']/dr[f'I_{thermometer_name} (A)']/1000)
+            for nvm_name in self.nvms:
+                print('----------------')
+                print(' ',f'V_{nvm_name} (V): ', dr[f'V_{nvm_name} (V)'])
+            # input('pause...:')
+
+def run(
+    settings: str,
+    measlist: str,
+    output_dir: str = '.',
+    name: str = 'dcsweep',
+    dry_run: bool = False,
+    validate: bool = True,
+) -> str:
+    """
+    DCSweep experiment for microcalorimeter.
+
+    Source a series of voltages while monitoring the thermopile.
+
+    Parameters
+    ----------
+    settings : str
+        Settings files for experiment.
+    measlist : str
+        Voltage measurment list for experiment.
+    output_dir : str
+        Directory to output to, creats a new folder inside of to store
+        csv files.
+    name : str, optional
+        Name of measurement. Default is 'dcsweep'.
+    dry_run : bool, optional
+        If True, attempts to validate the measurement.
+    validate : bool, optional
+        Validate settings against a schema.
+
+    Returns
+    -------
+    str.
+        path to metadata location of output file.
+
+    """
+
+    
+
+
+    # read run settings
+    ep = ExptParameters(settings, measlist)
+
+    # validate the config file
+    if validate:
+        ep2 = ExptParameters(settings)
+        ep2 = configs.DCSweepConfiguration(ep2.config)
+
+
+    # set up an interface
+    interface_number = [i.split(':')[0][-1] for i in ep.config['addresses'].values()][0]
+    gpib_intfc = GPIBInterface(f'GPIB{interface_number}::INTFC')
+
+    print(f"Using GPIB{interface_number} interface")
+
+
+
+    # setup a data record
+    columns = ['V_SMU (V)', 'I_SMU (A)', 'SOURCE_SETTING (A)', 'time_since_source_adjust (s)']
+
+    # create a column for each nvm
+    nvm_names = ep.config['nvm_names']
+    if type(nvm_names) is str:
+        nvm_names = [nvm_names]
+
+    monitor_thermometer = ep.config['monitor_thermometer']
+    # create a column for each nvm
+    thermometer_names = ep.config['thermometer_names']
+    if type(thermometer_names) is str:
+        thermometer_names = [thermometer_names]
+    # for thermometer_name in thermometer_names:
+    #     v_column = ep.config['']
+
+    # add extra column for thermometers and such
+    columns += [f'V_{name} (V)' for name in nvm_names]
+    columns += [f'I_{name} (A)' for name in thermometer_names]
+    columns += [f'V_{name} (V)' for name in thermometer_names]
+
+
+
+    output_dir = path.new_dir(output_dir, name)
+
+    # copy settings files to output directory
+    copied_settings_path = join(output_dir, 'settings.csv')
+    copied_measlist_path = join(output_dir, 'measlist.csv')
+    shutil.copyfile(settings, copied_settings_path)
+    shutil.copyfile(measlist, copied_measlist_path)
+
+    # if its a dry run, bounce out once the configs have been validated
+    # and before any instruments have been connected to
+    if dry_run:
+        return
+
+    # active record will output data if measurement stops for whatever reason
+    # and knows to make local backups if something goes wrong
+    with ActiveRecord(
+        columns, output_dir=output_dir + '//', **ep.config['record_settings']
+    ) as dr:
+        # import instruments
+        smu = importer.import_instrument(ep.config['models']['SMU'], 'SMUSourceSweep')
+        smu = smu(ep.config['addresses']['SMU'])
+        
+        thermometers = []
+
+        nvms = []
+        if ep.config['monitor_thermopile']:
+            for nvm_name in nvm_names:
+                NVM = importer.import_instrument(
+                    ep.config['models'][nvm_name], 'Voltmeter'
+                )
+                nvms.append(NVM(ep.config['addresses'][nvm_name]))
+                nvms[-1].initial_setup()
+                nvms[-1].setup(**ep.config['setup']['NVM'])
+
+        if monitor_thermometer:
+            for thermometer_name in thermometer_names:
+                _thermometer = importer.import_instrument(
+                    ep.config['models'][thermometer_name], 'SMUSourceSweep'
+                )
+                thermometers.append(_thermometer(ep.config['addresses'][thermometer_name]))
+                thermometers[-1].initial_setup(**ep.config['initial_setup'][thermometer_name])
+                thermometers[-1].setup(**ep.config['setup'][thermometer_name])
+                # set to 2 values so that it is the same as when the SMU
+                # sweeps
+                print(ep.config['thermometer_source'])
+                thermometers[-1].setup(source_trigger_levels = [ep.config['thermometer_source']])
+        
+        # Here is the measurement loop
+        # measurement manager shuts things down if measurmeent
+        # stops for whatever reason
+        t0 = time.time()
+        with MeasurementManager(
+                smus = {'SMU':smu},
+                thermometers = {therm_name:therm for therm_name, therm in zip(thermometer_names, thermometers)}, 
+                nvms = {nvm_name:nvm for nvm_name, nvm in zip(nvm_names, nvms)},
+                interface=gpib_intfc
+                ) as mm:
+            # i'm initializing the SMU inside the context manager
+            # so if something goes wrong the context manager can shut it off
+            smu.initial_setup(**ep.config['initial_setup']['SMU'])
+            smu.setup(**ep.config['setup']['SMU'], source= 'on')
+
+
+            # initialize measurement loop
+            ep.advance()
+
+            # start measurement
+            count = 0
+            while not ep.complete():
+                if ep.config['off_duration'] > 0:
+                    mm.measure(
+                        dr,
+                        source_value = 0.0,
+                        first_sample_delay = ep.config['first_sample_delay'],
+                        step_duration=ep.config['off_duration'],
+                        print_label = 'Zero Measurement'
+                    )
+                # measure sample
+                mm.measure(
+                    dr,
+                    source_value = ep.config['SOURCE_SETTING (A)'],
+                    first_sample_delay = ep.config['first_sample_delay'],
+                    step_duration=ep.config['step_duration'],
+                    print_label = 'Normal Sample'
+                )
+
+                dr.batch_update()
+                ep.advance()
+
+    return join(output_dir, dr.session_str + '_metadata.csv')
 
 
 @click.command(name='parse')
@@ -127,7 +408,7 @@ def parse(
     avg_window_size_secs: float = 3000,
     avg_window_shiftback_secs: float = 0,
     imm_step: bool = False,
-    make_plots: bool = False,
+    make_plots: bool = True,
     repeatability_id: str = 'dc_sweep',
 ) -> tuple[configs.ParsedDCSweep, list[plt.Figure]]:
     r"""
@@ -179,6 +460,8 @@ def parse(
 
     # do the analysis and save things
     metadata = Path(metadata)
+    if metadata.is_dir():
+        metadata = [p for p in metadata.glob('*metadata*')][0]
     meta_dir = metadata.parents[0]
     if settings is None:
         settings = meta_dir / 'settings.csv'
@@ -254,7 +537,13 @@ def parse(
 _parse_cli = clitools.format_from_npdoc(parse)(_parse_cli)
 
 
-def run_gui(settings: Path, measlist: Path, output_dir: Folder, dry_run: bool = False):
+def run_gui(
+        settings: Path,
+        measlist: Path,
+        output_dir: Folder,
+        name: str = 'dcsweep',
+        dry_run: bool = False
+        ):
     """
     dcsweep runner GUI.
 
@@ -266,6 +555,8 @@ def run_gui(settings: Path, measlist: Path, output_dir: Folder, dry_run: bool = 
         Path to the measurement list file.
     output_dir : Folder
         Directory to output data to.
+    name : str, optional
+        Name of measurement. Default is 'dcsweep'.
     dry_run : bool, optional
         Does everything up to but not including run the
         experiment. Can be used to validate settings. The default is False.
@@ -285,218 +576,11 @@ def run_gui(settings: Path, measlist: Path, output_dir: Folder, dry_run: bool = 
     clitools.ucal_cli(commands)
 
 
-def run(
-    settings: str,
-    measlist: str,
-    output_dir: str = '.',
-    dry_run: bool = False,
-) -> str:
-    """
-    DCSweep experiment for microcalorimeter.
-
-    Source a series of voltages while monitoring the thermopile.
-
-    Parameters
-    ----------
-    staircase_settings : str
-        Settings files for experiment.
-    staircase_measlist : str
-        Voltage measurment list for experiment.
-    output_dir : str
-        Directory to output to, creats a new folder inside of to store
-        csv files.
-    dry_run : bool, optional
-        If True, attempts to validate the measurement.
-
-    Returns
-    -------
-    str.
-        path to metadata location of output file.
-
-    """
-    # read run settings
-    ep = ExptParameters(settings, measlist)
-
-    # validate the config file
-    ep2 = ExptParameters(settings)
-    ep2 = configs.DCSweepConfiguration(ep2.config)
-
-    # setup a data record
-    columns = ['V_SMU (V)', 'I_SMU (A)']
-    # create a column for each nvm
-    nvm_names = ep.config['nvm_names']
-    if type(nvm_names) is str:
-        nvm_names = [nvm_names]
-
-    columns += [f'V_{name} (V)' for name in nvm_names]
-
-    output_dir = path.new_dir(output_dir, ep.config['record_settings']['meas_name'])
-
-    # copy settings files to output directory
-    copied_settings_path = join(output_dir, 'settings.csv')
-    copied_measlist_path = join(output_dir, 'measlist.csv')
-    shutil.copyfile(settings, copied_settings_path)
-    shutil.copyfile(measlist, copied_measlist_path)
-
-    # if its a dry run, bounce out once the configs have been validated
-    # and before any instruments have been connected to
-    if dry_run:
-        return
-
-    # active record will output data if measurement stops for whatever reason
-    # and knows to make local backups if something goes wrong
-    with ActiveRecord(
-        columns, output_dir=output_dir + '//', **ep.config['record_settings']
-    ) as dr:
-        # import instruments
-        smu = importer.import_instrument(ep.config['models']['SMU'], 'SMUSourceSweep')
-        smu = smu(ep.config['addresses']['SMU'])
-        nvms = []
-        if ep.config['monitor_thermopile']:
-            for nvm_name in nvm_names:
-                NVM = importer.import_instrument(
-                    ep.config['models'][nvm_name], 'Voltmeter'
-                )
-                nvms.append(NVM(ep.config['addresses'][nvm_name]))
-                nvms[-1].initial_setup()
-                nvms[-1].setup(**ep.config['setup']['NVM'])
-
-        # determine number of readings
-        # to us for the NVMs
-        total_fast_time = (
-            ep.config['fast_settings']['duration_per_level']
-            + ep.config['fast_settings']['initial_level_duration']
-        )
-        nvm_num_readings = {}
-        nvm_num_readings['fast'] = ceil(
-            total_fast_time / ep.config['setup']['NVM']['timer'] / 2
-        )
-
-        # Here is the measurement loop
-        # measurement manager shuts things down if measurmeent
-        # stops for whatever reason
-        with MeasurementManager(smu, *nvms) as mm:
-            # i'm initializing the SMU inside the context manager
-            # so if something goes wrong the context manager can shut it off
-            smu.initial_setup(**ep.config['initial_setup']['SMU'])
-            smu.setup(**ep.config['setup']['SMU'])
-            # initialize measurement loop
-            ep.advance()
-            source_last = ep.config['V_SOURCE_SETTING (V)']
-            fast = {}
-            slow = {}
-            # start measurement
-            while not ep.complete():
-                print(
-                    'ep index:', ep.index, 'voltage:', ep.config['V_SOURCE_SETTING (V)']
-                )
-                source_new = ep.config['V_SOURCE_SETTING (V)']
-
-                # start fast measurements
-                smu.setup(**ep.config['fast_settings'])
-                smu.setup(source_trigger_levels=[source_last, source_new])
-                smu.arm()
-
-                if ep.config['monitor_thermopile']:
-                    for nvm in nvms:
-                        nvm.setup(num_readings=nvm_num_readings['fast'])
-                        nvm.arm(
-                            delay=ep.config['fast_settings']['initial_level_duration']
-                        )
-                        nvm.trigger()
-
-                smu.trigger()
-                t0 = time.time()
-
-                smu.wait_until_data_available(
-                    4 * ep.config['fast_settings']['duration_per_level']
-                )
-                fast['SMU'] = smu.fetch_data(meas_start_time=t0)
-                if ep.config['monitor_thermopile']:
-                    for nvm, name in zip(nvms, nvm_names):
-                        nvm.wait_until_data_available(
-                            4 * ep.config['fast_settings']['duration_per_level'] * 2
-                        )
-                        fast[name] = nvm.fetch_data(meas_start_time=t0)
-
-                # slow measurements
-                smu.setup(initial_level_duration=-1, **ep.config['slow_settings'])
-                smu.setup(source_trigger_levels=[source_new])
-                smu.arm()
-                # I think the NVM needs to be triggered repeatedly, this doesn't
-                # seem to work properly for longer measurement times, the NVN just
-                # isn't measuring for the same amount of time as the SMU
-                t0 = time.time()
-                smu.trigger()
-
-                # update fast data while smu is running slow
-                dr.stage_update(
-                    'V_SMU (V)', fast['SMU']['Voltage (V)'], fast['SMU']['timestamp']
-                )
-                dr.stage_update(
-                    'I_SMU (A)', fast['SMU']['Current (A)'], fast['SMU']['timestamp']
-                )
-                if ep.config['monitor_thermopile']:
-                    for nvm, nvm_name in zip(nvms, nvm_names):
-                        dr.stage_update(
-                            f'V_{name} (V)',
-                            fast[name]['Voltage (V)'],
-                            fast[name]['timestamp'],
-                        )
-
-                dr.batch_update()
-
-                # collect and update slow data on the NVM while SMU is running
-                if ep.config['monitor_thermopile']:
-                    while smu.query_state() == 'measuring':
-                        t0_nvm = time.time()
-                        for nvm in nvms:
-                            nvm.setup(num_readings=1)
-                            nvm.arm()
-                            nvm.trigger()
-                        for nvm, name in zip(nvms, nvm_names):
-                            nvm.wait_until_data_available(30)
-                        print('\r', end='')
-                        for nvm, name in zip(nvms, nvm_names):
-                            nvm_slow = nvm.fetch_data(meas_start_time=t0_nvm)
-                            dr.update(
-                                f'V_{name} (V)',
-                                nvm_slow['Voltage (V)'][0],
-                                nvm_slow['timestamp'][0],
-                            )
-
-                            print(
-                                '{name} (mV): {:.6f}| '.format(
-                                    nvm_slow['Voltage (V)'][0] * 1e3, name=name
-                                ),
-                                end='',
-                            )
-                    print('')
-                smu.wait_until_data_available(
-                    2 * ep.config['slow_settings']['duration_per_level']
-                )
-                slow['SMU'] = smu.fetch_data(meas_start_time=t0)
-
-                # update SMU data
-                dr.stage_update(
-                    'V_SMU (V)', slow['SMU']['Voltage (V)'], slow['SMU']['timestamp']
-                )
-                dr.stage_update(
-                    'I_SMU (A)', slow['SMU']['Current (A)'], slow['SMU']['timestamp']
-                )
-                dr.batch_update()
-
-                # iterate
-                source_last = source_new
-                ep.advance()
-
-    return join(output_dir, dr.session_str + '_metadata.csv')
-
-
 @click.command(name='run')
 @click.argument('settings', type=Path)
 @click.argument('measlist', type=Path)
 @click.argument('output_dir', type=Path)
+@click.option('--name',type = str, default = 'dcsweep')
 @click.option('--dry-run', is_flag=True, default=False)
 def _run_cli(*args, **kwargs):
     print(args)
