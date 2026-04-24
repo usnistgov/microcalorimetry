@@ -60,15 +60,3 @@ def concat(*arrs, dim: str, new_coords: iter):
     out = xr.concat(arrs, dim)
     out = out.assign_coords({dim: new_coords})
     return out
-
-
-def mean_unique_values(arr: xr.DataArray, dim: str):
-    """
-    Average dupilcate values across a dimension.
-    """
-    old_coords = {k: v for k, v in arr.coords.items() if k != dim}
-    out = arr.groupby(dim).mean(dim)
-    # copy over coordinates from the old array
-    # don't include the dimension that was grouped and averaged
-    out = out.assign_coords(old_coords)
-    return out

@@ -11,6 +11,12 @@
                         "monitor_power"
                     ]
                 },
+                "off_trigger_delay": {
+                    "type": "number",
+                    "description": "How long to wait before turning OFF RF source after triggering meters for fast off measurement.",
+                    "minimum": 0,
+                    "examples": [2.0]
+                },
                 "use_GPIB_levelling": {
                     "type": "boolean",
                     "description": "If true, utilize levelling over GPIB commands."

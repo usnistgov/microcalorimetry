@@ -21,178 +21,10 @@ import click
 from itertools import cycle
 from decimal import Decimal
 from fnmatch import fnmatch
+from microcalorimetry.math.numbers import mean_unique_values
 
-__all__ = ['run', 'parse', 'view', 'generate_settled_runlist', 'runlist_from_loss']
+__all__ = ['run', 'parse', 'generate_settled_runlist', 'runlist_from_loss']
 
-
-def view(
-    metadata: Path,
-    signal_config: configs.RFSweepSignalConfig = None,
-    time_window: list[float] = None,
-    plot_p_est: bool = True,
-    plot_sensor_raw: bool = True,
-    down_sample_n: int = 1,
-    power_units: str = 'W',
-    time_units: str = 'hrs',
-) -> tuple[plt.Figure]:
-    """
-    View an ongoing rfsweep experiment.
-
-    Parameters
-    ----------
-    metadata : Path
-        Path to the metadata file of an active experiment
-    signal_config : RFSweepSignalConfig, optional
-        Path to a signal configuration of the measurement.
-        Will attempt to read the signal config from the measurement
-        files if not provided, if provided will overide what is in
-        the metadata files.
-    time_window : list[float], optional
-        Time window to look at (in units of time_units),
-        as [min, max]. If
-        not provided will plot entire time series. by default None
-    plot_p_est : bool, optional
-        Plots the estimate of each power signal, by default True
-    plot_sensor_raw : bool, optional
-        Plots the raw data that composes each signal, by default True
-    down_sample_n : int, optional
-        Down sample time series by n, by default 1
-    power_units : str, optional
-        Plot units for power, by default 'W'
-    time_units : str, optional
-        Plot units for time, by default 'hrs'
-
-    Returns
-    -------
-    figures : tuple[Figure]
-        Tuple of output figures.
-    """
-
-    def down_sample(ts, n=down_sample_n):
-        index = np.arange(0, len(ts[0]), down_sample_n)
-        t = ts[0][index]
-        y = ts[1][index]
-        return t, y
-
-    def zero_hour(ts, t0=None):
-        return ts / 3600
-
-    def punit(vals, origin: str = 'W'):
-        if origin == power_units:
-            return vals
-        if origin == 'W':
-            if power_units == 'mW':
-                return vals * 1000
-            elif power_units == 'dBm':
-                return 10 * np.log10(vals) + 30
-        elif origin == 'dBm':
-            if power_units == 'mW':
-                return 10 ** (vals / 10)
-            elif power_units == 'W':
-                return 10 ** (vals / 10) / 1000
-
-    # check that powerlevelling is functioning properly
-    # this is just for debugging inline
-
-    # mpl.use('tkagg')
-    # plt.close('all')
-    # metadata = r"O:\67201\Power\24Calor\rawdata\C24N129\040\cstd_run_0_incomplete\20250115_metadata.csv"
-    # it will break the app if run normally
-
-    # if a folder is pointed to, use a filed with _metadata.csv
-    # in the name as the metadata file, so folders can be pointed to
-    # adjusted_metadata = []
-    # for md in [metadata]:
-    #     md = Path(md)
-    #     if not md.exists():
-    #         raise FileExistsError(f'{md} doesnt exist')
-    #     elif md.is_file():
-    #         adjusted_metadata.append(md)
-    #     # assume folders contain a single run
-    #     # 1 metadata file
-    #     elif md.is_dir():
-    #         new_md = [f for f in md.glob('*_metadata.csv')]
-    #         if len(new_md) == 1:
-    #             adjusted_metadata.append(new_md[0])
-    #         else:
-    #             raise ValueError(f'{md} must contain exactly 1 *_metadata files to be pointed to by parser.')
-    # metadata = adjusted_metadata[0]
-
-    # if power levelling is happening, plot a summary of that
-
-    dr = ExistingRecord(metadata)
-
-    d_full = dr.batch_read()
-
-    try:
-        ep = ExptParameters(dr.metadata['config_file'], dr.metadata['settings_file'])
-
-    except FileNotFoundError:
-        newdir = dirname(metadata)
-        _config_file = join(newdir, basename(dr.metadata['config_file']))
-        _run_settings_file = join(newdir, basename(dr.metadata['settings_file']))
-        ep = ExptParameters(_config_file, _run_settings_file)
-
-    if time_window is not None:
-        raise NotImplementedError(
-            "Haven't added time windowing, zoom in to full plot for now."
-        )
-
-    cmm = signal_config
-    if cmm is None:
-        cmm = ep.config['signal_config']
-
-    time_coeffs = {'hrs': 1 / 3600, 'min': 1 / 60, 's': 1}
-    tcoeff = time_coeffs[time_units]
-
-    fig_ts = None
-    if plot_p_est:
-        fig_ts, ax_ts = plt.subplots(1, 1)
-        for ai, sensor in enumerate(dict(cmm)):
-            try:
-                # the e mapping corresponds to the thermopile voltage, it
-                # doesnt have a power estimate
-                pest = d_full[microrunner.format_pmeter_est_column((sensor))]
-                ax_ts.plot(
-                    pest.t * tcoeff, punit(pest.values, origin='W'), 'o-', label=sensor
-                )
-            except KeyError:
-                print(
-                    f'Missing Estimated Signal power from {sensor}. Possibly from an older version of the runner.'
-                )
-        ax_ts.set_ylabel(f'Estimated Metered Power {power_units}')
-        ax_ts.set_xlabel('Time (' + time_units + ')')
-        ax_ts.legend(loc='best')
-        fig_ts.suptitle('Estimated Metered Power of Sensors')
-        fig_ts.tight_layout()
-    # otherwise, plot each sensors raw time series in a seperate window
-    sensor_figs = []
-    if plot_sensor_raw:
-        for ai, sensor in enumerate(dict(cmm)):
-            sensor_map = cmm[sensor]
-            sensor_cols = {}
-            for k, v in dict(sensor_map).items():
-                try:
-                    sensor_cols.update({k: v['column']})
-                except (TypeError, KeyError):
-                    pass
-            N = len(sensor_cols)
-            fig_i, axs_i = plt.subplots(N, 1, sharex=True)
-            if N == 1:
-                axs_i = [axs_i]
-            fig_i.suptitle(f'{sensor} Raw Data')
-            for i, sc in enumerate(sensor_cols):
-                try:
-                    ts = d_full[sensor_cols[sc]]
-                    axs_i[i].plot(ts.t * tcoeff, ts.values, 'o-', ds='steps-post')
-                    axs_i[i].set_ylabel(sensor_cols[sc])
-                except KeyError as e:
-                    msg = f'{sensor_cols[sc]} not in data record, are the input_signals for {sensor} correct? maybe one of {list(d_full.keys())}'
-                    raise KeyError(msg) from e
-            axs_i[-1].set_xlabel('Time (' + time_units + ')')
-            sensor_figs.append(fig_i)
-
-    return fig_ts, *sensor_figs
 
 
 def run_gui(
@@ -694,8 +526,8 @@ def parse(
         ...
 
     # output a the dataframe results
+    df = c.output_dataframe()
     if dataframe_results:
-        df = c.output_dataframe()
         df.to_csv(dataframe_results)
 
     # format fata for rmellipse calculataions
@@ -706,6 +538,7 @@ def parse(
     # variablize the column names to make it a bit easier
     assert signal_config['calorimeter_power']['type'] == 'thermoelectric'
     e_col = signal_config['calorimeter_power']['e']['column']
+    source_col = signal_config['RF_source_power']['power']['column']
 
     # do a little bit of post processing to calculate power
     # This calculates the inferred power flowing through the thermopile
@@ -736,6 +569,11 @@ def parse(
     outputs.update(
         {'e_on': data.sel(col=e_col + '_on'), 'e_off': data.sel(col=e_col + '_off')}
     )
+
+    outputs.update(
+        {'RF_source_on': data.sel(col=source_col + '_on')}
+    )
+
 
     # this part of the code is trying to turn the voltage/current
     # measurements into power measurements of the sensor inside
@@ -975,44 +813,24 @@ def mean_last_of_point_dBm(signal, points, i: int, n_samples: int):
 
 
 def runlist_from_loss(
-    metadata: Path,
-    output_dir: Path = Path('.'),
-    level_to: str = 'DUT_power',
-    DUT_power_max_dBm: float = 10,
-    monitor_power_max_dBm: float = 0,
-    max_source_dBm: float = 15,
-    output_name: str = 'runlist.csv',
-    n_samples: int = 1,
-    frequencies: np.ndarray[float] = None,
+    parsed_rf: configs.ParsedRFSweep,
+    DUT_power_max_dBm, 
+    output_path: Path = Path('.') / 'runlist.csv',
     segment_size: int = 10,
     off_step_length: int = 2,
     safety_backoff_dBm: float = 3,
+    source_hard_limit_buffer_dBm: float = 1
 ) -> list[plt.Figure]:
     """
     Generate a runlist from the approximate RF Loss of measurement signals.
 
     Parameters
     ----------
-    metadata : Path
-        Path to measurement metadata.
-    output_dir : Path, optional
-        Directory to output runfiles. The default is Path('.').
-    level_to : str, optional
-        Which signal to level to. The default is 'DUT_power'.
-    DUT_power_max_dBm : float, optional
+    parsed_rf : configs.ParsedRFSweep
+    DUT_power_max_dBm : float
         Maximum DUT power in dBm. The default is 10.
-    monitor_power_max_dBm : float, optional
-        Maxmium monitor power in dBm. The default is 0.
-    max_source_dBm : float, optional
-        Maxmimum allowed source value in dBm . The default is None.
-    output_name : str, optional
-        Name to output the file as The default is 'runlist.csv'.
-    n_samples : int, optional
-        Number of samples to average over for calculations. The default is 1.
-    frequencies : np.ndarray[float], optional
-        Frequency list to interpolate the RF loss values too and produce
-        the runlist. If None, uses the frequencies in the provided
-        measurement. The default is None.
+    output_path : Path, optional
+        Directory to output runfiles. The default is Path('.').
     segment_size : int, optional
         Number of frequencie points per segment. The default is 5.
     off_step_length : int, optional
@@ -1022,206 +840,111 @@ def runlist_from_loss(
         Back off the start value by this amount to avoid over sourcing.
         The levelling feature will converge to the correct value during a
         measurement. The default is 3.0.
+    source_hard_limit_buffer_dBm : float, optional
+        If a frequency dependent limit isn't provided,
+        then this buffer wil be used to set the limit by adding
+        it to the estimated required power.
 
     Returns
     -------
     figures : list[plt.Figure]
         List of generated figures.
     """
-    dr = ExistingRecord(metadata)
+    
 
-    frequencies = np.sort(frequencies)
+    parsed_rf = configs.ParsedRFSweep(parsed_rf)
+    
+    # read in, average repeat frequencies, sort by freuqency
+    # and convert to dBm
+    source_power = mean_unique_values(parsed_rf['RF_source_on'].load().nom, dim = 'frequency').sortby('frequency')
+    dut_power = 10*np.log10(
+        mean_unique_values(parsed_rf['p2_fast'].load().nom, dim = 'frequency').sortby('frequency')
+    *1000)
 
-    # PARSE THE MEASURMENT
-    max_powers = {
-        'DUT_power_signal (W)': DUT_power_max_dBm,
-        'monitor_power_signal (W)': monitor_power_max_dBm,
-        'RF_source_power_signal (W)': max_source_dBm,
-    }
-    signal_columns = ['DUT_power_signal (W)']
-
-    if 'monitor_power_signal (W)' in dr.columns:
-        signal_columns.append('monitor_power_signal (W)')
-
-    print('Present signals ', signal_columns)
-
-    d_full = dr.batch_read(
-        ['frequency', 'power_on', 'point_counter', 'RF_source_power_signal (W)']
-        + signal_columns
-    )
-
-    src = d_full['RF_source_power_signal (W)']
-    points_dr = d_full['point_counter']
+    # array of target DUT powers
+    target_power = dut_power*0+ DUT_power_max_dBm
+    
 
     def frmt(*args):
         args = [float(a) for a in args]
         return '{:6.3f} | {:6.3f} | {:6.3f} | {:6.3f}'.format(*args)
 
-    # read in settings file
-    try:
-        settings = pd.read_csv(dr.metadata['settings_file'])
-    except FileNotFoundError:
-        try_file = Path(metadata).parent / Path(dr.metadata['settings_file']).name
-        settings = pd.read_csv(try_file)
 
-    # the data record counts the initial warm up as a point.
-    # experiment needs to be finished for this
-    if len(settings) + 1 != len(points_dr[1]):
-        print(
-            'Incomplete measurement passed to metadata. Meas list may be incomplete or have bad source settings on last frequency.'
-        )
+    # calculate RF loss
+    loss = source_power - dut_power
 
-    # for each completed measurment
-    # change the initial source to the final source
-    points = (points_dr[0][1:], points_dr[1][1:])
-    new_list = {c: [] for c in settings.columns}
-    read_frequencies = np.array([], float)
-    losses = {s: np.array([], float) for s in signal_columns}
+    # calculate required power
+    required_power = target_power + loss
 
-    # build an RF loss table
-    for i, (tp, p) in enumerate(zip(points[0], points[1])):
-        # copy row
-        fset = settings.iloc[i]
-        this_avg = {}
-        this_loss = {}
-        # leave the zero rows alone, otherwise update initial source
-        if not all([fs == 0 for fs in fset]):
-            # go up a point to find end of source
-            if i < len(points[0]):
-                # go up a point to find end of source
-                src = mean_last_of_point_dBm(
-                    d_full['RF_source_power_signal (W)'], points, i, n_samples
-                )
-                # this is silly, but finds the start of the next point
-                # with nearest, then looks for where the source changes state
-                # closest to that point, and averages the previous 7 samples
-                # to get the source value right before the fast off
-                # happened.
-                for signal_name in signal_columns:
-                    this_avg[signal_name] = mean_last_of_point_dBm(
-                        d_full[signal_name], points, i, n_samples
-                    )
-                    this_loss[signal_name] = src - this_avg[signal_name]
-                    losses[signal_name] = np.append(
-                        losses[signal_name], this_loss[signal_name]
-                    )
-                read_frequencies = np.append(read_frequencies, fset.Frequency_GHz)
+    # back off safely
+    starting_powers = required_power - safety_backoff_dBm
 
-    # interpolate losses to the reqeusted frequency grid
-    # use the measured frequencies by default
-    if frequencies is None:
-        frequencies = read_frequencies
-
-    interp_losses = {}
-
-    for signal_name in signal_columns:
-        interp_losses[signal_name] = _smallest_neighbour(
-            frequencies, read_frequencies, losses[signal_name]
-        )
+    limit_powers = required_power + source_hard_limit_buffer_dBm
 
     figs = []
 
     # make some plots
     fig, ax = plt.subplots()
-    figs.append(fig)
     ax.set_xlabel('Frequency (GHz)')
-    ax.set_ylabel('RF Loss (dBm)')
-    colors = cycle(['b', 'C1', 'm'])
-    for signal_name in signal_columns:
-        color = next(colors)
-        print(signal_name, interp_losses[signal_name])
-        ax.plot(
-            read_frequencies,
-            losses[signal_name],
-            'o',
-            color=color,
-            label=signal_name.replace('(W)', 'Measured'),
-        )
-        ax.plot(
-            frequencies,
-            interp_losses[signal_name],
-            '-',
-            color=color,
-            label=signal_name.replace('(W)', 'Interpolated'),
-        )
+    ax.set_ylabel('Power (dBm)')
+    ax.set_title("Power Table Calculation Summary")
+
+    ax.stackplot(
+        loss.frequency, target_power, loss,
+        colors= ('b','orange'),
+        labels=('Target DUT Power',"Loss"),
+        alpha = 0.5
+    )
+    ax.plot(
+        loss.frequency, required_power,
+        label = 'Required Power',
+        ls = '--'
+    )
+    ax.plot(
+        loss.frequency, starting_powers,
+        label = 'New Starting Power',
+        color = 'k'
+    )
+
+    ax.plot(
+        loss.frequency, limit_powers,
+        label = 'Source Limit',
+        color = 'r'
+    )
     ax.legend(loc='best')
-
-    # calculate source power to achieve target power
-    for s in signal_columns:
-        if level_to in s:
-            level_to = s
-    initial_source = interp_losses[level_to] + max_powers[level_to] - safety_backoff_dBm
-
-    # calculate expected powers
-    expected_powers = {'RF_source_power_signal (W)': initial_source}
-    for signal_name in signal_columns:
-        expected_powers[signal_name] = initial_source - interp_losses[signal_name]
-
-    # plot the expected power levels
-    fig, ax = plt.subplots()
     figs.append(fig)
-    ax.set_xlabel('Frequency (GHz)')
-    ax.set_ylabel('Expected Initial Power (dBm)')
-    for signal_name in signal_columns + ['RF_source_power_signal (W)']:
-        color = next(colors)
-        ax.plot(
-            frequencies,
-            expected_powers[signal_name],
-            color=color,
-            label=signal_name.replace('(W)', 'expected'),
-        )
-        ax.axhline(
-            max_powers[signal_name],
-            color=color,
-            ls='--',
-            label=signal_name.replace('(W)', 'limit'),
-        )
 
-    # signal_name = 'RF_source_power_signal (W)'
-    # color = next(colors)
-    # ax.plot(frequencies, initial_source, color = color, label = signal_name.replace('(W)','expected'))
-    # ax.axhline(max_powers[signal_name], color = color,ls = '--', label = signal_name.replace('(W)','limit'))
-    ax.legend(loc='best')
 
-    # check no maximums are exceeded
-    no_maximums = True
-    for signal_name in signal_columns + ['RF_source_power_signal (W)']:
-        if (expected_powers[signal_name] > max_powers[signal_name]).any():
-            no_maximums = False
-            print(
-                f'Maximum power exceeded for {signal_name}, no runlist will be generated'
-            )
+    # # if no maximums hit, build a run list
+    # # interleave the frequency points
+    initial_source = _interleave(starting_powers.values)
+    frequencies = _interleave(loss.frequency.values)
+    targets = _interleave(target_power.values)
+    limits = _interleave(limit_powers.values)
 
-    # if no maximums hit, build a run list
-    # interleave the frequency points
-    initial_source = _interleave(initial_source)
-    frequencies = _interleave(frequencies)
 
-    if no_maximums:
-        output_df = {
-            'Frequency_GHz': [],
-            'Initial_source_power_dBm': [],
-            'Target_source_power_dBm': [],
-            'Source_power_limit_dBm': [],
-        }
+    output_df = {
+        'Frequency_GHz': [],
+        'Initial_source_power_dBm': [],
+        'Target_source_power_dBm': [],
+        'Source_power_limit_dBm': [],
+    }
 
-        for i, fi in enumerate(frequencies):
-            # insert zero rows
-            if i % segment_size == 0:
-                for n in output_df:
-                    output_df[n] += [0] * off_step_length
-            output_df['Frequency_GHz'].append(fi)
-            output_df['Initial_source_power_dBm'].append(initial_source[i])
-            output_df['Target_source_power_dBm'].append(max_powers[level_to])
-            output_df['Source_power_limit_dBm'].append(
-                max_powers['RF_source_power_signal (W)']
-            )
+    for i, fi in enumerate(frequencies):
+        # insert zero rows
+        if i % segment_size == 0:
+            for n in output_df:
+                output_df[n] += [0] * off_step_length
+        output_df['Frequency_GHz'].append(fi)
+        output_df['Initial_source_power_dBm'].append(initial_source[i])
+        output_df['Target_source_power_dBm'].append(targets[i])
+        output_df['Source_power_limit_dBm'].append(limits[i])
 
-        # append with a zero row
-        for n in output_df:
-            output_df[n] += [0] * off_step_length
-        output_df = pd.DataFrame(output_df)
-        output_df.to_csv(Path(output_dir) / output_name, index=False)
+    # append with a zero row
+    for n in output_df:
+        output_df[n] += [0] * off_step_length
+    output_df = pd.DataFrame(output_df)
+    output_df.to_csv(output_path, index=False)
 
     return figs
 

@@ -22,6 +22,7 @@ from rminstr.instruments.HP3458A import Voltmeter as HP3458A_Voltmeter
 from rminstr.instruments.K2450 import DCSubPowerMeter, SMUSourceSweep as K2450_SMUSourceSweep
 from rminstr.instruments.KS_E8257D import SignalGenerator as KS_E8257D
 from rminstr.instruments.DP8200 import VoltageGenerator as DP8200
+from rminstr.instruments.Fluke_5720A import VoltageGenerator as Fluke_5720A_VoltageGenerator
 from rminstr.instruments.RS_NRP75TWG import RFPowerMeter as RS_NRP75TWG_RFPowerMeter
 from rminstr.instruments.communications import GPIBInterface
 from rminstr.data_structures import (
@@ -62,6 +63,7 @@ INSTRUMENT_CLASSES = {
     'Anritsu_MG3696A': {'RF_source': Anritsu_MG3696A},
     'RS_SMA100B': {'RF_source': RS_SMA100B},
     'KS_E8257D': {'RF_source': KS_E8257D},
+    'Fluke_5720A': {'RF_amplitude_adjuster':Fluke_5720A_VoltageGenerator},
     'HP34420A': {
         'bias_monitor': HP34420A_Voltmeter,
         'thermopile_monitor': HP34420A_Voltmeter,
@@ -101,8 +103,8 @@ NECESSARY_COLUMNS = [
     'stable_samples',
 ]
 
-# These are used for the flow control algorithm, but not neccesary for parsing
-# output data. They can be printed out to privide debug information
+# These are used for the flow control algorithm, but not necessary for parsing
+# output data. They can be printed out to provide debug information
 STATUS_COLUMNS = [
     'point_start_time',
     'last_stats_update_time',
@@ -138,8 +140,8 @@ EXPECTED_RESISTANCE = {}
 RFSOURCES = []
 
 # THese are different types of instrument roles, relevant to their
-# behaviour during the course of a measurement
-# all voltage montior roles do the same thing.
+# behavior during the course of a measurement
+# all voltage monitor roles do the same thing.
 # the different names are to help make the config file more readable
 CMRCL_POWER_METER_ROLES = ['power_meter']
 VOLTAGE_MONITOR_ROLES = ['voltage_monitor', 'bias_monitor', 'thermopile_monitor']
@@ -869,7 +871,7 @@ class MicrocalorimeterRunner:
             elif mapping['type'] == 'thermoelectric':
                 e_quant = mapping[THERMOPILE_VOLTS_CMMKEY]
                 column = e_quant['column']
-                print(self.sensitivity_linear_term[sensor])
+                # print(self.sensitivity_linear_term[sensor])
                 estimated_power = (
                     self.record[column] / self.sensitivity_linear_term[sensor]
                 )
@@ -1505,6 +1507,17 @@ class MicrocalorimeterRunner:
             self._end_of_iteration()
             return
 
+    
+        # Update power levelling.
+        use_GPIB_levelling = self.parameters['levelling_settings']['use_GPIB_levelling']
+        GPIB_levelling_time = self.parameters['levelling_settings'][
+            'GPIB_levelling_time'
+        ]
+
+        use_AM_levelling = self.parameters['levelling_settings']['use_AM_levelling']
+        AM_levelling_time = self.parameters['levelling_settings']['AM_levelling_time']
+
+
         # at this point the power is on, and has just been turned on
         # At this point, we have established that power should be on and power
         # is on. So, we just need to adjust the power. First, determine how
@@ -1552,7 +1565,7 @@ class MicrocalorimeterRunner:
                     )
                 )
 
-            if power_is_invalid:
+            if power_is_invalid and (use_GPIB_levelling or use_AM_levelling):
                 self.final_cleanup()
                 raise (
                     Exception(
@@ -1560,7 +1573,7 @@ class MicrocalorimeterRunner:
                             port_name
                         } not a valid number:  {power_dBm[port_name]} dBm, {
                             power_mW[port_name]
-                        } mW '
+                        } mW  for use of power levelling'
                     )
                 )
 
@@ -1575,14 +1588,6 @@ class MicrocalorimeterRunner:
         current_time = self.record['timestamp']
         elapsed_time = current_time - point_start_time
 
-        # Update power levelling.
-        use_GPIB_levelling = self.parameters['levelling_settings']['use_GPIB_levelling']
-        GPIB_levelling_time = self.parameters['levelling_settings'][
-            'GPIB_levelling_time'
-        ]
-
-        use_AM_levelling = self.parameters['levelling_settings']['use_AM_levelling']
-        AM_levelling_time = self.parameters['levelling_settings']['AM_levelling_time']
 
         if elapsed_time <= GPIB_levelling_time and use_GPIB_levelling:
             GPIB_levelling_C = self.parameters['levelling_settings']['GPIB_levelling_C']
@@ -1704,7 +1709,11 @@ class MicrocalorimeterRunner:
             self._batch_trigger()
 
             # sleep to ensure that the Voltmeters capture the turn off
-            time.sleep(2)
+            try:
+                time.sleep(self.parameters['levelling_settings']['off_trigger_delay'])
+            except KeyError:
+                print("Cant find 'off trigger delay' in levellin_settings. Defaulting to 2 seconds.")
+                time.sleep(2)
             self.change_source_state(source_on=False)
             # sleep to ensure sensor catches the turn off
             try:
