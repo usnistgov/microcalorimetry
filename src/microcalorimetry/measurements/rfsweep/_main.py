@@ -291,6 +291,7 @@ def run(
     name: str = 'rf_sweep',
     no_confirm: bool = False,
     dry_run: bool = False,
+    validate: bool = True,
 ):
     """
     Run a microcalorimetry RF Sweep experiment.
@@ -318,6 +319,8 @@ def run(
         If true, will try to load the configurations without actually running
         anything to do a dry-check - can be used to validate some basic type validation
         of the configuration.
+    validate : bool, optional
+        If true, attempts to validate configuration files. The default is True.
     """
     priority = [0] * len(configs)
     if isinstance(settings, str) or isinstance(settings, Path):
@@ -334,6 +337,7 @@ def run(
                     sensor_master_list,
                     priority,
                     no_confirm=no_confirm,
+                    validate = validate
                 ) as runner:
                     # opens visa resources for every instrument
                     runner.initialize_instruments()
@@ -353,6 +357,7 @@ def run(
                     sensor_master_list,
                     priority,
                     dry_run=True,
+                    validate = validate
                 )
 
 
