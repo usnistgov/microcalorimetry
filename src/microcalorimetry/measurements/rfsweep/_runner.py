@@ -1295,12 +1295,14 @@ class MicrocalorimeterRunner:
                 # print(name, 'in _fetch_data', instrument.query_state())
                 instrument.wait_until_data_available()
                 out_data = instrument.fetch_data()
-                timestamps = out_data['timestamp']
+                
                 voltage = out_data['Voltage (V)']
                 current = out_data['Current (A)']
                 voltage_column = self.parameters['instruments'][name]['voltage_output_column']
                 current_column = self.parameters['instruments'][name]['current_output_column']
                 if all_power_data:
+                    timestamps = out_data['timestamp']
+                    timestamps = timestamps - timestamps[0] + self.record['timestamp']
                     self.record.stage_update(voltage_column, voltage, timestamps)
                     self.record.stage_update(current_column, current, timestamps)
 
@@ -1712,7 +1714,7 @@ class MicrocalorimeterRunner:
             try:
                 time.sleep(self.parameters['levelling_settings']['off_trigger_delay'])
             except KeyError:
-                print("Cant find 'off trigger delay' in levellin_settings. Defaulting to 2 seconds.")
+                print("Cant find 'off trigger delay' in 'levelling_settings'. Defaulting to 2 seconds.")
                 time.sleep(2)
             self.change_source_state(source_on=False)
             # sleep to ensure sensor catches the turn off

@@ -24,6 +24,14 @@
                     "type": "string",
                     "description": "Name of the output column to save to the data record."
                 },
+                "current_output_column": {
+                    "type": "string",
+                    "description": "Only for roles that utilize SMUs. Name of the output column to save current to the data record."
+                },
+                "voltage_output_column": {
+                    "type": "string",
+                    "description": "Only for roles that utilize SMUs. Name of the output column to save voltages to the data record."
+                },
                 "model": {
                     "type": "string",
                     "description": "Manufacturer model code of instrument. See possible instruments."
@@ -48,7 +56,8 @@
                         "bias_monitor",
                         "RF_source",
                         "RF_amplitude_adjuster",
-                        "power_meter"
+                        "power_meter",
+                        "thermometer_monitor"
                     ]
                 },
                 "initial_settings": {

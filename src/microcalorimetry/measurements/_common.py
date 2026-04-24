@@ -82,13 +82,16 @@ def view(
 
 
     for k in d_full:
-        fig_i, axs_i = plt.subplots(1, 1)
-        fig_i.suptitle(f'{k} : Raw Data')
-        ts = d_full[k]
-        time = _apply_tunit(ts.t,time_units,relative_time)
-        axs_i.plot(time, ts.values, 'o-', ds='steps-post')
-        axs_i.set_ylabel(k)
-        axs_i.set_xlabel(f'{relative_or_not} Time ({time_units})')
-        sensor_figs.append(fig_i)
+        try:
+            fig_i, axs_i = plt.subplots(1, 1)
+            fig_i.suptitle(f'{k} : Raw Data')
+            ts = d_full[k]
+            time = _apply_tunit(ts.t,time_units,relative_time)
+            axs_i.plot(time, ts.values, 'o-', ds='steps-post')
+            axs_i.set_ylabel(k)
+            axs_i.set_xlabel(f'{relative_or_not} Time ({time_units})')
+            sensor_figs.append(fig_i)
+        except Exception as e:
+            print(f'Failed to plot {k} for - {e}')
 
     return tuple(sensor_figs)
