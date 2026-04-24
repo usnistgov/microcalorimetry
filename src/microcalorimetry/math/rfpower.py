@@ -323,6 +323,73 @@ def zeta_dcsub(
     denom = e_on / e_off - (P_on / P_off_slow)
     return numerator / denom
 
+def correction_factor(
+    gamma_s: xr.DataArray,
+    gc: xr.DataArray,
+) -> xr.DataArray:
+    """
+    Get the correction factor.
+
+    Parameters
+    ----------
+    gamma_s : xr.DataArray
+        Reflection coefficient of the standard in s1p_c format.
+    gc : xr.DataArray
+        Correction factor, either 1 term or 4 term model.
+
+    Raises
+    ------
+    Exception
+        If not a 1 term correction factor, until support added..
+
+    Returns
+    -------
+    xr.DataArray
+        Effective efficiency.
+
+    """
+    # 1 term model
+    if gc.shape[-1] == 1:
+        gam = gamma_s.loc[..., 'S11']
+        g = 1 + gc * (1 + np.abs(gam) ** 2) / (1 - np.abs(gam) ** 2)
+
+    elif gc.shape[-1] == 2:
+        gam = gamma_s.loc[..., 'S11']
+        num = gc[..., 0] * (1 + np.abs(gam) ** 2) - 2 * np.real(gam) * gc[..., 1]
+        g = 1 + num / (1 - np.abs(gam) ** 2)
+
+    elif gc.shape[-1] == 4:
+        gam = gamma_s.sel(s='S11', drop=True)
+        gc1 = gc.sel(gc=0, drop=True)
+        gc2 = gc.sel(gc=1, drop=True)
+        gc3 = gc.sel(gc=2, drop=True)
+        gc4 = gc.sel(gc=3, drop=True)
+        num = (
+            gc1
+            + gc2 * np.abs(gam) ** 2
+            - 2 * gc3 * np.real(gam)
+            + 2 * gc4 * np.imag(gam)
+        )
+        g = 1 + num / (1 - np.abs(gam) ** 2)
+
+    elif gc.shape[-1] == 3:
+        gam = gamma_s.sel(s='S11', drop=True)
+        gc1 = gc.sel(gc=0, drop=True)
+        gc3 = gc.sel(gc=1, drop=True)
+        gc4 = gc.sel(gc=2, drop=True)
+        num = (
+            gc1 * (1 + np.abs(gam) ** 2)
+            - 2 * gc3 * np.real(gam)
+            + 2 * gc4 * np.imag(gam)
+        )
+        g = 1 + num / (1 - np.abs(gam) ** 2)
+
+    else:
+        raise ValueError(f'{gc.shape[-1]} term correction factor not supported')
+
+
+    return g
+
 
 def effective_efficiency(
     uncorrected_eta: xr.DataArray,
