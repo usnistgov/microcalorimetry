@@ -9,7 +9,7 @@ __all__ = ['view']
 
 def _apply_tunit(x: np.array, time_units: str, relative: bool)->np.array:
     out = x
-
+    print(out.shape)
     if relative:
         out = out - out[0]
 
@@ -66,6 +66,7 @@ def view(
         metadata = [p for p in metadata.glob('*metadata*')][0]
     meta_dir = metadata.parents[0]
     dr = ExistingRecord(metadata)
+    t0 = float(dr.metadata['time_zero'])
 
     d_full = dr.batch_read()
     d_full = {k:v for k,v in d_full.items() if any([fnmatch(k,pattern) for pattern in include_columns])}
@@ -82,13 +83,16 @@ def view(
 
 
     for k in d_full:
-        fig_i, axs_i = plt.subplots(1, 1)
-        fig_i.suptitle(f'{k} : Raw Data')
-        ts = d_full[k]
-        time = _apply_tunit(ts.t,time_units,relative_time)
-        axs_i.plot(time, ts.values, 'o-', ds='steps-post')
-        axs_i.set_ylabel(k)
-        axs_i.set_xlabel(f'{relative_or_not} Time ({time_units})')
-        sensor_figs.append(fig_i)
+        try:
+            fig_i, axs_i = plt.subplots(1, 1)
+            fig_i.suptitle(f'{k} : Raw Data')
+            ts = d_full[k]
+            time = _apply_tunit(ts.t+t0,time_units,relative_time)
+            axs_i.plot(time, ts.values, 'o-', ds='steps-post')
+            axs_i.set_ylabel(k)
+            axs_i.set_xlabel(f'{relative_or_not} Time ({time_units})')
+            sensor_figs.append(fig_i)
+        except Exception as e:
+            print(f'Failed to plot {k}')
 
     return tuple(sensor_figs)
