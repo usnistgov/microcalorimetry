@@ -1860,7 +1860,10 @@ class ThermoelectricAnalyzer(SignalAnalyzer):
         SignalAnalyzer.__init__(
             self, analysis_config, signal_config, input_signal_config, instruments
         )
-        self.RF_on_average_window = self.analysis_config['RF_on_average_window']
+        try:
+            self.RF_on_average_window = self.analysis_config['RF_on_average_window']
+        except KeyError:
+            self.RF_on_average_window = None
         self.column = self.input_signal_config['e']['column']
         self.instr_timing_tolerance = self.analysis_config['instr_timing_tolerance']
 
@@ -2088,7 +2091,10 @@ class BolometerAnalyzer(SignalAnalyzer):
         V_off_delay = self.analysis_config['V_off_delay']
         V_off_function = self.analysis_config['V_off_function']
         V_off_fit_time_window = self.analysis_config['V_off_fit_time_window']
-        RF_on_average_window = self.analysis_config['RF_on_average_window']
+        try:
+            self.RF_on_average_window = self.analysis_config['RF_on_average_window']
+        except KeyError:
+            self.RF_on_average_window = None
 
         try:
             self.stats_window_override = self.analysis_config['stats_window_override']
@@ -2100,7 +2106,6 @@ class BolometerAnalyzer(SignalAnalyzer):
         self.V_off_function = V_off_function
         self.V_off_delay = V_off_delay
         self.V_off_fit_time_window = V_off_fit_time_window
-        self.RF_on_average_window = RF_on_average_window
 
     def analyze_segment(self, segment: Segment) -> tuple:
         """
@@ -2417,7 +2422,10 @@ class SMUPowerMeterAnalyzer(SignalAnalyzer):
         V_off_delay = self.analysis_config['V_off_delay']
         V_off_function = self.analysis_config['V_off_function']
         V_off_fit_time_window = self.analysis_config['V_off_fit_time_window']
-        RF_on_average_window = self.analysis_config['RF_on_average_window']
+        try:
+            self.RF_on_average_window = self.analysis_config['RF_on_average_window']
+        except KeyError:
+            self.RF_on_average_window = None
 
         self.i_column = i_column
         self.v_column = v_column
@@ -2425,7 +2433,7 @@ class SMUPowerMeterAnalyzer(SignalAnalyzer):
         self.V_off_function = V_off_function
         self.V_off_delay = V_off_delay
         self.V_off_fit_time_window = V_off_fit_time_window
-        self.RF_on_average_window = RF_on_average_window
+  
 
     def analyze_segment(self, segment: Segment) -> tuple:
         """
@@ -2539,7 +2547,10 @@ class RFSourceAnalyzer(SignalAnalyzer):
         self.signal_config = signal_config
         self.instruments = instruments
         self.instr_timing_tolerance = None
-        self.stats_window_override = self.analysis_config['stats_window_override']
+        try:
+            self.stats_window_override = self.analysis_config['stats_window_override']
+        except KeyError: 
+            self.stats_window_override = None
         self.RF_on_average_window = None
 
     def analyze_segment(self, segment: Segment) -> tuple:
@@ -2628,11 +2639,12 @@ class RFSourceAnalyzer(SignalAnalyzer):
 
 
         fig, ax = pl.subplots()
-        segment_results = segment.results
+        # segment_results = segment.results
         segment_raw_data = segment.raw_data
         start_time = segment_raw_data[self.source_column+ '_timestamp'][0]
         plot_time = segment_raw_data[self.source_column + '_timestamp'] - start_time
         source_setting = segment_raw_data[self.source_column]
+
 
         pl.plot(
             plot_time, source_setting, color=MAIN_TRACE_COLOR, linewidth=MAIN_TRACE_LINEWIDTH
@@ -2642,12 +2654,16 @@ class RFSourceAnalyzer(SignalAnalyzer):
 
         len_step = len(segment.steps)
         for i, step_i in enumerate(segment.steps):
+
             plot_time_step = step_i.raw_data[self.source_column + '_timestamp'] - start_time
             setting_step = step_i.raw_data[self.source_column]
 
             initial_stable = step_i.results[self.source_column + '_initial_stable']
             final_stable = step_i.results[self.source_column + '_final_stable']
-
+            step_line = pl.plot(
+                plot_time_step,
+                setting_step,
+            )  # PLOT_COLORS[i % len(PLOT_COLORS)])
             # i want to plot what samples were used but doesn't seem to be working.
             label = None
             if i == len_step-1:
@@ -2672,7 +2688,29 @@ class RFSourceAnalyzer(SignalAnalyzer):
                 linewidth=STABLE_TRACE_LINEWIDTH,
                 color=MIDDLE_STABLE_TRACE_COLOR,
             )  # PLOT_COLORS[i % len(PLOT_COLORS)])
+            # plot amplitude modulations section
+            if self.am_voltage_column:
+                final_setting = step_i.results[self.source_column + '_on']
+                source_name = self.signal_config['power']['instrument']
+                percent_per_volt = self.instruments[source_name]['initial_settings']['AM_ext_sensitivity_percent_per_volt']
+                am_step = step_i.raw_data[self.am_voltage_column]
+                am_step_time = step_i.raw_data[self.am_voltage_column+'_timestamp']
+                ind = am_step > 0
+                am_step = am_step[ind]
+                am_step_time = am_step_time[ind]
 
+                adjusted_source = final_setting*(1 + am_step*percent_per_volt/100)
+                
+                label = None
+                if i == len_step-1:
+                    label = 'AM Adjusted Source'
+                pl.plot(
+                    am_step_time - start_time,
+                    adjusted_source,
+                    '-.',
+                    color = step_line[0].get_color(),
+                    linewidth=STABLE_TRACE_LINEWIDTH,
+                    )
         pl.legend(loc = 'best')
         pl.xlabel('Time (s)')
         pl.ylabel('RF Source Setting')
@@ -2690,7 +2728,10 @@ class CommercialPowerMeterAnalyzer(SignalAnalyzer):
         self.column = self.input_signal_config['power']['column']
         self.instr_timing_tolerance = self.analysis_config['instr_timing_tolerance']
         self.RF_off_time_offset_method = self.analysis_config['RF_off_time_offset_method']
-        self.RF_on_average_window = self.analysis_config['RF_on_average_window']
+        try:
+            self.RF_on_average_window = self.analysis_config['RF_on_average_window']
+        except KeyError:
+            self.RF_on_average_window = None
         try:
             self.stats_window_override = self.analysis_config['stats_window_override']
         except KeyError:
