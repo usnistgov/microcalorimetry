@@ -2,6 +2,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from rmellipse.propagators import RMEProp
+from rmellipse.uobjects import RMEMeas
 from microcalorimetry.math import rfpower, fitting
 from pathlib import Path
 import microcalorimetry._helpers._intf_tools as clitools
@@ -69,7 +70,7 @@ def make_k_coeffs(
     p_of_e: bool = False,
     deg: int = 2,
     make_plots: bool = False,
-) -> tuple[dict[configs.ThermoelectricFitCoefficients], plt.Figure]:
+) -> tuple[ RMEMeas, plt.Figure]:
     r"""
     Load and analyze a sensitivity run.
 
@@ -95,7 +96,7 @@ def make_k_coeffs(
 
     Returns
     -------
-    sensitivity : dict[configs.ThermoelectricFitCoefficients]
+    sensitivity : RMEMeas
         Sensitivity coefficients
     figures : list[plt.Figure]
         List of figures generated (empty if not made). Fit and residuals.
@@ -105,42 +106,38 @@ def make_k_coeffs(
     # wrap any uncertainty functions
     calc_thermopile_sensitivity = propagator.propagate(rfpower.thermopile_sensitivity)
     parsed_dcsweep = configs.ParsedDCSweep(parsed_dcsweep)
-    v = configs.DCSweep(parsed_dcsweep.pop('v')).load()
-    i = configs.DCSweep(parsed_dcsweep.pop('i')).load()
+    v = configs.DCSweep(parsed_dcsweep.pop('heater_v')).load()
+    i = configs.DCSweep(parsed_dcsweep.pop('heater_i')).load()
+    e = configs.DCSweep(parsed_dcsweep['e']).load()
+    
     coeffs_dict = {}
     figures = []
-    for ename in parsed_dcsweep.keys():
-        e = configs.DCSweep(parsed_dcsweep[ename]).load()
 
-        p = v * i
+    p = v * i
 
-        coeffs = calc_thermopile_sensitivity(
-            p,
-            e,
-            constrain_zero=constrain_zero,
-            p_of_e=p_of_e,
-            deg=deg,
-            punc=p.stdunc().cov,
-            eunc=e.stdunc().cov,
-        )
+    coeffs = calc_thermopile_sensitivity(
+        p,
+        e,
+        constrain_zero=constrain_zero,
+        p_of_e=p_of_e,
+        deg=deg,
+        punc=p.stdunc().cov,
+        eunc=e.stdunc().cov,
+    )
 
-        coeffs.name = 'coeffs'
-        v.name = 'voltage_steps'
-        i.name = 'current_steps'
-        e.name = 'thermopile_steps'
+    coeffs.name = 'coeffs'
+    v.name = 'voltage_steps'
+    i.name = 'current_steps'
+    e.name = 'thermopile_steps'
 
-        coeffs.attrs['constrain_zero'] = constrain_zero
-        coeffs.attrs['p_of_e'] = p_of_e
-        coeffs_dict[ename] = coeffs
+    coeffs.attrs['constrain_zero'] = constrain_zero
+    coeffs.attrs['p_of_e'] = p_of_e
 
-        # remove units from the name, don't want thos its confusing.
-        ename.replace('(V)', '')
 
-        # make plots if asked to
-        fig = None
-        if make_plots:
-            fig = plot_coeffs(propagator, v, i, e, coeffs, p_of_e, ename)
-            figures.append(fig)
+    # make plots if asked to
+    if make_plots:
+        figs = plot_coeffs(propagator, v, i, e, coeffs, p_of_e)
+        figures+=figs
 
     return coeffs_dict, figures
 
@@ -148,7 +145,7 @@ def make_k_coeffs(
 _cli_make_k_coeffs = clitools.format_from_npdoc(make_k_coeffs)(_cli_make_k_coeffs)
 
 
-def plot_coeffs(propagator, v, i, e, coeffs, p_of_e, ename):
+def plot_coeffs(propagator, v, i, e, coeffs, p_of_e):
     """
     Plots coefficients
 
@@ -168,14 +165,16 @@ def plot_coeffs(propagator, v, i, e, coeffs, p_of_e, ename):
         Fit coefficients
     p_of_e : _type_
         IF fit was done in terms of power (True) or voltage (False)
-    ename : _type_
-        Name of e voltage column
 
     Returns
     -------
     plt.Figure
         matplotlib figure object
     """
+
+    
+    
+    
     polyval = propagator.propagate(fitting.polyval2)
 
     @propagator.propagate
@@ -188,64 +187,75 @@ def plot_coeffs(propagator, v, i, e, coeffs, p_of_e, ename):
         out.values = ref.values - vals.values
         return out
 
+    @propagator.propagate
+    def div(ref, vals):
+        out = ref.copy()
+        out.values = ref.values / vals.values
+        return out
+
+
     k = 2
     p = mult(v, i)
-    if p_of_e:
-        x = e
-        xscale = 1e6
-        xname = 'e'
-        xunits = r'$\mu$V'
+    
+    
+    get_openloop = propagator.propagate(
+        rfpower.openloop_thermoelectric_power
+        )
 
-        y = p
-        yscale = 1e3
-        yname = 'Power'
-        yunits = 'mW'
 
-    else:
-        x = p
-        xscale = 1e3
-        xname = 'Power'
-        xunits = 'mW'
-        y = e
-        yscale = 1e6
-        yname = 'e'
-        yunits = r'$\mu$V'
+    sortind = np.argsort(e.nom.values)
+    p_fit = get_openloop(coeffs, e, p_of_e)
 
-    x_fit = x
-    sortind = np.argsort(x_fit.nom.values)
-    y_fit = polyval(coeffs, x_fit)
+    delta = minus(p_fit, p)
 
-    delta = minus(y_fit, y)
+    e = e[sortind]
+    p = p[sortind]
+    p_fit = p_fit[sortind]
+    delta = delta[sortind]
+    upper = p_fit.uncbounds(k=k)[0]
+    lower = p_fit.uncbounds(k=-k)[0]
 
-    x_fit = x_fit.isel(steps=sortind)
-    x = x.isel(steps=sortind)
-    y = y.isel(steps=sortind)
-    y_fit = y_fit.isel(steps=sortind)
-    delta = delta.isel(steps=sortind)
+    e_upper = e.stdunc(k=k)[0]
+    p_upper = p.stdunc(k=k)[0]
+    p_fit_upper = p_fit.stdunc(k=k)[0]
+    
+    # plot the measured sensitivity
+    fig0, ax = plt.subplots(1,1)
+    eOp = div(e,p)
+    ax.errorbar(
+        e.nom * 1e3,
+        eOp.nom,
+        xerr=e_upper * 1e3,
+        yerr= eOp.stdunc(k=k).cov,
+        marker='o',
+        markersize=8,
+        linestyle='',
+        label='Measured (k = 2 Uncertainty)',
+    )
+    ax.set_xlabel('e (mV)')
+    ax.set_ylabel(r'$\frac{e}{P_{heater}}\:\left(\frac{\mathrm{V}}{\mathrm{W}}\right)$')
+    fig0.suptitle('Measured Sensitivity')
 
+    # plot the Fit Residuals
     fig, ax = plt.subplots(2, 1, sharex = True)
-    upper = y_fit.uncbounds(k=k)[0]
-    lower = y_fit.uncbounds(k=-k)[0]
 
-    x_upper = x.stdunc(k=k)[0]
-    y_upper = y.stdunc(k=k)[0]
-    y_fit_upper = y_fit.stdunc(k=k)[0]
+    
 
     ax[0].fill_between(
-        x_fit.nom * xscale,
-        lower * yscale,
-        upper * yscale,
+        e.nom * 1e3,
+        lower * 1e3,
+        upper * 1e3,
         color='k',
         alpha=0.2,
         label='k = 2 uncertainty',
     )
-    ax[0].plot(x_fit.nom * xscale, y_fit.nom * yscale, 'r-', lw=2, label='Fit')
+    ax[0].plot(e.nom * 1e3, p_fit.nom * 1e3, 'r-', lw=2, label='Fit')
 
     ax[0].errorbar(
-        x.nom * xscale,
-        y.nom * yscale,
-        xerr=x_upper * xscale,
-        yerr=y_upper * yscale,
+        e.nom * 1e3,
+        p.nom * 1e3,
+        xerr=e_upper * 1e3,
+        yerr=p_upper * 1e3,
         marker='o',
         markersize=8,
         linestyle='',
@@ -253,10 +263,10 @@ def plot_coeffs(propagator, v, i, e, coeffs, p_of_e, ename):
     )
 
     ax[1].errorbar(
-        x.nom * xscale,
-        delta.nom * yscale,
-        xerr=x_upper * xscale,
-        yerr=y_upper * yscale,
+        e.nom * 1e3,
+        delta.nom * 1e6,
+        xerr= e_upper * 1e3,
+        yerr= p_upper * 1e6,
         marker='.',
         markersize=8,
         capsize=5,
@@ -265,20 +275,22 @@ def plot_coeffs(propagator, v, i, e, coeffs, p_of_e, ename):
     )
 
     ax[1].fill_between(
-        x_fit.nom * xscale,
-        -1 * y_fit_upper * yscale,
-        y_fit_upper * yscale,
+        e.nom * 1e3,
+        -1 * p_fit_upper * 1e6,
+        p_fit_upper * 1e6,
         color='k',
         alpha=0.2,
         label='k = 2 Uncertainty',
     )
-    ax[0].set_ylabel(f'{yname} ({yunits})')
-    ax[1].set_ylabel(f'Fit - Measured ({yunits})')
-    ax[1].set_xlabel(f'{xname} ({xunits})')
+    
+
+    ax[0].set_ylabel(r'$P_{heater}\:\left(\mathrm{mW}\right)$')
+    ax[1].set_ylabel(r'$P_{fit}-P_{heater}\:\left(\mathrm{\mu W}\right)$')
+    ax[1].set_xlabel(r'$e\:\left(\mathrm{mV}\right)$')
 
     for a in ax:
         a.legend(loc='best')
-    fig.suptitle(f'Sensitivity Fit {ename}')
+    fig.suptitle(f'Sensitivity Fit')
     # msg = 'coeffs (units V/W^i or W/V^i) \n'
     # for i in coeffs.nom.deg:
     #     msg += r'c_' + str(int(i)) + ' = ' + str(float(coeffs.nom.sel(deg=i))) + '\n'
@@ -290,4 +302,4 @@ def plot_coeffs(propagator, v, i, e, coeffs, p_of_e, ename):
     #     fontsize=12,
     #     bbox={'facecolor': 'orange', 'alpha': 0.5, 'pad': 5},
     # )
-    return fig
+    return [fig0, fig]

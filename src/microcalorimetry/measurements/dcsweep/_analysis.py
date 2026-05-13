@@ -1,13 +1,58 @@
 from rmellipse.uobjects import RMEMeas
+from rmellipse.propagators import RMEProp
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
 
-from rminstr.data_structures import ExistingRecord, ExptParameters
+from rminstr.data_structures import ExistingRecord, ExptParameters, TimeSeries
 import rminstr_specs.K2450 as kspecs
 import rminstr_specs.HP34420A as nvmspecs
+import rminstr_specs
 from datetime import datetime
+from typing import Protocol
 
+from typing import Protocol
+from typing import (
+    Protocol,
+    Sequence,
+    SupportsFloat,
+    Tuple,
+    Literal,
+)
+type FloatType = (
+    type[SupportsFloat]
+    | np.dtypes.Float16DType
+    | np.dtypes.Float32DType
+    | np.dtypes.Float64DType
+)
+
+
+class TimeSeries[T](Protocol):
+    shape: Tuple[int]
+    dims: Tuple[Literal['time']]
+    dtype: T
+
+class DCCalibrationData(Protocol):
+    """
+    Protocol for a DCCalibratedData xarray.Dataset.
+    
+    All values should be samples alligned on the time coordinates.
+    """
+    # variables
+    heater_v: TimeSeries[FloatType]
+    heater_i: TimeSeries[FloatType]
+    heater_p: TimeSeries[FloatType]
+    heater_r: TimeSeries[FloatType]
+    therm_v: TimeSeries[FloatType]
+    therm_i: TimeSeries[FloatType]
+    therm_p: TimeSeries[FloatType]
+    therm_r: TimeSeries[FloatType]
+    e: TimeSeries[FloatType]
+    # coordinates
+    pwr_setting: Sequence[FloatType]
+    time: Sequence[FloatType]
+    env_temp: Sequence[FloatType]
+    
 
 def read_experiment(metadata_path: str, settings: str, meas_list: str):
     """
@@ -40,277 +85,393 @@ def read_experiment(metadata_path: str, settings: str, meas_list: str):
     # make some attribute
     return data, ep
 
+def timeseries_to_dataarray(ts: TimeSeries) -> xr.DataArray:
+    arr = xr.DataArray(
+        ts.values,
+        dims = ('time'),
+        coords = {'time':ts.t}#-ts.t[0]}
+    )
+    return arr
 
-def calculate_step_final_values(
-    raw,
-    exp_settings,
-    sensor_id: str,
-    overview_plots: bool = False,
-    zero_limit: float = 0.1,
-    source_threshhold: float = 0.1,
-    avg_window_size_secs: float = None,
-    avg_window_shiftback_secs: float = 0,
-    fit_imm_step: bool = False,
-    smu_volts_col='V_SMU (V)',
-    smu_curr_col='I_SMU (A)',
-    thermo_col='V_NVM (V)',
-    test_settling_statistics: bool = True,
-    force_equal_length_timeseries: bool = False,
-    save_plot_path: str = None,
-):
+
+def mean_settled_by_group(
+        x: xr.DataArray, 
+        group_arr: xr.DataArray,
+        values: xr.DataArray,
+        window: float        
+    ) -> tuple[xr.DataArray,xr.DataArray,list[xr.DataArray]]:
     """
-    Calculate the final values of the steps on the staircase.
+    Return mean and average of settled samples in x corresponding to group_arr.
+    
+    Where samples in group_arr == each value in values, takes the values
+    in the provied window of x.
 
     Parameters
     ----------
-    raw : dict
-        Dictionary of tuples, output of read_experiment.
-    exp_settings : parameter_tree
-        Settings used in the staircase experiment. Output of read_experiment.
-    sensor_id: str,
-        Name of sensor to attach to uncertainty origin.
-    overview_plots : bool, optional
-        If True, makes plots of the experiment. The default is False.
-    zero_limit : float, optional
-        Treats anything below this as a zero. Somtimes the SMU is noisy when it
-        tries to source zero, and that throws off the threshholding.
-        The default is 0.1.
-    source_threshhold : float, optional
-        Value to look for in difference in source to detect steps.
-        The default is 0.1.
-    avg_window_size_secs : float, optional
-        Time window to average samples over. The default is None.
-    avg_window_shiftback_secs : float, optional
-        Shift the averaging window starttime backwards by this amount.
-        The default is 0.
-    fit_imm_step : bool, optional
-        If true, fits immediately after the step instead of relative to the
-        end of a step. The default is False.
-    smu_volts_col : TYPE, optional
-        Key of SMU Volts data in raw. The default is 'V_SMU (V)'.
-    smu_curr_col : TYPE, optional
-        Key for SMU Amps. The default is 'I_SMU (A)'.
-    thermo_col : TYPE, optional
-        Key for Thermoelectric Volts Column in raw. The default is 'V_NVM (V)'.
-    force_equal_length_timeseries: bool, optional
-        If true, will force timeseries data to be of the same length, assuming
-        that they are alligned at the first index. Useful for experiments that
-        got shut down half way. The default is False.
-    save_plot_path: str,
-        If provided, saves overview plots
-    "
+    x : xr.DataArray
+        Values to take mean and average of.
+    group_arr : xr.DataArray
+        Array alligned to x that identifies the groups.
+    values : xr.DataArray
+        Values in group_arr to use.
+    window : float
+        Time window to use.
+
+    Returns
+    -------
+    mean : xr.DataArray
+        mean of samples per group.
+    std : xr.DataArray
+        std of samples per group.
+    samples : list[xr.DataArray]
+        samples used in each group
+    """
+    avg = []
+    std = []
+    times= []
+    samples = []
+    for osn in values:
+        # print(osn)
+        group = x[group_arr == osn]
+        # pick out settled values and do mean/std
+        settled = group[
+            group.time > group.time[-1] - window
+            ]
+        samples.append(settled)
+        avg.append(np.mean(settled))
+        std.append(np.std(settled))
+        times.append(np.mean(settled.time))
+    output = []
+    for i in [avg, std]:
+        output.append(xr.DataArray(
+            i,
+            dims = ('time'),
+            coords = {'time':times}
+            ))
+    return *output, samples
+
+def metered_to_linmeas(
+        name: str,
+        mean: xr.DataArray,
+        std: xr.DataArray | None = None,
+        specs: rminstr_specs.Specification | None = None, 
+        umech_prefix: str = ''
+        ) -> RMEMeas:
+    """
+    Turn an array of metered data to a RMEmeas object with lin prop uncertainties.
+    
+    Provide a 1d array of average and optionally std of the averages. Can
+    provide a data sheet specification as well. Will generate an RMEMeas object
+    with correlated data sheet uncertainties and uncorrelated std uncertainties.
+    
+    Parameters
+    ----------
+    name : str
+        Name to give to the meas object.
+    mean : xr.DataArray
+        Average values.
+    std : xr.DataArray | None, optional
+        Standard deviation of measurements. The default is None.
+    specs : rminstr_specs.Specification | None, optional
+        Specsheet to use. The default is None.
+    umech_prefix : str, optional
+        Prefix to give to umech_ids. The default is ''.
+
     Returns
     -------
     RMEMeas
-        RMEMeas object containing final voltage values.
-    RMEMeas
-        RMEMeas object containing final current values.
-    RMEMeas
-        RMEMeas object containing final thermoelectric values.
-    fig
-        overview of experiment data
-
+        Contains correlated linear uncertainties of provided metereed
+        data.
     """
-    # column names
-    cnames = [smu_volts_col, smu_curr_col, thermo_col]
-
-    # reduce smu and current lengths to equal grid
-    clengths = []
-    for cn in [smu_volts_col, smu_curr_col]:
-        clengths.append(len(raw[cn][0]))
-    length_test = clengths[0]
-    clengths_equal = [cl == length_test for cl in clengths]
-    if not all(clengths_equal) and force_equal_length_timeseries:
-        new_length = min(clengths)
-        new_raw = {}
-        for k in [smu_volts_col, smu_curr_col]:
-            new_raw[k] = (raw[k][0][0:new_length], raw[k][1][0:new_length])
-        new_raw[thermo_col] = (
-            raw[thermo_col][0][0:new_length],
-            raw[thermo_col][1][0:new_length],
-        )
-        raw = new_raw
-    elif not all(clengths_equal) and not force_equal_length_timeseries:
-        raise Exception(
-            'Data has missing lengths. Set force_equal_length_timeseries to avoid this issue.'
-        )
-
-    # remove weird points near boundaries
-    indexes = []
-    for cn in [smu_volts_col, smu_curr_col]:
-        indexes.append(np.abs(raw[cn][1]) > 100)
-    index = np.logical_not(np.logical_or(*indexes))
-
-    new_raw = {}
-    for k in [smu_volts_col, smu_curr_col]:
-        new_raw[k] = (raw[k][0][index], raw[k][1][index])
-    new_raw[thermo_col] = (raw[thermo_col][0], raw[thermo_col][1])
-    raw = new_raw
-
-    smu_serial = exp_settings['serials']['SMU']
-    nvm_serial = exp_settings['serials']['NVM']
-    specs = {
-        smu_volts_col: kspecs.DatasheetMeasureDCV(
-            'vsource',
-            smu_serial,
-            v_range='auto',
-            t_ambient=26,
-            time_zero=raw[smu_volts_col][0][0],
-        ),
-        smu_curr_col: kspecs.DatasheetMeasureDCI(
-            'isource',
-            smu_serial,
-            i_range='auto',
-            t_ambient=26,
-            time_zero=raw[smu_curr_col][0][0],
-        ),
-        thermo_col: nvmspecs.DatasheetDCV(
-            'nvm',
-            serial=nvm_serial,
-            v_range='auto',
-            t_ambient=26,
-            time_zero=raw[thermo_col][0][0],
-            null=False,
-        ),
-    }
-
-    # steps
-    zero_ind = np.where(abs(raw[smu_volts_col][1]) < zero_limit)[0]
-    zeros = raw[smu_volts_col][0][zero_ind]
-    stair_ind = np.where(abs(raw[smu_volts_col][1]) > zero_limit)[0]
-    steps_ind = np.where(abs(np.diff(raw[smu_volts_col][1])) > source_threshhold)[0]
-    steps_ind = np.array([s for s in steps_ind if s not in zero_ind])
-    # store steps as time stamps so
-    steps = raw[smu_volts_col][0][steps_ind]
-    # create uncertainty objects for each variable
-    date = datetime.fromtimestamp(raw[smu_volts_col][0][0]).strftime('%Y%m%d')
-    finals = {}
-    finals_ind = {}
-    # for each column name, threshhold the steps
-    # and find the right area to fit
-    for n in cnames:
-        t = raw[n][0]
-        d = raw[n][1]
-        mu = []
-        std = []
-        nminus1 = []
-        # get the average of the mean at end of step
-        for si, s in enumerate(steps):
-            # for fitting the end of steps
-            # the first step is always at the end of the initial
-            # zero cooldown period, so needs to be at the final value
-            if not fit_imm_step or si == 0:
-                t1 = s - avg_window_shiftback_secs
-                t0 = t1 - avg_window_size_secs
-            else:
-                # need to shift the first timestamp by one sample to not overlap with the previous
-                # step
-                t0 = (
-                    raw[smu_volts_col][0][steps_ind[si - 1] + 1]
-                    - avg_window_shiftback_secs
+    
+    meas: RMEMeas = RMEMeas.from_nom(name, mean)
+    
+    if std is not None:
+        for i,si in  enumerate(std):
+            pert = mean.copy()
+            pert[i] += si
+            umech_i= f'{umech_prefix}_std_{i}'
+            meas.add_umech(
+                umech_i, pert,add_uid = True,category = {'Type':'A','Origin':'dc scweep noise'}
                 )
-                t1 = t0 + avg_window_size_secs
-
-            ind = np.logical_and(t >= t0, t < t1)
-            vals = d[ind]
-            mu.append(np.mean(vals))
-            std.append(np.std(vals, ddof=1))  # / np.sqrt(len(vals)))
-            nminus1.append(len(vals) - 1)
-            try:
-                finals_ind[n] = np.append(finals_ind[n], np.where(ind)[0])
-            except KeyError:
-                finals_ind[n] = np.where(ind)[0]
-
-        # Add type A uncertainty to each final value
-        covarr = np.expand_dims(np.array(mu), axis=0)
-        pnames = ['nominal']
-        for i, s in enumerate(std):
-            cdi = np.expand_dims(np.array(mu), axis=0).copy()
-            cdi[0, i] += s
-            pnames.append(n + '_std_' + 'step' + str(i) + '_' + date)
-            covarr = np.concatenate((covarr, cdi), axis=0)
-        # Datasheet tings+
-        bunc = covarr[0, :] + specs[n].all_manufacturer_errors(covarr[0, :])
-
-        pnames.append('Datasheet_' + n + '_' + date)
-
-        covarr = np.concatenate((covarr, np.expand_dims(bunc, 0)), axis=0)
-
-        cov = xr.DataArray(
-            covarr,
-            dims=('umech_id', 'steps'),
-            coords={'umech_id': pnames, 'steps': np.arange(covarr.shape[-1])},
-        )
-
-        # dofs
-        dofs = xr.DataArray(
-            np.ones(len(pnames[1:])), dims=('umech_id'), coords={'umech_id': pnames[1:]}
-        )
-        dofs.values[...] = np.inf
-        dofs.values[:-1] = np.array(nminus1)
-
-        # make a MUF meas object with data
-
-        uobj = RMEMeas(name=n, cov=cov, covdofs=dofs)
-        type_b_categories = {
-            'Type': 'B',
-            'Origin': f'{sensor_id} $k$ DC Traceability',
-            'Experiment': 'Voltage Staircase',
-        }
-        type_a_categories = {
-            'Type': 'A',
-            'Origin': f'{sensor_id} $k$ Noise',
-            'Experiment': 'Voltage Staircase',
-        }
-        for k, v in type_a_categories.items():
-            uobj.assign_categories(
-                pnames[1:-1], [k] * len(pnames[1:-1]), [v] * len(pnames[1:-1])
+    
+    if specs is not None:
+        unc_array = specs.all_manufacturer_errors(mean.values)
+        pert = mean + unc_array
+        umech_i= f'{umech_prefix}_spec_{specs.name}'
+        meas.add_umech(
+            umech_i, pert,add_uid = True,category = {'Type':'A','Origin':'dc sweep traceability'}
             )
-        for k, v in type_b_categories.items():
-            uobj.assign_categories([pnames[-1]], [k], [v])
 
-        finals[n] = uobj
-    fig = None
-    if overview_plots:
-        fig, ax = plt.subplots(2, 1, sharex=True)
-        fig = fig
-        ax = ax
-        for s in steps:
-            ax[0].axvline((s - raw[smu_volts_col][0][0]) / 3600, color='k')
-        ax[0].plot(
-            (raw[smu_volts_col][0] - raw[smu_volts_col][0][0]) / 3600,
-            raw[smu_volts_col][1] * raw[smu_curr_col][1] * 1e3,
-            '.',
+    return meas
+
+
+def legacy_to_parsed_dc(
+    metadata_path: str,
+    settings: str,
+    meas_list: str,
+    on_time_window: float = 300,
+    off_time_window: float = 300,
+    heater_instr_name: str = 'SMU',
+    sensor_instr_name: str = 'NVM',
+    zero_threshhold: float = 1e-6,
+    transition_threshhold_watts: float = 0.1e-4,
+    ) -> tuple[RMEMeas,tuple[plt.Figure]]:
+    """
+    This is a parsing function for the original draft of the dcsweep measurement.
+    
+    This draft of the measurement did not include a thermometer, and did not
+    assume that the heater and sensors time series data were alligned by samples.
+    Since the settings were not recorded as a function of time, this function
+    requires a guess about the step sizes and what measured powers should be
+    considered off in order to properly select samples out of the time series.
+
+    Parameters
+    ----------
+    metadata_path : str
+        Path to measurement.
+    settings : str
+        Path to measurement settings.
+    meas_list : str
+        Path to measlist.
+    on_time_window : float, optional
+        Time window for selecting on samples. The default is 300.
+    off_time_window : float, optional
+        Time window for selecting off samples. The default is 300.
+    heater_instr_name : str, optional
+        Name of heater instrument. The default is 'SMU'.
+    sensor_instr_name : str, optional
+        Name of sensor instrument. The default is 'NVM'.
+    zero_threshhold : float, optional
+        Threshhold (in Watts) of samples below this where the heater
+        is believed to be turned off. The default is 1e-6.
+    transition_threshhold_watts : float, optional
+        Thresh hold (in Watts) where changes in the applied power to the heater
+        constitutes a new step in the sweep. The default is 0.1e-4.
+
+    Returns
+    -------
+    e : RMEMeas
+        Offset corrected voltage of the sensors thermoelectric element.
+    v : RMEMeas
+        Offset corrected voltage of the heating element.
+    i : RMEMEas
+        Offset corrected current of the heating element.
+    tuple[plt.Figure]
+        Tuple of plt.Figure objects detailing the analysis.
+
+    Raises
+    ------
+    ValueError
+        Fails to parse.
+    """
+    print(metadata_path)
+    data, ep = read_experiment(metadata_path, settings, meas_list)
+    
+    # get the source values from the config
+    # tells us how many source settings and
+    # the expected number of transitions between source
+    # settings but not where they are in the data record 
+    # (sorry)
+    all_source_settings = ep.get_column(ep.columns[0])
+    mask = np.append([True], np.diff(all_source_settings) != 0)
+    source_settings = all_source_settings[mask]
+    expected_n_transitions = len(source_settings) - 1
+
+    heater_v = timeseries_to_dataarray(data[f'V_{heater_instr_name} (V)'])
+    heater_i = timeseries_to_dataarray(data[f'I_{heater_instr_name} (A)'])
+    e = timeseries_to_dataarray(data[f'V_{sensor_instr_name} (V)'])
+
+    # trim smu data to smallest size in case the metadata only dumped some of
+    # voltage or current for a step
+    min_heater_size = min([value.shape[0] for value in [heater_v, heater_i]])
+    heater_v = heater_v[:min_heater_size]
+    heater_i = heater_i[:min_heater_size]
+
+    # calculate pwr
+    heater_p = heater_v * heater_i
+
+
+
+    # figure out where the transitions are  
+    transitions = np.append([0],abs(np.diff(heater_p))) > transition_threshhold_watts
+    n_transitions = np.where(transitions)[0].shape[0]
+    if n_transitions != expected_n_transitions:
+        raise ValueError(
+            f"Did not find the right number of source transitions (found {n_transitions} instead of {expected_n_transitions}). Try adjusting the transition_threshhold_watts.")
+    
+    # create arrays of time since adjustment
+    start = 0
+    # go back 2 samples for safety
+    where_transitions= np.where(transitions)[0]
+    adjust_times = np.zeros(len(heater_p))
+    step_numbers = np.zeros(len(heater_p),dtype = int)
+    for i, ti in enumerate(np.append(where_transitions,len(heater_p))):
+        end = ti
+        times = heater_p.time[start:ti]
+        adjust_times[start:ti] = heater_p.time[start:ti] - heater_p.time[start]
+        step_numbers[start:ti] = i
+        start = ti
+
+    # arrays of adjustment times and numbered steps
+    heater_adjust_times = xr.DataArray(
+        adjust_times,
+        dims = ('time'), coords = {'time':heater_p.time}
+        )
+    heater_step_numbers = xr.DataArray(
+        step_numbers,
+        dims = ('time'), coords = {'time':heater_p.time}
         )
 
-        ax[1].plot(
-            (raw[thermo_col][0] - raw[thermo_col][0][0]) / 3600,
-            raw[thermo_col][1] * 1e9,
-            '.',
+    # shift the sensor adjust times back by 1 sample inc case they are out
+    # of sync by 1 sample
+    sensor_adjust_times = heater_adjust_times.interp(time = e.time, method= 'nearest') \
+        .shift(time = -2)
+    sensor_step_numbers = heater_step_numbers.interp(time = e.time, method = 'nearest')\
+        .shift(time = -2)
+
+
+    # timestamps in hours
+    te_hrs = (e.time-e.time[0])/3600
+    h_hrs = (heater_v.time - heater_v.time[0])/3600
+
+    # make a figure to start plotting analysis
+    # this will get added to through the rest
+    # of this function
+    fig,ax= plt.subplots(2,1, sharex = True)
+    for us in np.unique(sensor_step_numbers):
+        ind_sensor = sensor_step_numbers == us
+        ind_heater = heater_step_numbers == us
+        ax[0].plot(e[ind_sensor].time, e[ind_sensor]*1e3)
+        ax[1].plot(heater_p[ind_heater].time, heater_p[ind_heater]*1000)
+    ax[1].set_xlabel('Time (s)')
+    ax[0].set_ylabel(r'$e \left(\mathrm{mV}\right)$')
+    ax[1].set_ylabel(r'$P_{heater} \left(\mathrm{mW}\right)$')
+    heater_v = xr.DataArray(heater_v)
+    
+    
+    # final values
+    ons = xr.Dataset()
+    offs = xr.Dataset()
+
+    # get all the on values
+
+    on_step_numbers = np.unique(heater_step_numbers[heater_p > zero_threshhold])
+    
+    # get on values
+    e_ons, e_ons_std, e_on_samples = mean_settled_by_group(
+        e,
+        sensor_step_numbers,
+        values = on_step_numbers,
+        window = on_time_window
         )
-        ax[1].set_xlabel('Time (Hours)')
-        ax[0].set_ylabel('P_SMU (mW)')
-
-        ax[1].set_ylabel(thermo_col.replace('(V)', ('(nV)')))
-
-        ax[0].plot(
-            (
-                raw[smu_volts_col][0][finals_ind[smu_volts_col]]
-                - raw[smu_volts_col][0][0]
-            )
-            / 3600,
-            1e3
-            * raw[smu_volts_col][1][finals_ind[smu_volts_col]]
-            * raw[smu_curr_col][1][finals_ind[smu_curr_col]],
-            'ro',
+    
+    
+    for sample in e_on_samples:
+        ax[0].plot(sample.time, sample*1000,'k')
+    
+    ax[0].plot(e_ons.time, e_ons*1000, 'ko')
+    
+    # get the heater v ons
+    heater_v_ons, heater_v_ons_std,  heater_v_ons_samples = mean_settled_by_group(
+        heater_v,
+        heater_step_numbers,
+        values = on_step_numbers,
+        window = on_time_window
         )
-
-        ax[1].plot(
-            (raw[thermo_col][0][finals_ind[thermo_col]] - raw[thermo_col][0][0]) / 3600,
-            raw[thermo_col][1][finals_ind[thermo_col]] * 1e9,
-            'ro',
+    
+    # get the heater i ons
+    heater_i_ons, heater_i_ons_std,  heater_i_ons_samples = mean_settled_by_group(
+        heater_i,
+        heater_step_numbers,
+        values = on_step_numbers,
+        window = on_time_window
         )
-        if save_plot_path:
-            fig.savefig(save_plot_path)
+    
+    
+    ax[1].plot(heater_v_ons.time, heater_v_ons*heater_i_ons*1000,'k.')
+    for v,i in zip(heater_v_ons_samples, heater_i_ons_samples):
+        ax[1].plot(v.time, v*i*1000,'k')
 
-    return finals[smu_volts_col], finals[smu_curr_col], finals[thermo_col], fig
+
+    # get the off measurements
+    off_step_numbers = np.unique(heater_step_numbers[heater_p < zero_threshhold])
+
+    # get mean off values
+    e_offs_mn, e_offs_std, e_off_samples = mean_settled_by_group(
+        e,
+        sensor_step_numbers,
+        values = off_step_numbers,
+        window = off_time_window
+        )
+    for sample in e_off_samples:
+        ax[0].plot(sample.time, sample*1000,'k.')
+
+    ax[0].plot(e_offs_mn.time, e_offs_mn*1000,'k.')
+    
+    # interpolate to the on times
+    e_offs = e_offs_mn.interp(time = e_ons.time)
+    ax[0].plot(e_offs.time, e_offs*1000,'ko--')
+    
+    
+    # get the heater v offs
+    heater_v_offs, heater_v_offs_std,  heater_v_offs_samples = mean_settled_by_group(
+        heater_v,
+        heater_step_numbers,
+        values = off_step_numbers,
+        window = off_time_window
+        )
+    
+    # get the heater i offs
+    heater_i_offs, heater_i_offs_std,  heater_i_offs_samples = mean_settled_by_group(
+        heater_i,
+        heater_step_numbers,
+        values = off_step_numbers,
+        window = off_time_window
+        )
+    
+    
+    for v,i in zip(heater_v_offs_samples, heater_i_offs_samples):
+        ax[1].plot(v.time, v*i*1000,'k')    
+    
+    for v,i in zip(heater_v_ons_samples, heater_i_ons_samples):
+        ax[1].plot(v.time, v*i*1000,'k')
+    
+    heater_v_offs = heater_v_offs.interp(time = heater_v_ons.time)
+    heater_i_offs = heater_i_offs.interp(time = heater_i_ons.time)
+
+
+    # make spec sheets, assume worst case which is default
+    heater_i_specs = kspecs.DatasheetMeasureDCI('K2450',serial = 'xxx',suppress_warnings = True)
+    heater_v_specs = kspecs.DatasheetMeasureDCV('K2450',serial = 'xxx',suppress_warnings = True)
+    e_specs = nvmspecs.DatasheetDCV('HP34420A',serial = 'xxx',suppress_warnings = True)
+    
+    # put in to RMEMEas objects with correlated uncertainties
+    e_ons = metered_to_linmeas('e_on',e_ons,std = e_ons_std,specs = e_specs)
+    e_offs = metered_to_linmeas('e_off',e_offs,std = e_offs_std,specs = e_specs)
+    
+    heater_v_ons = metered_to_linmeas(
+        'heater_v_on',heater_v_ons,std = heater_v_ons_std,specs = heater_v_specs)
+    heater_v_offs = metered_to_linmeas(
+        'heater_v_off',heater_v_offs,std = heater_v_offs_std,specs = heater_v_specs)
+    
+    heater_i_ons = metered_to_linmeas(
+        'heater_i_on',heater_i_ons,std = heater_i_ons_std,specs = heater_i_specs)
+    heater_i_offs = metered_to_linmeas(
+        'heater_i_off',heater_i_offs,std = heater_i_offs_std,specs = heater_i_specs)
+    
+    
+    # correct for the offset
+    prop = RMEProp(sensitivity = True)
+    @prop.propagate
+    def sub(x,y): return x - y
+    
+    @prop.propagate
+    def mul(x,y): return x*y
+    
+    e = sub(e_ons, e_offs)
+    heater_v = sub(heater_v_ons, heater_v_offs)
+    heater_i = sub(heater_i_ons, heater_i_offs)
+    p = mul(heater_v, heater_i)
+    return e, heater_v, heater_i, fig
+    
