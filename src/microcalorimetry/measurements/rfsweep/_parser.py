@@ -614,6 +614,8 @@ class Run(abc.ABC):
             'thermoelectric': ThermoelectricAnalyzer,
             'bolometer': BolometerAnalyzer,
             'RF_source': RFSourceAnalyzer,
+            # to catch typos
+            'rf_source': RFSourceAnalyzer
         }
 
         self.analyzers = {}
@@ -2498,10 +2500,13 @@ class SMUPowerMeterAnalyzer(SignalAnalyzer):
         )
 
         on_v_results = _average_pre_fastoff(
-            step, self.v_column, self.instr_timing_tolerance, self.RF_on_average_window,self.analysis_config['RF_off_time_offset_method']
+            step, 
+            self.v_column, 
+            self.stats_window_override,
         )
         on_i_results = _average_pre_fastoff(
-            step, self.i_column, self.instr_timing_tolerance, self.RF_on_average_window,self.analysis_config['RF_off_time_offset_method']
+            step, self.i_column, 
+            self.stats_window_override,
         )
 
         results.update(off_v_results)
@@ -2615,11 +2620,12 @@ class RFSourceAnalyzer(SignalAnalyzer):
 
         # results for
         
-        results = results | _average_pre_fastoff(
-            step,
-            self.am_voltage_column,
-            self.stats_window_override
-        )
+        if self.am_voltage_column:
+            results = results | _average_pre_fastoff(
+                step,
+                self.am_voltage_column,
+                self.stats_window_override
+            )
 
         return results, metadata
 
@@ -2787,7 +2793,11 @@ class CommercialPowerMeterAnalyzer(SignalAnalyzer):
             Descriptive information reported with analysis results.
         """
         metadata = {}
-        results = _average_pre_fastoff(step, self.column, self.instr_timing_tolerance, self.RF_on_average_window,self.analysis_config['RF_off_time_offset_method'])
+        results = _average_pre_fastoff(
+            step, 
+            self.column, 
+            self.stats_window_override
+            )
         return results, metadata
 
     def plot_analysis(self, segment: Segment, *args):

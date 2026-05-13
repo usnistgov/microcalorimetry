@@ -252,10 +252,9 @@ def zeta_general(
         Uncorrected effective efficiency.
 
     """
-    E_off = openloop_thermoelectric_power(cal_k, e_off, p_of_e)
+    # E_off = openloop_thermoelectric_power(cal_k, e_off, p_of_e)
 
-    E_on = openloop_thermoelectric_power(cal_k, e_on, p_of_e)
-    E = E_on - E_off
+    E  = openloop_thermoelectric_power(cal_k, e_on-e_off, p_of_e)
 
     return P2 / (E - P_dc_on_slow + P_dc_off_slow)
 

@@ -110,7 +110,6 @@ def make_k_coeffs(
     i = configs.DCSweep(parsed_dcsweep.pop('heater_i')).load()
     e = configs.DCSweep(parsed_dcsweep['e']).load()
     
-    coeffs_dict = {}
     figures = []
 
     p = v * i
@@ -139,7 +138,7 @@ def make_k_coeffs(
         figs = plot_coeffs(propagator, v, i, e, coeffs, p_of_e)
         figures+=figs
 
-    return coeffs_dict, figures
+    return coeffs, figures
 
 
 _cli_make_k_coeffs = clitools.format_from_npdoc(make_k_coeffs)(_cli_make_k_coeffs)
