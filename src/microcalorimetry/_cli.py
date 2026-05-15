@@ -47,7 +47,11 @@ def _gui(no_console_stdout: bool = False):
             'rfsweep.make_settled_runlist': rfsweep.generate_settled_runlist,
             'rfsweep.make_runlist_from_loss': rfsweep.runlist_from_loss,
         },
-        output_group_saveable=['dcsweep.parse','rfsweep.parse'],
+        output_group_saveable=[
+            'dcsweep.parse_v0',
+            'dcsweep.parse_v1',
+            'rfsweep.parse'
+            ],
     )
 
     app.add_function_tab(

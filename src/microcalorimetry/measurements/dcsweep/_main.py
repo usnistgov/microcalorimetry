@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 import microcalorimetry.configs as configs
 import microcalorimetry._helpers._intf_tools as clitools
 
-__all__ = ['run', 'parse']
+__all__ = ['run', 'parse_v0', 'parse_v1']
 
 
 def time_delta(t, t0, unit: str):
@@ -534,17 +534,44 @@ def parse_v1(
     off_min_wait_time: float,
     off_max_wait_time: float,
     min_pwr_setting: float,
-    throw_away_min_time: float,
-    zero = ['e', 'heater_v','heater_i'],
-    slow_off_as_on = [],
-    make_plots: bool = True
-) -> tuple[configs.ParsedDCSweep, list[plt.Figure]]:
-    r"""
-    Load and analyze draft 1 of a DC sweep run.
-
-    This draft supports thermometers and enforces time alignment of samples to
-    make analysis easier.
+    throw_away_min_time: float
+    ) -> tuple[configs.ParsedDCSweep, list[plt.Figure]]:
     """
+    Parse version 1 of a DC sweep calibration measurement.
+
+    Parameters
+    ----------
+    metadata : list[Path]
+        List of paths to metadata files.
+    e_col : str
+        Thermopile column.
+    on_min_wait_time : float
+        Minimum time to wait before an on measurment should be included as part of the
+        fit.
+    on_max_wait_time : float
+        Maximum time to wait before an on measurement should be included as
+        part of the fit.
+    off_min_wait_time : float
+        Minimum time to wait before an off measurement should be included as
+        part of the fit..
+    off_max_wait_time : float
+        Maximum time to wait before an off measurement should be included as
+        part of the fit.
+    min_pwr_setting : float
+        Exclude and power levels below this value.
+    throw_away_min_time : float
+        Throw away samples taken before this time since source adjustment.
+
+
+    Returns
+    -------
+    parsed_dc : configs.ParsedDCSweep
+        Parsed DC measurements.
+    figs : list[plt.Figure]
+        Analysis Figures
+
+    """
+
 
     # distinguish between list of paths and single path
     if isinstance(metadata, str) or isinstance(metadata, Path):

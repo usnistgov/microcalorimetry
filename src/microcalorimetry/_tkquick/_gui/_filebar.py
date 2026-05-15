@@ -26,7 +26,7 @@ class FileFrame(customtkinter.CTkFrame):
 
         # button for managing plot settings
         self.plotmenu = customtkinter.CTkOptionMenu(
-            self, values=['Export All', 'Close All'], command=self.plotmenu_callback
+            self, values=['Export All', 'Close All', 'Pickle All', 'Unpickle'], command=self.plotmenu_callback
         )
         self.plotmenu.grid(row=0, column=1, padx=(0, 10), sticky='nwe')
         self.plotmenu.set('Plots')
@@ -57,12 +57,17 @@ class FileFrame(customtkinter.CTkFrame):
 
     def plotmenu_callback(self, choice, file=None):
         self.plotmenu.set('Plots')
-        if choice == 'Export All':
-            self.plotmenu_export_all()
-        if choice == 'Close All':
-            self.plotmenu_close_all()
-        else:
-            raise Exception(f'{choice} not recognized')
+        match choice:
+            case 'Export All':
+                self.plotmenu_export_all()
+            case 'Close All':
+                self.plotmenu_close_all()
+            case 'Pickle All':
+                self.pickle_all_figs()
+            case 'Unpickle':
+                self.unpickle_figs()
+            case _:
+                raise Exception(f'{choice} not recognized')
 
     def plotmenu_close_all(self):
         tabnames = list(self.graphicstabs.plots_dict.keys())
@@ -92,6 +97,39 @@ class FileFrame(customtkinter.CTkFrame):
                 fig.savefig(folder / f'{name}{frmt}')
         else:
             print('no folder selected.')
+    
+    def pickle_all_figs(self):
+        """Pickles all the open folders to a figure."""
+        import pickle
+        folder = str(
+            ctk.filedialog.askdirectory(
+                title='Pickle open figures to folder:',
+            )
+        )
+
+        if folder != '':
+            folder = Path(folder)
+            plots_dict = self.graphicstabs.plots_dict
+            for name, fig in plots_dict.items():
+                with open(folder /f'{name}.pklfig', 'wb') as f:
+                    pickle.dump(fig, f)
+        else:
+            print('no folder selected.')
+    
+    def unpickle_figs(self):
+        """Pickles all the open folders to a figure."""
+        import pickle
+        files =  ctk.filedialog.askopenfilenames(
+                title='(Only select files you made, pickling can be unsafe) Select pickle objects to open:',
+                filetypes=[('Pickled Figure', '.pklfig')]
+            )
+        
+
+        for fn in files:
+            with open(fn, 'rb') as f:
+                fig_loaded = pickle.load(f)
+            self.graphicstabs.add_plot(fig_loaded, Path(fn).stem)
+
 
     def button_open(self, file=None):
         filename = file
