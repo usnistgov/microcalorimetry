@@ -3,18 +3,16 @@ from rmellipse.propagators import RMEProp
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
-
+import microcalorimetry.configs as configs
 from rminstr.data_structures import ExistingRecord, ExptParameters, TimeSeries
+from pathlib import Path
 import rminstr_specs.K2450 as kspecs
 import rminstr_specs.HP34420A as nvmspecs
 import rminstr_specs
-from datetime import datetime
-from typing import Protocol
-
-from typing import Protocol
+import matplotlib as mpl
+from dataclasses import dataclass
 from typing import (
     Protocol,
-    Sequence,
     SupportsFloat,
     Tuple,
     Literal,
@@ -27,34 +25,66 @@ type FloatType = (
 )
 
 
-class TimeSeries[T](Protocol):
+class TimeSeriesProtocol[T](Protocol):
     shape: Tuple[int]
     dims: Tuple[Literal['time']]
     dtype: T
 
-class DCCalibrationData(Protocol):
-    """
-    Protocol for a DCCalibratedData xarray.Dataset.
-    
-    All values should be samples alligned on the time coordinates.
-    """
-    # variables
-    heater_v: TimeSeries[FloatType]
-    heater_i: TimeSeries[FloatType]
-    heater_p: TimeSeries[FloatType]
-    heater_r: TimeSeries[FloatType]
-    therm_v: TimeSeries[FloatType]
-    therm_i: TimeSeries[FloatType]
-    therm_p: TimeSeries[FloatType]
-    therm_r: TimeSeries[FloatType]
-    e: TimeSeries[FloatType]
-    # coordinates
-    pwr_setting: Sequence[FloatType]
-    time: Sequence[FloatType]
-    env_temp: Sequence[FloatType]
-    
 
-def read_experiment(metadata_path: str, settings: str, meas_list: str):
+@dataclass
+class RunInput:
+    path: str | Path
+    Tbath: float
+    r_heater: float
+
+class DCCalibrationData(Protocol):
+    """Protocol for an xarray.Dataset"""
+    # variables
+    heater_v: TimeSeriesProtocol[FloatType]
+    heater_i: TimeSeriesProtocol[FloatType]
+    heater_p: TimeSeriesProtocol[FloatType]
+    heater_r: TimeSeriesProtocol[FloatType]
+    e: TimeSeriesProtocol[FloatType]
+    pwr_setting: TimeSeriesProtocol[FloatType]
+    env_temp: TimeSeriesProtocol[FloatType]
+    steps: TimeSeriesProtocol[FloatType]# [IntType]
+    # coordinates
+    time: TimeSeriesProtocol[FloatType]
+
+class DCCalibrationDataTempWithThermometer(DCCalibrationData,Protocol):
+    """Protocol for an xarray.Dataset"""
+    # variables
+    therm_v: TimeSeriesProtocol[FloatType]
+    therm_i: TimeSeriesProtocol[FloatType]
+    therm_p: TimeSeriesProtocol[FloatType]
+    therm_r: TimeSeriesProtocol[FloatType]
+
+
+def colorbar(fig: plt.Figure, ax: plt.axes,  values: np.array, map: str = "jet", label: str = ""):
+    cmap = plt.get_cmap("jet", len(values))
+    norm = mpl.colors.Normalize(vmin=min(values), vmax=max(values))
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    fig.colorbar(sm, ax = ax, label = label)
+    return cmap
+
+def trim(ds: DCCalibrationData, trim: list[xr.DataArray]) -> DCCalibrationData:
+    out = ds
+    for condition in trim:
+        out = out.where(condition, drop = True)
+    return out
+
+def mean_sub(x: np.array):
+    return x - np.mean(x)
+
+def zero_one_norm(x: np.array):
+    out = x - np.min(x)
+    out = out/np.max(out)
+    return out
+
+# %% Version 0 Stuff
+# These are functions and classes for parsing the version 1 of the experiment.
+
+def read_experiment_v0(metadata_path: str, settings: str, meas_list: str):
     """
     Read a measurement.
 
@@ -155,7 +185,8 @@ def metered_to_linmeas(
         mean: xr.DataArray,
         std: xr.DataArray | None = None,
         specs: rminstr_specs.Specification | None = None, 
-        umech_prefix: str = ''
+        umech_prefix: str = '',
+        origin: str = ''
         ) -> RMEMeas:
     """
     Turn an array of metered data to a RMEmeas object with lin prop uncertainties.
@@ -184,29 +215,37 @@ def metered_to_linmeas(
         data.
     """
     
-    meas: RMEMeas = RMEMeas.from_nom(name, mean)
-    
-    if std is not None:
+    # if std provided, generate in a fast way since add_umech is a little slow 
+    if std is None:
+        meas: RMEMeas = RMEMeas.from_nom(name, mean)
+    else:
+        umechs = ['nominal']
         for i,si in  enumerate(std):
-            pert = mean.copy()
-            pert[i] += si
-            umech_i= f'{umech_prefix}_std_{i}'
-            meas.add_umech(
-                umech_i, pert,add_uid = True,category = {'Type':'A','Origin':'dc scweep noise'}
-                )
+            umechs.append(f'{umech_prefix}_std_{i}')
+        cov = mean.expand_dims({'umech_id':umechs}, axis = 0).copy()
+        perts =  np.diag(std).copy()
+        perts = np.vstack((std*0,perts))
+        cov= cov+perts
+        meas = RMEMeas(name, cov = cov)
+        meas.make_umechs_unique(same_uid=True)
+        meas.assign_categories_to_all(Origin = origin + ' Noise', Type = 'A')
+        
     
     if specs is not None:
         unc_array = specs.all_manufacturer_errors(mean.values)
         pert = mean + unc_array
         umech_i= f'{umech_prefix}_spec_{specs.name}'
         meas.add_umech(
-            umech_i, pert,add_uid = True,category = {'Type':'A','Origin':'dc sweep traceability'}
+            umech_i, pert,add_uid = True,category = {'Type':'B','Origin':origin + ' Traceability'}
             )
 
     return meas
 
+# %% Parsing functions
+# parsing functions should taking data paths and options
+# and return a configs.ParsedDC object and a list of figures for review.
 
-def legacy_to_parsed_dc(
+def parse_v0(
     metadata_path: str,
     settings: str,
     meas_list: str,
@@ -216,7 +255,7 @@ def legacy_to_parsed_dc(
     sensor_instr_name: str = 'NVM',
     zero_threshhold: float = 1e-6,
     transition_threshhold_watts: float = 0.1e-4,
-    ) -> tuple[RMEMeas,tuple[plt.Figure]]:
+    ) -> tuple[configs.ParsedDCSweep, tuple[plt.Figure]]:
     """
     This is a parsing function for the original draft of the dcsweep measurement.
     
@@ -266,7 +305,7 @@ def legacy_to_parsed_dc(
         Fails to parse.
     """
     print(metadata_path)
-    data, ep = read_experiment(metadata_path, settings, meas_list)
+    data, ep = read_experiment_v0(metadata_path, settings, meas_list)(metadata_path, settings, meas_list)
     
     # get the source values from the config
     # tells us how many source settings and
@@ -298,7 +337,11 @@ def legacy_to_parsed_dc(
     n_transitions = np.where(transitions)[0].shape[0]
     if n_transitions != expected_n_transitions:
         raise ValueError(
-            f"Did not find the right number of source transitions (found {n_transitions} instead of {expected_n_transitions}). Try adjusting the transition_threshhold_watts.")
+            f"""Did not find the right number of source transitions
+            (found {n_transitions} instead of {expected_n_transitions}).
+            Try adjusting the transition_threshhold_watts (currently
+            {transition_threshhold_watts})"""
+            )
     
     # create arrays of time since adjustment
     start = 0
@@ -447,18 +490,18 @@ def legacy_to_parsed_dc(
     e_specs = nvmspecs.DatasheetDCV('HP34420A',serial = 'xxx',suppress_warnings = True)
     
     # put in to RMEMEas objects with correlated uncertainties
-    e_ons = metered_to_linmeas('e_on',e_ons,std = e_ons_std,specs = e_specs)
-    e_offs = metered_to_linmeas('e_off',e_offs,std = e_offs_std,specs = e_specs)
+    e_ons = metered_to_linmeas('e_on',e_ons,std = e_ons_std,specs = e_specs, umech_prefix= 'DC Sweep')
+    e_offs = metered_to_linmeas('e_off',e_offs,std = e_offs_std,specs = e_specs, umech_prefix= 'DC Sweep')
     
     heater_v_ons = metered_to_linmeas(
-        'heater_v_on',heater_v_ons,std = heater_v_ons_std,specs = heater_v_specs)
+        'heater_v_on',heater_v_ons,std = heater_v_ons_std,specs = heater_v_specs, umech_prefix= 'DC Sweep')
     heater_v_offs = metered_to_linmeas(
-        'heater_v_off',heater_v_offs,std = heater_v_offs_std,specs = heater_v_specs)
+        'heater_v_off',heater_v_offs,std = heater_v_offs_std,specs = heater_v_specs, umech_prefix= 'DC Sweep')
     
     heater_i_ons = metered_to_linmeas(
-        'heater_i_on',heater_i_ons,std = heater_i_ons_std,specs = heater_i_specs)
+        'heater_i_on',heater_i_ons,std = heater_i_ons_std,specs = heater_i_specs, umech_prefix= 'DC Sweep')
     heater_i_offs = metered_to_linmeas(
-        'heater_i_off',heater_i_offs,std = heater_i_offs_std,specs = heater_i_specs)
+        'heater_i_off',heater_i_offs,std = heater_i_offs_std,specs = heater_i_specs, umech_prefix= 'DC Sweep')
     
     
     # correct for the offset
@@ -474,4 +517,400 @@ def legacy_to_parsed_dc(
     heater_i = sub(heater_i_ons, heater_i_offs)
     p = mul(heater_v, heater_i)
     return e, heater_v, heater_i, fig
+
+
+# %% Version 1 Stuff
+# These are functions and classes for parsing the version 1 of the experiment.
+
+def read_v1(
+    runs: list[Path],
+    e_col: str = 'V_NVM (V)'
+    ) -> DCCalibrationData:
+    """
+    Reads version 1 of the DC sweep experiment in an XArrayDataSet.
     
+    Can take in multiple runs.
+
+    Parameters
+    ----------
+    runs : list[Path]
+        List of folders containing or metadata files them selves from 
+        dc sweep runs.
+    e_col : str, optional
+        Column associated with the thermoelectric sensor
+        The default is 'V_NVM (V)'.
+
+    Returns
+    -------
+    DCCalibrationData
+        Dataset containing raw data on an alligned coordinate set.
+
+    Raises
+    ------
+    ValueError
+        If e_col isn't present.
+    """
+    all_data = {}
+    
+    
+    def try_get(d, key, p: str):
+        try:
+            return d[key]
+        except KeyError as e:
+            raise KeyError(f'expected {key} field in config file {p}. Not present, add manually.') from e
+    
+    for file in runs:
+        print(file)
+        file = Path(file)
+        if file.is_dir():
+            file = [f for f in file.glob('*metadata*')][0]
+        try:
+            config = [f for f in file.parent.glob('*settings*')][0]
+        except IndexError:
+            raise FileNotFoundError(f'Cant find *settings* file in {file.parent}')
+        print(config)
+        cfile = str(config)
+        # read in data and configuration
+        data = ExistingRecord(file).batch_read()
+        config = ExptParameters(config).config
+        
+        # get config file inputs that should be present to do analysis
+        Tbath = float(try_get(config, 't_bath_c', cfile))
+        r_heater = float(try_get(config, 'r_heater_ohms', cfile))
+    
+        # trim data to matching lengths
+        min_shape = min(v.values.shape[0] for v in data.values())
+        data = {k:TimeSeries(v.t[:min_shape],v.values[:min_shape]) for k,v in data.items()}
+        for k,v in data.items():
+            # print(k, v.t.shape)
+            try:
+                all_data[k] = np.append(all_data[k], data[k].values)
+            except KeyError:
+                all_data[k] = data[k].values
+        try:
+            all_data['bath'] = np.append(all_data['bath'], data[k].values*0 + Tbath)
+        except KeyError:
+            all_data['bath'] = data[k].values*0 + Tbath
+
+        try:
+            all_data['Timestamp (s)'] = np.append(all_data['Timestamp (s)'], data[k].t)
+        except KeyError:
+            all_data['Timestamp (s)'] = data[k].t
+        
+        pwr = data['SOURCE_SETTING (A)'].values**2*r_heater
+        
+        try:
+            all_data['pwr_setting'] = np.append(all_data['pwr_setting'], pwr)
+        except KeyError:
+            all_data['pwr_setting'] = pwr
+        
+    try:
+        e = (['time'],all_data[e_col])
+    except KeyError:
+        raise ValueError(f'{e_col} not in {list(all_data.keys())}')
+    # put into a dataset
+    data = xr.Dataset(
+        data_vars = dict(
+            heater_v =  (['time'],all_data['V_SMU (V)']),
+            heater_i = (['time'],all_data['I_SMU (A)']),
+            heater_p = (['time'],all_data['I_SMU (A)']*all_data['V_SMU (V)']),
+            heater_r = (['time'],all_data['I_SMU (A)']/all_data['V_SMU (V)']),
+            therm_i = (['time'],all_data['I_Thermometer (A)']),
+            therm_v = (['time'],all_data['V_Thermometer (V)']),
+            therm_p = (['time'],all_data['V_Thermometer (V)']*all_data['I_Thermometer (A)']),
+            therm_r = (['time'],all_data['V_Thermometer (V)']/all_data['I_Thermometer (A)']),
+            e = e,
+            pwr_setting =  (['time'],all_data['pwr_setting']),
+            adjust_time = (['time'],all_data['time_since_source_adjust (s)']),
+            env_temp = (['time'],all_data['bath'])
+        ),
+        coords = dict(
+            time = all_data['Timestamp (s)'],
+        )
+    )
+
+    # make something that tracks where the steps happened
+    where_steps =  np.where(np.diff(data.pwr_setting, prepend = False) != 0)[0]
+    where_steps = np.append(where_steps,len(data.time))
+    steps = np.zeros(data.time.shape, dtype = int)
+    follow = 0
+    for i,crawl in enumerate(where_steps):
+        steps[follow:crawl] = i
+        follow = crawl
+    data = data.assign(
+        steps = xr.DataArray(
+            steps,
+            dims = ('time',),
+            coords = dict(time = data.time)
+        )
+    )
+
+    return data
+
+
+def review_plot_v1(
+        var: str, 
+        raw: DCCalibrationData, 
+        corr: DCCalibrationData | None = None,
+        offs: DCCalibrationData | None = None,
+        offs_samples: DCCalibrationData | None = None,
+        ons: DCCalibrationData | None = None,
+        ylabel: str | None = None,
+        yscale: float = 1) -> plt.Figure:
+    fig,ax = plt.subplots(1,1)
+    t0 = raw.time[0]
+    def zero(x):
+        return (x - t0)/3600
+    if ons is not None:
+        ax.plot(zero(ons.time), ons[var]*yscale, 'k*', label = 'On Measurements')
+    if corr is not None:
+        ax.plot(zero(corr.time), corr[var]*yscale,'o',label = 'Offset Corrected')
+    if offs_samples is not None:
+        ax.plot(zero(offs_samples.time), offs_samples[var]*yscale,'kx', label = 'Off Samples')
+    ax.plot(zero(raw.time), raw[var]*yscale,'-',label = 'Raw Data')
+    if offs is not None:
+        ax.plot(zero(offs.time), offs[var]*yscale,'k.', label = 'Offs Interp')
+
+    # cbar.set_ticklabels([str(v) for v in unq_pwr])
+    ax.set_xlabel(r'Time (hrs)')
+    if ylabel is None:
+        ax.set_ylabel(var)
+    else:
+        ax.set_ylabel(ylabel)
+    ax.legend(loc = 'best')
+    return fig
+
+def parse_v1(
+    metadata: list[Path | str],
+    e_col: str,
+    throw_away_min_time: float,
+    on_min_wait_time:float,
+    on_max_wait_time: float,
+    off_min_wait_time: float,
+    off_max_wait_time: float, 
+    min_pwr_setting: float,
+    ):
+    """
+    """
+    off_min_wait_time = float(off_min_wait_time)
+    off_max_wait_time = float(off_max_wait_time)
+    on_min_wait_time = float(on_min_wait_time)
+    on_max_wait_time = float(on_max_wait_time)
+    min_pwr_setting = float(min_pwr_setting)
+   
+    data = read_v1(metadata, e_col)
+
+    # throw away bad data
+    data = data.where(data.adjust_time > throw_away_min_time, drop = True)
+
+    # pick on values
+    ons = data.where(
+        (data.pwr_setting > 0) & \
+        (data.adjust_time >= float(on_min_wait_time)) & \
+        (data.adjust_time <= float(on_max_wait_time)) & \
+        (data.pwr_setting >= float(min_pwr_setting)),
+        drop = True
+    )
+
+
+    # pick off values and interpolate to the
+    # on times
+    offs_samples = None
+    offs = None
+    offs_samples = data.where(
+        (data.pwr_setting == 0) & \
+        (data.adjust_time >= off_min_wait_time) & \
+        (data.adjust_time <= off_max_wait_time),
+        drop =True
+        )
+    
+    # interpolate, use average value if not
+    # enough zero measurements are available to interpolate.
+    offs = ons.copy()
+    for v in offs_samples:
+        offs[v] = offs_samples[v].interp(
+        time = ons.time,
+        kwargs = dict(fill_value = offs_samples[v].mean())
+        )
+
+        
+    # keep raw data around
+    raw = data.copy()
+
+    # make data offset corrected measurements
+    zero = ['e','heater_i','heater_v','heater_p']
+    data = ons.copy()
+    for name, var in data.items():
+        if name in zero:
+            data[name] = var - offs[name]
+
+
+    unq_pwr = np.unique(data.pwr_setting)
+
+    # make review plots
+    figs = []
+    fig = review_plot_v1(
+        'e',
+        raw = raw,
+        corr = data,
+        offs = offs,
+        offs_samples=offs_samples,
+        ons = ons,
+        ylabel = r'$e_{sensor}$ (mV)',
+        yscale = 1e3
+    )
+    figs.append(fig)
+
+    fig = review_plot_v1(
+        'therm_r',
+        raw,
+        corr = data,
+        ylabel = r'$R_{thermometer}\:\left(\mathrm{k}\Omega\right)$',
+        yscale = 1e-3
+    )
+    figs.append(fig)
+    fig = review_plot_v1(
+        'heater_p',
+        raw,
+        ylabel = r'$P_{heater}\:\left(\mathrm{mW}\right)$',
+        yscale = 1e3
+    )
+    figs.append(fig)
+
+
+    fig,ax = plt.subplots(1,1)
+    # color by approximate unique powers
+    colors = colorbar(fig,ax, unq_pwr, label = 'Power Setting (mW)')
+    for i, pi in enumerate(unq_pwr):
+        di = data.where(data.pwr_setting == pi)
+        # print(color)
+        ax.plot(di.heater_p*1000, di.e*1e3,'o',color = colors(i))
+
+    # cbar.set_ticklabels([str(v) for v in unq_pwr])
+    ax.set_xlabel(r'$P_{smu}$ (mW)')
+    ax.set_ylabel(r'$e_{sensor}$ (mV)')
+    figs.append(fig)
+
+
+    fig,ax = plt.subplots(1,1)
+    # color by approximate unique powers
+    colors = colorbar(fig,ax, unq_pwr, label = 'Power Setting (mW)')
+    for i, pi in enumerate(unq_pwr):
+        di = data.where(data.pwr_setting == pi)
+        # print(color)
+        ax.plot(di.heater_p*1000, di.e*1e3,'o',color = colors(i))
+
+    # cbar.set_ticklabels([str(v) for v in unq_pwr])
+    ax.set_xlabel(r'$P_{smu}$ (mW)')
+    ax.set_ylabel(r'$e_{sensor}$ (mV)')
+    figs.append(fig)
+
+    fig,ax = plt.subplots(1,1)
+    # color by approximate unique powers
+    colors = colorbar(fig,ax, unq_pwr*1e3, label = 'Power Setting (mW)')
+    for i, pi in enumerate(unq_pwr):
+        di = data.where(data.pwr_setting == pi)
+        # print(color)
+        ax.plot(di.therm_r/1000, mean_sub(di.e)*1e6,'o',color = colors(i))
+    ax.set_xlabel(r'$R_{thermometer}\:\left(\mathrm{k}\Omega\right)$')
+    ax.set_ylabel(r'$e_{sensor}- $ - $\mu_{e}\:\left(\mu\mathrm{V}\right)$ by Power Setting')
+    figs.append(fig)
+
+    fig,ax = plt.subplots(1,1)
+    # color by approximate unique powers
+    scatter = ax.scatter(data.e*1e3, data.e/data.heater_p, c= data.env_temp, cmap = plt.cm.jet)
+    fig.colorbar(scatter, label = 'Ambient Temperature')
+    ax.set_xlabel(r'$e\:\left(\mathrm{mV}\right)$')
+    ax.set_ylabel(r'$\frac{e}{P_{smu}}$')
+    figs.append(fig)
+
+    fig,ax = plt.subplots(1,1)
+    # color by approximate unique powers
+    scatter = ax.scatter(data.e*1e3, data.therm_r, c= data.env_temp, cmap = plt.cm.jet)
+    fig.colorbar(scatter, label = 'Ambient Temperature')
+    ax.set_xlabel(r'e (mV)')
+    ax.set_ylabel(r'$R_{thermometer}\:\left(\Omega\right)$')
+    figs.append(fig)
+
+    fig,ax = plt.subplots(1,1)
+    # color by approximate unique powers
+    scatter = ax.scatter(data.e*1e3, data.e/data.heater_p, c= data.heater_p, cmap = plt.cm.jet)
+    fig.colorbar(scatter, label = r'$P_{heater}\:\left(\mathrm{mW}\right)$')
+    ax.set_xlabel(r'$e\:\left(\mathrm{mV}\right)$')
+    ax.set_ylabel(r'$\frac{e}{P_{smu}}$')
+    figs.append(fig)
+
+    fig,ax = plt.subplots(1,1)
+    # color by approximate unique powers
+    scatter = ax.scatter(data.e*1e3, data.e/data.heater_p, c= data.adjust_time/3600, cmap = plt.cm.jet)
+    fig.colorbar(scatter, label = 'Sample Time (hrs)')
+    ax.set_xlabel(r'$e\:\left(\mathrm{mV}\right)$')
+    ax.set_ylabel(r'$\frac{e}{P_{smu}}$')
+    figs.append(fig)
+
+    fig,ax = plt.subplots(1,1)
+    # color by approximate unique powers
+    scatter = ax.scatter(data.e*1e3, data.e/data.heater_p, c= data.therm_r, cmap = plt.cm.jet)
+    fig.colorbar(scatter, label = r'$R_{thermometer}\:\left(\Omega\right)$')
+    ax.set_xlabel(r'$e\:\left(\mathrm{mV}\right)$')
+    ax.set_ylabel(r'$\frac{e}{P_{smu}}$')
+    figs.append(fig)
+    
+    # spec sheets
+    heater_i_specs = kspecs.DatasheetMeasureDCI('K2450',serial = 'xxx',suppress_warnings = True)
+    heater_v_specs = kspecs.DatasheetMeasureDCV('K2450',serial = 'xxx',suppress_warnings = True)
+    therm_i_specs = kspecs.DatasheetMeasureDCI('K2450',serial = 'xxx',suppress_warnings = True)
+    therm_v_specs = kspecs.DatasheetMeasureDCV('K2450',serial = 'xxx',suppress_warnings = True)
+    e_specs = nvmspecs.DatasheetDCV('HP34420A',serial = 'xxx',suppress_warnings = True)
+    
+
+    # put on values in rme meas objects
+    on_step_groups = ons.groupby(ons.steps)
+    on_means = on_step_groups.mean()
+    on_stds = on_step_groups.std(ddof = 1)
+    
+    # off values should also be grouped by the
+    # on value step numbers
+    off_step_groups = offs.groupby(ons.steps)
+    off_means = off_step_groups.mean()
+    off_stds = off_step_groups.std(ddof = 1)
+
+    measurements = {}
+    spec_sheets = {
+            'heater_v': heater_v_specs,
+            'heater_i': heater_i_specs,
+            'e': e_specs,
+            'therm_i': therm_i_specs,
+            'therm_v': therm_v_specs
+        }
+    
+    prop = RMEProp(sensitivity = True)
+    
+    for var in ['heater_i','heater_v','e']:
+        # print(var,'on')
+        on = metered_to_linmeas(
+            f'{var}_on',
+            mean = on_means[var],
+            std = on_stds[var],
+            specs = spec_sheets[var],
+            umech_prefix = 'DC Sweep'
+            )
+        # print(var,'off')
+        off = metered_to_linmeas(
+            f'{var}_off',
+            mean = off_means[var],
+            std = off_stds[var],
+            specs = spec_sheets[var],
+            umech_prefix = 'DC Sweep'
+            )
+        measurements[var] = on - off
+    for var in ['therm_i','therm_v']:
+        measurements[var] = metered_to_linmeas(
+            var,
+            mean = on_means[var],
+            std = on_stds[var],
+            specs = spec_sheets[var],
+            umech_prefix = 'DC Sweep'
+            )
+    
+    return measurements, figs

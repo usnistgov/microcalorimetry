@@ -9,7 +9,7 @@ import microcalorimetry._helpers._intf_tools as clitools
 import microcalorimetry.configs as configs
 import click
 
-__all__ = ['make_k_coeffs']
+__all__ = ['fit_thermoelectric']
 
 
 @click.command(name='make-sensitivity-coeffs')
@@ -52,7 +52,7 @@ def _cli_make_k_coeffs(
     kwargs['make_plots'] = show_plots or save_plots
 
     outputs = clitools.run_and_show_plots(
-        make_k_coeffs,
+        fit_thermoelectric,
         *args,
         show_plots=show_plots,
         save_plots=save_plots,
@@ -64,9 +64,10 @@ def _cli_make_k_coeffs(
     return outputs
 
 
-def make_k_coeffs(
+def fit_thermoelectric(
     parsed_dcsweep: configs.ParsedDCSweep,
     constrain_zero: bool = False,
+    thermometer_corrected: bool = False,
     p_of_e: bool = False,
     deg: int = 2,
     make_plots: bool = False,
@@ -83,13 +84,18 @@ def make_k_coeffs(
         Steps parsed from sensitivity measurement. The first field
         is the applied voltage, the second field is the applied current,
         and the last field is the measure thermopile voltage.
+    thermometer_corrected : bool, optional
+        Use a thermometer corrected model. Requires a thermometer
+        voltage and current to be present in the parsed DC sweep.
     constrain_zero : bool, optional
-        Constrains the fit to zero. The default is False.
+        Constrains the fit to zero, only applies to non thermometer
+        corrected models. The default is False.
     p_of_e : bool, optional
-        Fit power as a function of thermopile voltage.
-        The default is False.
+        Fit power as a function of thermopile voltage, only applies to non
+        thermometer corrected models. The default is False.
     deg : int, optional
-        Fit degrees of polynomial, the default is 2.
+        Fit degrees of polynomial, only applies to non
+        thermometer corrected models. The default is 2.
     make_plots : bool, optional
         Output plots if True, outputs None in place of figure
         otherwise.
@@ -105,6 +111,8 @@ def make_k_coeffs(
     propagator = RMEProp(sensitivity=True)
     # wrap any uncertainty functions
     calc_thermopile_sensitivity = propagator.propagate(rfpower.thermopile_sensitivity)
+    temperature_corrected_thermoelectric_fit = propagator.propagate(
+        rfpower.temperature_corrected_thermoelectric_fit)
     parsed_dcsweep = configs.ParsedDCSweep(parsed_dcsweep)
     v = configs.DCSweep(parsed_dcsweep.pop('heater_v')).load()
     i = configs.DCSweep(parsed_dcsweep.pop('heater_i')).load()
@@ -113,38 +121,59 @@ def make_k_coeffs(
     figures = []
 
     p = v * i
+    
+    # use the thermometer corrected dataset
+    if thermometer_corrected:
+        therm_v = configs.DCSweep(parsed_dcsweep.pop('therm_v')).load()
+        therm_i = configs.DCSweep(parsed_dcsweep.pop('therm_i')).load()
+        therm_r = therm_v/therm_i
+        coeffs = temperature_corrected_thermoelectric_fit(
+            p,
+            therm_r,
+            e
+            )
+    # otherwise use a simple polynomial
+    else:
+        therm_r = None
+        coeffs = calc_thermopile_sensitivity(
+            p,
+            e,
+            constrain_zero=constrain_zero,
+            p_of_e=p_of_e,
+            deg=deg,
+            punc=p.stdunc().cov,
+            eunc=e.stdunc().cov,
+        )
+        
+        coeffs.attrs['constrain_zero'] = constrain_zero
+        coeffs.attrs['p_of_e'] = p_of_e
 
-    coeffs = calc_thermopile_sensitivity(
-        p,
-        e,
-        constrain_zero=constrain_zero,
-        p_of_e=p_of_e,
-        deg=deg,
-        punc=p.stdunc().cov,
-        eunc=e.stdunc().cov,
-    )
 
     coeffs.name = 'coeffs'
     v.name = 'voltage_steps'
     i.name = 'current_steps'
     e.name = 'thermopile_steps'
 
-    coeffs.attrs['constrain_zero'] = constrain_zero
-    coeffs.attrs['p_of_e'] = p_of_e
-
 
     # make plots if asked to
     if make_plots:
-        figs = plot_coeffs(propagator, v, i, e, coeffs, p_of_e)
+        figs = plot_coeffs(propagator, p, e, coeffs, p_of_e, temperature = therm_r)
         figures+=figs
 
     return coeffs, figures
 
 
-_cli_make_k_coeffs = clitools.format_from_npdoc(make_k_coeffs)(_cli_make_k_coeffs)
+_cli_make_k_coeffs = clitools.format_from_npdoc(fit_thermoelectric)(_cli_make_k_coeffs)
 
 
-def plot_coeffs(propagator, v, i, e, coeffs, p_of_e):
+def plot_coeffs(
+    propagator,
+    p,
+    e,
+    coeffs,
+    p_of_e,
+    temperature: RMEMeas | None
+    ):
     """
     Plots coefficients
 
@@ -154,16 +183,16 @@ def plot_coeffs(propagator, v, i, e, coeffs, p_of_e):
     ----------
     propagator : RMEProp
         Propagator to use
-    v : RMEMeas
-        Voltage measured at each step
-    i : RMEMeas
-        Voltage measured at each step
+    p : RMEMeas
+        Heater power
     e : RMEMeas
         Voltage measured at each step
     coeffs : _type_
         Fit coefficients
     p_of_e : _type_
-        IF fit was done in terms of power (True) or voltage (False)
+        If fit was done in terms of power (True) or voltage (False)
+    temperature: RMEMeas | None
+        Optional thermometer readings.
 
     Returns
     -------
@@ -171,15 +200,7 @@ def plot_coeffs(propagator, v, i, e, coeffs, p_of_e):
         matplotlib figure object
     """
 
-    
-    
-    
-    polyval = propagator.propagate(fitting.polyval2)
-
-    @propagator.propagate
-    def mult(v, i):
-        return v * i
-
+   
     @propagator.propagate
     def minus(ref, vals):
         out = ref.copy()
@@ -194,8 +215,7 @@ def plot_coeffs(propagator, v, i, e, coeffs, p_of_e):
 
 
     k = 2
-    p = mult(v, i)
-    
+
     
     get_openloop = propagator.propagate(
         rfpower.openloop_thermoelectric_power
@@ -203,7 +223,7 @@ def plot_coeffs(propagator, v, i, e, coeffs, p_of_e):
 
 
     sortind = np.argsort(e.nom.values)
-    p_fit = get_openloop(coeffs, e, p_of_e)
+    p_fit = get_openloop(coeffs, e, p_of_e, temperature = temperature)
 
     delta = minus(p_fit, p)
 

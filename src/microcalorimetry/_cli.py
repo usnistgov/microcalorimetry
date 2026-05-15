@@ -39,7 +39,8 @@ def _gui(no_console_stdout: bool = False):
         # view function is just parse but with out the ability to save.
         functions={
             'view': measurements.view,
-            'dcsweep.parse': dcsweep.parse,
+            'dcsweep.parse_v0': dcsweep.parse_v0,
+            'dcsweep.parse_v1': dcsweep.parse_v1,
             'dcsweep.run': dcsweep._main.run_gui,
             'rfsweep.parse': rfsweep.parse,
             'rfsweep.run': rfsweep._main.run_gui,
@@ -53,7 +54,7 @@ def _gui(no_console_stdout: bool = False):
         'analysis.',
         functions={
             'make_eta_repeatability_model': anl.make_eta_repeatability_model,
-            'make_k_coeffs': anl.make_k_coeffs,
+            'make_k_coeffs': anl.fit_thermoelectric,
             'make_eta': anl.make_eta,
             'dc_lead_correction': anl.dc_lead_correction,
             'apply_uncertainty_model':anl.apply_uncertainty_model,

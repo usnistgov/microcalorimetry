@@ -399,7 +399,27 @@ def run(
 #     return outputs
 
 
-def parse(
+def _get_metadata(path: Path):
+    """
+    If a folder, get the metadata file. Otherwise assume metadata file.
+
+    Parameters
+    ----------
+    path : Path
+        DESCRIPTION.
+
+    Returns
+    -------
+    Path
+        Path to '*metadata.csv' file.
+    """
+    metadata = Path(path)
+    if metadata.is_dir():
+        metadata = [p for p in metadata.glob('*metadata*')][0]
+    return metadata
+
+
+def parse_v0(
     metadata: Path,
     settings: Path = None,
     measlist: Path = None,
@@ -413,14 +433,14 @@ def parse(
     make_plots: bool = True
 ) -> tuple[configs.ParsedDCSweep, list[plt.Figure]]:
     r"""
-    Load and analyze a sensitivity run.
+    Load and analyze the initial draft of a DC sweep run.
 
-    Takes in a sensitivty experiment and generate sensitivity coefficients
+    Takes in a sensitivity experiment and generate sensitivity coefficients
     and other relevant data.
 
     Parameters
     ----------
-    metadata : Path
+    metadata : list[Path]
         Path to datarecord metadata
     settings : Path, optional
         Path to experiment settings. Assumed to be a file called settings.csv in metadata directory if not provided.
@@ -442,7 +462,7 @@ def parse(
     transition_threshhold_watts : float, optional
         Thresh hold (in Watts) where changes in the applied power to the heater
         constitutes a new step in the sweep. The default is 0.1e-4.
-    make_plots: bool, optional
+    make_plots : bool, optional
         If true,make plots
 
     Returns
@@ -456,6 +476,12 @@ def parse(
 
     """
 
+    # distinguish between list of paths and single path
+    if isinstance(metadata, str) or isinstance(metadata, Path):
+        metadata = [metadata]
+
+    # look at first meatadata file and check what's in it
+
     # do the analysis and save things
     metadata = Path(metadata)
     if metadata.is_dir():
@@ -467,6 +493,7 @@ def parse(
         measlist = meta_dir / 'measlist.csv'
         
     # original draft of the measurement
+    
     e, heater_v,heater_i, fig = staircase_analysis.legacy_to_parsed_dc(
         metadata_path=str(Path(metadata)),
         settings=str(Path(settings)),
@@ -499,6 +526,47 @@ def parse(
 
     return parsed, figs
 
+
+def parse_v1(
+    metadata: list[Path],
+    e_col: str,
+    on_min_wait_time:float,
+    on_max_wait_time: float,
+    off_min_wait_time: float,
+    off_max_wait_time: float,
+    min_pwr_setting: float,
+    throw_away_min_time: float,
+    zero = ['e', 'heater_v','heater_i'],
+    slow_off_as_on = [],
+    make_plots: bool = True
+) -> tuple[configs.ParsedDCSweep, list[plt.Figure]]:
+    r"""
+    Load and analyze draft 1 of a DC sweep run.
+
+    This draft supports thermometers and enforces time alignment of samples to
+    make analysis easier.
+    """
+
+    # distinguish between list of paths and single path
+    if isinstance(metadata, str) or isinstance(metadata, Path):
+        metadata = [metadata]
+
+    # run through parser to extract parameters from the timeseries
+    parsed, figs = staircase_analysis.parse_v1(
+        metadata = metadata,
+        e_col = e_col,
+        throw_away_min_time = throw_away_min_time,
+        on_min_wait_time = on_min_wait_time,
+        on_max_wait_time = on_max_wait_time,
+        off_min_wait_time = off_min_wait_time,
+        off_max_wait_time = off_max_wait_time,
+        min_pwr_setting = min_pwr_setting,
+    )
+
+    # attatch metadata
+    for output in parsed.values():
+        output.attrs['metadata'] = str([str(p) for p in metadata])
+    return parsed, figs
 
 # _parse_cli = clitools.format_from_npdoc(parse)(_parse_cli)
 
@@ -555,38 +623,3 @@ def _run_cli(*args, **kwargs):
 
 _run_cli = clitools.format_from_npdoc(run)(_run_cli)
 
-
-def plot_experiment(metadata: str):
-    data = ExistingRecord(metadata).batch_read()
-
-    fig, ax = plt.subplots(1, 1)
-    ax.plot(data['V_SMU (V)'][0], data['V_SMU (V)'][1], 'k-o')
-    ax.set_xlabel('Timestamp (s)')
-    ax.set_ylabel('SMU Voltage (V)')
-    fig.tight_layout()
-
-    fig, ax = plt.subplots(1, 1)
-    ax.plot(data['V_SMU (V)'][0], data['V_SMU (V)'][1] / data['I_SMU (A)'][1], 'k-o')
-    ax.set_xlabel('Timestamp (s)')
-    ax.set_ylabel(r'SMU Resistance ($\Omega$)')
-    fig.tight_layout()
-
-    fig, ax = plt.subplots(1, 1)
-    ax.plot(
-        data['V_SMU (V)'][0], 1e3 * data['V_SMU (V)'][1] * data['I_SMU (A)'][1], 'k-o'
-    )
-    ax.set_xlabel('Timestamp (s)')
-    ax.set_ylabel(r'SMU Power ($mW$)')
-    fig.tight_layout()
-
-    fig, ax = plt.subplots(1, 1)
-    ax.plot(data['V_SMU (V)'][0], data['I_SMU (A)'][1], 'k-o')
-    ax.set_xlabel('Timestamp (s)')
-    ax.set_ylabel(r'SMU Current (A)')
-    fig.tight_layout()
-
-    fig, ax = plt.subplots(1, 1)
-    ax.plot(data['V_NVM (V)'][0], data['V_NVM (V)'][1], 'k-o')
-    ax.set_xlabel('Timestamp (s)')
-    ax.set_ylabel('NVM Voltage (V)')
-    fig.tight_layout()

@@ -177,6 +177,7 @@ def make_correction_factor(
     inputs.pop('gc_regressor_rows')
 
     basic = RMEProp(sensitivity=not nominals)
+    
 
     calc_delta_power = basic.propagate(rfpower.calorimetric_power_delta_general)
     calc_te_power = basic.propagate(rfpower.openloop_thermoelectric_power)
