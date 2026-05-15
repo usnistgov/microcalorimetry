@@ -102,8 +102,7 @@ class MeasurementManager:
             else:
                 for smu in self.smus.values():
                     smu.setup(
-                        source_trigger_levels=[source_value],
-                        level = source_value,
+                        source_level = source_value,
                         )
                 self.arm_all()
                 for smu in self.smus.values():
@@ -287,8 +286,8 @@ def run(
                 thermometers[-1].setup(**ep.config['setup'][thermometer_name])
                 # set to 2 values so that it is the same as when the SMU
                 # sweeps
-                print(ep.config['thermometer_source'])
-                thermometers[-1].setup(source_trigger_levels = [ep.config['thermometer_source']])
+                print(thermometer_name, 'src=',ep.config['thermometer_source'])
+                thermometers[-1].setup(source_level = ep.config['thermometer_source'], source = 'on')
         
         # Here is the measurement loop
         # measurement manager shuts things down if measurmeent
