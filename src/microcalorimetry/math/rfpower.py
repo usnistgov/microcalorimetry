@@ -36,9 +36,15 @@ def openloop_thermoelectric_power(
     coeffs: xr.DataArray,
     e: xr.DataArray,
     p_of_e: bool,
+    temperature: xr.DataArray | None = None
 ) -> xr.DataArray:
     """
     Calculate the openloop thermoelectric power from fit coefficients.
+
+    This function can accept models that provide power as a polynomial
+    function of voltage (or vice versa) or can be provided a temperature
+    sensitive model of the thermoelectric if temperature readings are 
+    also provided.
 
     Parameters
     ----------
@@ -48,12 +54,18 @@ def openloop_thermoelectric_power(
         values corresponding to the polynomail power (i.e.
         deg = 2 corresponds to c_2 for y = c_2*x**^2 ). Fit
         coefficients can be power in terms of voltage (W/V^n) or
-        voltage in terms of power (V/W^n). A
+        voltage in terms of power (V/W^n). 
+        
+        Alternativley, can take in temperature sensitive fit coefficients
+        and a temperature reading.
     thermoelectric_voltage : xr.DataArray
         Array of thermoelectric voltages to evaluate power at.
     p_of_e : bool
         If true, assumes fit is power in terms
         of the thermolectric voltage, by default True.
+    temperature: xr.DataArray | None, optional
+        If provided, assumed to be a temperature dependent thermoelectric model.
+        Otherwise assumed to a straight forward polynomial.
 
     Returns
     -------
@@ -61,6 +73,14 @@ def openloop_thermoelectric_power(
         Evaluated thermoelectric power.
     """
 
+    # if temperature readings were given then do a temperature fit and
+    # bounce out
+    if temperature is not None:
+        p = apply_temperature_dependent_fit(
+            e, temperature, coeffs)
+        return p
+
+    # otherwise a singlae variable polynmial model
     # if power fit in terms of thermoelectric voltage,
     # just evaluate the fit coefficients, this is easiest
     if p_of_e:
@@ -142,6 +162,161 @@ def openloop_thermoelectric_power(
             p = fitting.polyroot2(coeffs, y=e)
 
     return p
+
+def _meannorm(x: xr.DataArray, mean: float | xr.DataArray, std: float | xr.DataArray):
+    return (x - mean) / std
+
+def temperature_corrected_thermoelectric_fit(
+        P: xr.DataArray, 
+        T: xr.DataArray, 
+        V: xr.DataArray):
+    """
+    Fits power, voltage, and temperature to a temperature sensitive model.
+    
+    Power is in Watts and voltage is is Volts. Temperature can be any units
+    provided it is proprtional to temperture and the same unit is units
+    when using the fit later on. 
+    
+    It is typically resistance for a resistance thermometer
+
+    Parameters
+    ----------
+    P : xr.DataArray
+        Power (Watts).
+    T : xr.DataArray
+        Temperatue
+    V : xr.DataArray
+        Volts (v).
+
+    Returns
+    -------
+    xr.DataArray
+        Array of fit coefficients with names othe coefficients along
+        a dimension called 'col'.
+    """
+
+    def get_meanstd(Input):    
+        mean = np.mean(Input)
+        std = np.std(Input)
+        return mean, std
+
+    VMEAN, VSTD = get_meanstd(V.values[0])
+    VNorm = _meannorm(V.values, VMEAN, VSTD)
+    TMEAN, TSTD = 0,1
+    if T is not None:
+        TMEAN, TSTD = get_meanstd(T.values[0])
+        TNorm = _meannorm(T.values, TMEAN, TSTD)
+
+    cs = []
+    ats = []
+    bts = []
+    ds = []
+    aps = []
+    bps = []
+    
+    for i in range(0, len(VNorm)):
+        if T is not None:
+            A = np.column_stack(
+                [
+                    np.ones(len(VNorm[i].flatten())), 
+                    TNorm[i].flatten()**2, 
+                    TNorm[i].flatten(), 
+                    TNorm[i].flatten()*VNorm[i].flatten(), 
+                    VNorm[i].flatten()**2, 
+                    VNorm[i].flatten()
+                ]
+            )
+        else:
+            A = np.column_stack(
+                [
+                    np.ones(len(VNorm[i].flatten())), 
+                    VNorm[i].flatten()**2, 
+                    VNorm[i].flatten()
+                ]
+            )
+        
+        
+        B = P[i].values.flatten() / V[i].values.flatten()
+        result, _, _, _ = np.linalg.lstsq(A, B)
+        if T is not None:
+            c, at, bt, d, ap, bp = result
+        else:
+            c, ap, bp = result
+            d, at, bt = (0,0,0)
+        
+        cs.append(c)
+        ats.append(at)
+        bts.append(bt)
+        ds.append(d)
+        aps.append(ap)
+        bps.append(bp)
+    
+    cs = np.array(cs)    
+    ats = np.array(ats)    
+    bts = np.array(bts)    
+    ds = np.array(ds)    
+    aps = np.array(aps)    
+    bps = np.array(bps)    
+
+    VArray = np.zeros(shape=(len(cs), 10))
+    VArray[:,0] = aps
+    VArray[:,1] = bps
+    VArray[:,2] = ats
+    VArray[:,3] = bts
+    VArray[:,4] = ds
+    VArray[:,5] = cs
+    VArray[:,6] = TMEAN
+    VArray[:,7] = VMEAN
+    VArray[:,8] = TSTD
+    VArray[:,9] = VSTD
+
+
+    VXRs = xr.DataArray(
+        VArray,
+        dims = ['umech_id', 'col'],
+        coords = {'umech_id': P.umech_id, 'col': ['ap', 'bp', 'at', 'bt', 'd', 'c', 'MeanT', 'MeanV', 'STDT', 'STDV']}
+    )
+
+    return VXRs
+
+
+def apply_temperature_dependent_fit(
+        e: xr.DataArray,
+        temperature: xr.DataArray,
+        coeffs: xr.DataArray
+        ):
+    """
+    Apply a temperature dependent fit.
+    
+    Shapes are assumed to be 
+
+    Parameters
+    ----------
+    e : xr.DataArray
+        Thermopile voltage shape (...,N)
+    temperature : xr.DataArray
+        Temperature readings shape (...,N).
+    coeffs : xr.DataArray
+        Fit coefficients shape (...,10).
+        Last dimension is called 'col' and contains the fit coefficients.
+
+    Returns
+    -------
+    xr.DataArray
+        Array of power readings with the same shape as 
+    """
+    fit = coeffs
+    V = e
+    T = temperature
+
+    VsNorm = (V - fit.sel (col = ['MeanV']).data) / fit.sel (col = ['STDV']).data
+    TsNorm = (T - fit.sel (col = ['MeanT']).data) / fit.sel (col = ['STDT']).data    
+    return V * (fit.sel (col = ['at']).values*TsNorm**2 +
+                   fit.sel (col = ['bt']).values*TsNorm +
+                   fit.sel (col = ['ap']).values*VsNorm**2 +
+                   fit.sel (col = ['bp']).values*VsNorm +
+                   fit.sel (col = ['d']).values*VsNorm*TsNorm +
+                   fit.sel (col = ['c']).values)
 
 
 def thermopile_sensitivity(
@@ -252,10 +427,9 @@ def zeta_general(
         Uncorrected effective efficiency.
 
     """
-    E_off = openloop_thermoelectric_power(cal_k, e_off, p_of_e)
+    # E_off = openloop_thermoelectric_power(cal_k, e_off, p_of_e)
 
-    E_on = openloop_thermoelectric_power(cal_k, e_on, p_of_e)
-    E = E_on - E_off
+    E  = openloop_thermoelectric_power(cal_k, e_on-e_off, p_of_e)
 
     return P2 / (E - P_dc_on_slow + P_dc_off_slow)
 
@@ -517,9 +691,9 @@ def calorimetric_power_delta_general(
         Uncorrected effective efficiency.
 
     """
-    E_off = openloop_thermoelectric_power(cal_k, e_off, p_of_e)
-    E_on = openloop_thermoelectric_power(cal_k, e_on, p_of_e)
-    E = E_on - E_off
+    E  = openloop_thermoelectric_power(cal_k, e_on - e_off, p_of_e)
+    # E_on = openloop_thermoelectric_power(cal_k, e_on, p_of_e)
+    # E = E_on - E_off
 
     return E - P_dc_on_slow + P_dc_off_slow
 

@@ -1,0 +1,31 @@
+{
+    "title": "DCSweepParserConfigV0",
+    "type": "object",
+    "description": "Settings needed to parsed the initial draft of the DC Sweep measurement.",
+    "properties": {
+        "analysis_config": {
+            "type": "object",
+            "properties": {
+                "settings": {
+                    "type": "str",
+                    "description": "The settings file of the measurement (optional)."
+                },
+                "RF_off_time_offset_method": {
+                    "type": "string",
+                    "enum": ["max_change","first_data_point"],
+                    "examples":["max_change"],
+                    "description": "Method for determining the last time point in the averaging window. If 'max_change': look for a change in column values corresponding to the source being turned off. If 'first_data_point', pick the time when the RF source was turned off - instr_timing_tolerance."
+                },
+                "RF_on_average_window": {
+                    "type": "number",
+                    "description": "time window (in seconds) to average over when evaluating long timescale settled values."
+                },
+                "stats_window_override": {
+                    "type": "number",
+                    "description": "Override the statswindow (in seconds) to average over when evaluating long timescale RF off values."
+                }
+            },
+            "required":["instr_timing_tolerance","RF_on_average_window","RF_off_time_offset_method"]
+        }
+    }
+}

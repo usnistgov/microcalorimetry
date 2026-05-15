@@ -86,7 +86,7 @@ class MeasurementManager:
             first_sample_delay: float,
             step_duration: float,
             print_label: str = 'Normal Mesurement'
-        ): 
+        ):
         step_count = 0
         step_start = time.time() # sample until the step is done
         while (time.time() - step_start < step_duration) or (step_count < 1):
@@ -95,7 +95,7 @@ class MeasurementManager:
             if step_count > 0:
                 self.arm_all()
                 t_trigger = self.interface.group_trigger(*self.instruments.values())
-        
+
             # smu needs to be triggered first when the source
             # is adjusted so that it has time to level out?
             # idk why but it needs to work like this :(
@@ -131,9 +131,9 @@ class MeasurementManager:
             for thermometer_name, thermometer in self.thermometers.items():
                 thermometer.wait_until_data_available(timeout = 10)
                 self.update_smu_dr(
-                    dr, 
+                    dr,
                     thermometer.fetch_data(),
-                    timestamp= t_trigger, 
+                    timestamp= t_trigger,
                     name = thermometer_name
                 )
 
@@ -199,7 +199,7 @@ def run(
 
     """
 
-    
+
 
 
     # read run settings
@@ -263,7 +263,7 @@ def run(
         # import instruments
         smu = importer.import_instrument(ep.config['models']['SMU'], 'SMUSourceSweep')
         smu = smu(ep.config['addresses']['SMU'])
-        
+
         thermometers = []
 
         nvms = []
@@ -295,7 +295,7 @@ def run(
         t0 = time.time()
         with MeasurementManager(
                 smus = {'SMU':smu},
-                thermometers = {therm_name:therm for therm_name, therm in zip(thermometer_names, thermometers)}, 
+                thermometers = {therm_name:therm for therm_name, therm in zip(thermometer_names, thermometers)},
                 nvms = {nvm_name:nvm for nvm_name, nvm in zip(nvm_names, nvms)},
                 interface=gpib_intfc
                 ) as mm:
@@ -334,128 +334,152 @@ def run(
     return join(output_dir, dr.session_str + '_metadata.csv')
 
 
-@click.command(name='parse')
-@click.argument('metadata', type=Path)
-@click.option('--output-file', '-o', type=Path)
-@click.option('--settings', type=Path)
-@click.option('--measlist', type=Path)
-@click.option('--zero-limit', type=float)
-@click.option('--source-threshhold', type=float)
-@click.option('--avg-window-size-secs', type=float)
-@click.option('--avg-window-shiftback_secs', type=float)
-@click.option('--imm-step', type=float)
-@click.option('--show-plots', is_flag=True)
-@click.option('--save-plots', type=Path)
-@click.option('--plot-ext', type=str)
-@click.option('--repeatability-id', type=str)
-def _parse_cli(
-    *args,
-    show_plots: bool = False,
-    output_file: Path = None,
-    save_plots: Path = None,
-    plot_ext: str = '.png',
-    **kwargs,
-):
+# @click.command(name='parse')
+# @click.argument('metadata', type=Path)
+# @click.option('--output-file', '-o', type=Path)
+# @click.option('--settings', type=Path)
+# @click.option('--measlist', type=Path)
+# @click.option('--zero_threshhold', type=float)
+# @click.option('--transition_threshhold_watts', type=float)
+# @click.option('--avg-window-size-secs', type=float)
+# @click.option('--avg-window-shiftback_secs', type=float)
+# @click.option('--imm-step', type=float)
+
+# @click.option('--show-plots', is_flag=True)
+# @click.option('--save-plots', type=Path)
+# @click.option('--plot-ext', type=str)
+# def _parse_cli(
+#     *args,
+#     show_plots: bool = False,
+#     output_file: Path = None,
+#     save_plots: Path = None,
+#     plot_ext: str = '.png',
+#     **kwargs,
+# ):
+#     """
+#     Interface for the command line for parsing DC sweeps.
+
+#     Parameters
+#     ----------
+#     show_plots : bool, optional
+#         If true, shows the plots in a gui and freezes the terminal, by default False.
+#     output_file : Path, optional
+#         If provided, outputs any saveable objects to an HDF5 file, by default None.
+#     save_plots : Path, optional
+#         If provided, saves plots to this directory.  The default is None.
+#     plot_ext : str, optional
+#         File extension to save plots as. The default is '.png.'.
+#     Returns
+#     -------
+#     _type_
+#         _description_
+#     """
+#     kwargs['make_plots'] = bool(show_plots or save_plots)
+#     print('Parse DCSWEEP from CLI:')
+#     full_output = dict(
+#         args=[str(a) for a in args],
+#         show_plots=show_plots,
+#         output_file=str(output_file),
+#         save_plots=str(save_plots),
+#         plot_ext=plot_ext,
+#         **{k: str(v) for k, v in kwargs.items()},
+#     )
+#     print(json.dumps(full_output, indent=True))
+#     outputs = clitools.run_and_show_plots(
+#         parse,
+#         *args,
+#         show_plots=show_plots,
+#         save_plots=save_plots,
+#         plot_ext=plot_ext,
+#         **kwargs,
+#     )
+#     if output_file:
+#         clitools.save_saveable_objects(outputs[0], output_file=output_file)
+#     return outputs
+
+
+def _get_metadata(path: Path):
     """
-    Interface for the command line for parsing DC sweeps.
+    If a folder, get the metadata file. Otherwise assume metadata file.
 
     Parameters
     ----------
-    show_plots : bool, optional
-        If true, shows the plots in a gui and freezes the terminal, by default False.
-    output_file : Path, optional
-        If provided, outputs any saveable objects to an HDF5 file, by default None.
-    save_plots : Path, optional
-        If provided, saves plots to this directory.  The default is None.
-    plot_ext : str, optional
-        File extension to save plots as. The default is '.png.'.
+    path : Path
+        DESCRIPTION.
+
     Returns
     -------
-    _type_
-        _description_
+    Path
+        Path to '*metadata.csv' file.
     """
-    kwargs['make_plots'] = bool(show_plots or save_plots)
-    print('Parse DCSWEEP from CLI:')
-    full_output = dict(
-        args=[str(a) for a in args],
-        show_plots=show_plots,
-        output_file=str(output_file),
-        save_plots=str(save_plots),
-        plot_ext=plot_ext,
-        **{k: str(v) for k, v in kwargs.items()},
-    )
-    print(json.dumps(full_output, indent=True))
-    outputs = clitools.run_and_show_plots(
-        parse,
-        *args,
-        show_plots=show_plots,
-        save_plots=save_plots,
-        plot_ext=plot_ext,
-        **kwargs,
-    )
-    if output_file:
-        clitools.save_saveable_objects(outputs[0], output_file=output_file)
-    return outputs
+    metadata = Path(path)
+    if metadata.is_dir():
+        metadata = [p for p in metadata.glob('*metadata*')][0]
+    return metadata
 
 
-def parse(
+def parse_v0(
     metadata: Path,
     settings: Path = None,
     measlist: Path = None,
-    zero_limit: float = 0,
-    source_threshhold: float = 0.01,
-    avg_window_size_secs: float = 3000,
-    avg_window_shiftback_secs: float = 0,
-    imm_step: bool = False,
-    make_plots: bool = True,
-    repeatability_id: str = 'dc_sweep',
+    on_time_window: float = 300,
+    off_time_window: float = 300,
+    heater_instr_name: str = 'SMU',
+    sensor_instr_name: str = 'NVM',
+    thermometer_instr_name: str = 'Thermometer',
+    zero_threshhold: float = 1e-6,
+    transition_threshhold_watts: float = 0.1e-4,
+    make_plots: bool = True
 ) -> tuple[configs.ParsedDCSweep, list[plt.Figure]]:
     r"""
-    Load and analyze a sensitivity run.
+    Load and analyze the initial draft of a DC sweep run.
 
-    Takes in a sensitivty experiment and generate sensitivity coefficients
+    Takes in a sensitivity experiment and generate sensitivity coefficients
     and other relevant data.
 
     Parameters
     ----------
-    metadata : Path
+    metadata : list[Path]
         Path to datarecord metadata
     settings : Path, optional
         Path to experiment settings. Assumed to be a file called settings.csv in metadata directory if not provided.
     measlist : Path, optional
         Path to experiment meas list. Assumed to be a file called measlist.csv in metadata directory if not provided.
-    zero_limit : float, optional
-        Treats anything below this as a zero for threshholding.
-        Somtimes the SMU is noisy when it tries to source zero,
-        and that throws off the threshholding.
-        The default is 0.1.
-    source_threshhold : float, optional
-        Value to look for in difference in source to detect steps.
-        The default is 0.1.
-    avg_window_size_secs : float, optional
-        Time window to average samples over in seconds.
-        The default is 3000.
-    avg_window_shiftback_secs : float, optional
-        Shift back the averaging window start time by this amount.
-        Averaging start time is end of step - avg_window_size_secs - avg_window_shiftback_secs.
-        The default is 0.
-    imm_step : bool, optional
-        If true, fits immediately after the step instead of relative to the
-        end of a step. The default is False.
+    on_time_window : float, optional
+        Time window for selecting on samples. The default is 300.
+    off_time_window : float, optional
+        Time window for selecting off samples. The default is 300.
+    heater_instr_name : str, optional
+        Name of heater instrument. The default is 'SMU'.
+    sensor_instr_name : str, optional
+        Name of sensor instrument. The default is 'NVM'.
+    thermometer_instr_name : str, optional
+        Name of the thermometer instrument. The default is 'Thermometer'
+    zero_threshhold : float, optional
+        Threshhold (in Watts) of samples below this where the heater
+        is believed to be turned off. The default is 1e-6.
+    transition_threshhold_watts : float, optional
+        Thresh hold (in Watts) where changes in the applied power to the heater
+        constitutes a new step in the sweep. The default is 0.1e-4.
     make_plots : bool, optional
-        If true, generates plots. The default is True.
-    repeatability_id : str, optional
-        If provided, used as id for uncertainty origin in calculation.
-        The default is 'dc_sweep'.
+        If true,make plots
 
     Returns
     -------
     parsed_dc : configs.ParsedDCSweep
         ParsedCalibration object and any figures generated
+    sensitivity : configs.ThermolectricFitCoefficients
+        Thermoelectric fit coefficients
     figures : list[plt.Figure]
         Generated figures.
 
     """
+
+    # distinguish between list of paths and single path
+    if isinstance(metadata, str) or isinstance(metadata, Path):
+        metadata = [metadata]
+
+    # look at first meatadata file and check what's in it
 
     # do the analysis and save things
     metadata = Path(metadata)
@@ -466,62 +490,31 @@ def parse(
         settings = meta_dir / 'settings.csv'
     if measlist is None:
         measlist = meta_dir / 'measlist.csv'
-
-    raw, ep = staircase_analysis.read_experiment(
+        
+    # original draft of the measurement
+    
+    e, heater_v,heater_i, fig = staircase_analysis.legacy_to_parsed_dc(
         metadata_path=str(Path(metadata)),
         settings=str(Path(settings)),
         meas_list=str(Path(measlist)),
+        on_time_window = on_time_window,
+        off_time_window = off_time_window,
+        heater_instr_name = heater_instr_name,
+        sensor_instr_name = sensor_instr_name,
+        zero_threshhold = zero_threshhold,
+        transition_threshhold_watts = transition_threshhold_watts,
     )
-    try:
-        nvm_names_temp = ep['nvm_names']
-        if isinstance(nvm_names_temp, str):
-            nvm_names_temp = [nvm_names_temp]
-        nvm_names = [f'V_{n} (V)' for n in nvm_names_temp]
-    except KeyError:
-        nvm_names = ['V_NVM (V)']
 
-    # attach metadata to group
-    e_list = []
-    fig_list = []
-    # v, and i never chaneg here, i should make the final values
-    # function loop ove reverything, I am being lazy here
-    parsed = {'v': {}, 'i': []}
-    for nvm_name in nvm_names:
-        v, i, e, fig_overview = staircase_analysis.calculate_step_final_values(
-            raw,
-            ep,
-            repeatability_id,
-            overview_plots=make_plots,
-            zero_limit=zero_limit,
-            source_threshhold=source_threshhold,
-            avg_window_size_secs=avg_window_size_secs,
-            avg_window_shiftback_secs=avg_window_shiftback_secs,
-            fit_imm_step=imm_step,
-            thermo_col=nvm_name,
-            force_equal_length_timeseries=True,
-        )
-        e_list.append(e)
-        fig_list.append(fig_overview)
-        parsed[nvm_name] = e
-    parsed['v'] = v
-    parsed['i'] = i
-    v.name = 'V_SMU (V)'
-    i.name = 'I_SMU (A)'
-    for e, name in zip(e_list, nvm_names):
-        e.name = name
-        parsed[name] = e
+    parsed = {}
+    parsed['e'] = e
+    parsed['heater_v'] = heater_v
+    parsed['heater_i'] = heater_i
 
     prop = RMEProp(sensitivity=True)
 
-    # generate  noise vs power plots
+    figs = []
     if make_plots:
-        power = parsed['v'] * parsed['i']
-        for nvm_name in nvm_names:
-            fig, ax = plt.subplots(1, 1)
-            ax.set_xlabel('Power (mW)')
-            ax.set_ylabel(f'Uncertainty in  {nvm_name.replace("(V)", "(nV)")} (k = 1)')
-            ax.plot(power.nom*1000, parsed[nvm_name].stdunc().cov * 1e9, 'ko')
-            fig_list.append(fig)
+        figs.append(fig)
 
     # attatch metadata
     settings_path = settings
@@ -530,10 +523,51 @@ def parse(
         output.attrs['settings'] = str(settings_path)
         output.attrs['measlist'] = str(measlist)
 
-    return parsed, fig_list
+    return parsed, figs
 
 
-_parse_cli = clitools.format_from_npdoc(parse)(_parse_cli)
+def parse_v1(
+    metadata: list[Path],
+    e_col: str,
+    on_min_wait_time:float,
+    on_max_wait_time: float,
+    off_min_wait_time: float,
+    off_max_wait_time: float,
+    min_pwr_setting: float,
+    throw_away_min_time: float,
+    zero = ['e', 'heater_v','heater_i'],
+    slow_off_as_on = [],
+    make_plots: bool = True
+) -> tuple[configs.ParsedDCSweep, list[plt.Figure]]:
+    r"""
+    Load and analyze draft 1 of a DC sweep run.
+
+    This draft supports thermometers and enforces time alignment of samples to
+    make analysis easier.
+    """
+
+    # distinguish between list of paths and single path
+    if isinstance(metadata, str) or isinstance(metadata, Path):
+        metadata = [metadata]
+
+    # run through parser to extract parameters from the timeseries
+    parsed, figs = staircase_analysis.parse_v1(
+        metadata = metadata,
+        e_col = e_col,
+        throw_away_min_time = throw_away_min_time,
+        on_min_wait_time = on_min_wait_time,
+        on_max_wait_time = on_max_wait_time,
+        off_min_wait_time = off_min_wait_time,
+        off_max_wait_time = off_max_wait_time,
+        min_pwr_setting = min_pwr_setting,
+    )
+
+    # attatch metadata
+    for output in parsed.values():
+        output.attrs['metadata'] = str([str(p) for p in metadata])
+    return parsed, figs
+
+# _parse_cli = clitools.format_from_npdoc(parse)(_parse_cli)
 
 
 def run_gui(
@@ -588,38 +622,3 @@ def _run_cli(*args, **kwargs):
 
 _run_cli = clitools.format_from_npdoc(run)(_run_cli)
 
-
-def plot_experiment(metadata: str):
-    data = ExistingRecord(metadata).batch_read()
-
-    fig, ax = plt.subplots(1, 1)
-    ax.plot(data['V_SMU (V)'][0], data['V_SMU (V)'][1], 'k-o')
-    ax.set_xlabel('Timestamp (s)')
-    ax.set_ylabel('SMU Voltage (V)')
-    fig.tight_layout()
-
-    fig, ax = plt.subplots(1, 1)
-    ax.plot(data['V_SMU (V)'][0], data['V_SMU (V)'][1] / data['I_SMU (A)'][1], 'k-o')
-    ax.set_xlabel('Timestamp (s)')
-    ax.set_ylabel(r'SMU Resistance ($\Omega$)')
-    fig.tight_layout()
-
-    fig, ax = plt.subplots(1, 1)
-    ax.plot(
-        data['V_SMU (V)'][0], 1e3 * data['V_SMU (V)'][1] * data['I_SMU (A)'][1], 'k-o'
-    )
-    ax.set_xlabel('Timestamp (s)')
-    ax.set_ylabel(r'SMU Power ($mW$)')
-    fig.tight_layout()
-
-    fig, ax = plt.subplots(1, 1)
-    ax.plot(data['V_SMU (V)'][0], data['I_SMU (A)'][1], 'k-o')
-    ax.set_xlabel('Timestamp (s)')
-    ax.set_ylabel(r'SMU Current (A)')
-    fig.tight_layout()
-
-    fig, ax = plt.subplots(1, 1)
-    ax.plot(data['V_NVM (V)'][0], data['V_NVM (V)'][1], 'k-o')
-    ax.set_xlabel('Timestamp (s)')
-    ax.set_ylabel('NVM Voltage (V)')
-    fig.tight_layout()

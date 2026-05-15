@@ -252,7 +252,6 @@ def _parse_cli(
         clitools.save_saveable_objects(outputs[0], output_file=output_file)
     return outputs
 
-
 def parse(
     metadata: list[Path],
     analysis_config: configs.RFSweepParserConfig = None,
@@ -262,9 +261,12 @@ def parse(
     plot_all_segments_analysis: bool = False,
     dataframe_results: Path = None,
     format_matlab: Path = None,
+    include_time_std: bool = True,
 ) -> tuple[dict[RMEMeas], list[plt.Figure]]:
     """
     Parse a microccalorimeter run to produce data with uncertainties.
+    
+    This parses the initial version of the DC sweep experiment.
 
     Parameters
     ----------
@@ -285,6 +287,9 @@ def parse(
         If provided, saves a csv of intermediate calculated values.
     format_matlab : Path, optional
         If provided, saves a matlab version of the output results.
+    include_time_std : bool, optional
+        It True, includes STD of time series as an uncertainty mechanism.
+        The default is True.
 
     Returns
     -------
@@ -350,6 +355,7 @@ def parse(
         metadata_dict.update({str(k): v for k, v in run.expt.config.items()})
 
         # make detailed analysis plots
+        # there are so many
         if make_plots:
             for signal, analyzer in run.analyzers.items():
                 try:
@@ -364,11 +370,15 @@ def parse(
                     )
                     if called_out or is_end or plot_all_segments_analysis:
                         # plot the analysis for a single step
-                        figure = analyzer.plot_analysis(segment)
-                        figure.suptitle(
-                            f'{signal} signal \n run {Path(metadata_path).parent.name} ; segment {si}'
-                        )
-                        figures.append(figure)
+                        # may get multiple plots for step
+                        new_figures = analyzer.plot_analysis(segment)
+                        if not isinstance(new_figures, list):
+                            new_figures = [new_figures]
+                        for figure in new_figures:
+                            figure.suptitle(
+                                f'{signal} signal \n run {Path(metadata_path).parent.name} ; segment {si}'
+                            )
+                        figures+=new_figures
 
         runs.append(run)
 
@@ -531,7 +541,11 @@ def parse(
         df.to_csv(dataframe_results)
 
     # format fata for rmellipse calculataions
-    data = c.output_segments(fmt_for='rmellipse', include_specs=True)
+    data = c.output_segments(
+        fmt_for='rmellipse', 
+        include_specs=True, 
+        include_time_std = include_time_std
+        )
 
     ep = run.expt.config
 
@@ -551,15 +565,13 @@ def parse(
     try:
         p_of_e_calorimeter = cal_coeffs.attrs['p_of_e']
 
-        E_on = openloope_te_power(
-            cal_coeffs, data.sel(col=e_col + '_on'), p_of_e=p_of_e_calorimeter
+        E = openloope_te_power(
+            cal_coeffs,
+            data.sel(col=e_col + '_on')-data.sel(col=e_col + '_off_slow'),
+            p_of_e=p_of_e_calorimeter
         )
 
-        E_off = openloope_te_power(
-            cal_coeffs, data.sel(col=e_col + '_off'), p_of_e=p_of_e_calorimeter
-        )
-
-        outputs.update({'E_on': E_on, 'E_off': E_off})
+        outputs.update({'E': E})
 
     except AttributeError:
         print(
@@ -567,7 +579,7 @@ def parse(
         )
 
     outputs.update(
-        {'e_on': data.sel(col=e_col + '_on'), 'e_off': data.sel(col=e_col + '_off')}
+        {'e_on': data.sel(col=e_col + '_on'), 'e_off': data.sel(col=e_col + '_off_slow')}
     )
 
     outputs.update(
@@ -650,46 +662,76 @@ def parse(
         s_coeffs = configs.ThermoelectricFitCoefficients(
             signal_config['DUT_power']['coeffs']
         ).load()
-        s_e_col = signal_config['DUT_power']['e']['column']
-
+        dut_signals = signal_config['DUT_power']
+        s_e_col = dut_signals['e']['column']
+        
+        # thermometer model do a temperature correction
+        if 'therm_v' in dut_signals:
+            s_e_const = 1.0
+            therm_v_col = dut_signals['therm_v']['column']
+            therm_i_col = dut_signals['therm_i']['column']
+            therm_v = data.sel(col = therm_v_col + '_on')
+            therm_i = data.sel(col = therm_i_col + '_on')
+            temperature = therm_v/therm_i
+            outputs.update({'temperature_p2':temperature})
+            
+        # this is a polyomial fit
         # check if the slope of the sensor equals the slope of the
         # coefficients, if not then the thermoelectric sensor's RF
         # side has a negative polarity to the srf side and the voltage
-        # measured needs to be multiplied by -1.
+        # measured needs to be multiplied by -1.\
+        else:
+            temperature = None
+            
+            s_e_const = 1.0
+            measured_slope_sign = np.sign(data.nom.sel(col=s_e_col + '_on')[0])
+            coeff_sign = np.sign(s_coeffs.nom.sel(deg=1))
 
-        s_e_const = 1.0
-        measured_slope_sign = np.sign(data.nom.sel(col=s_e_col + '_on')[0])
-        coeff_sign = np.sign(s_coeffs.nom.sel(deg=1))
-        if measured_slope_sign != coeff_sign:
-            s_e_const = -1.0
+            if measured_slope_sign != coeff_sign:
+                s_e_const = -1.0
 
-        p2_on = openloope_te_power(
+
+        p2_slow = openloope_te_power(
             s_coeffs,
-            s_e_const * data.sel(col=s_e_col + '_on'),
-            p_of_e=s_coeffs.attrs['p_of_e'],
-        )
-
-        p2_off = openloope_te_power(
-            s_coeffs,
-            data.sel(col=s_e_col + '_off'),
+            s_e_const * (data.sel(col=s_e_col + '_on')-data.sel(col=s_e_col + '_off_slow')),
             p_of_e=cal_coeffs.attrs['p_of_e'],
+            temperature = temperature
         )
 
-        p2_slow = p2_on - p2_off
-
-        zeta = zeta_general(
-            data.sel(col=e_col + '_on'),
-            data.sel(col=e_col + '_off'),
-            cal_coeffs,
-            cal_coeffs.attrs['p_of_e'],
-            p2_slow,
-        )
+        # if a fast off is available, use that
+        try:
+            p2_fast = openloope_te_power(
+                s_coeffs,
+                s_e_const * (data.sel(col=s_e_col + '_on')-data.sel(col=s_e_col + '_off_fast')),
+                p_of_e=cal_coeffs.attrs['p_of_e'],
+                temperature = temperature
+            )
+            outputs.update({'e_p2_off_fast':data.sel(col=s_e_col + '_off_fast')})
+            zeta = zeta_general(
+                data.sel(col=e_col + '_on'),
+                data.sel(col=e_col + '_off_slow'),
+                cal_coeffs,
+                cal_coeffs.attrs['p_of_e'],
+                p2_slow,
+            )
+            
+        except KeyError:
+            print("No fast off analysis for {DUT_power}")
+            p2_fast = p2_slow
+    
+            zeta = zeta_general(
+                data.sel(col=e_col + '_on'),
+                data.sel(col=e_col + '_off_slow'),
+                cal_coeffs,
+                cal_coeffs.attrs['p_of_e'],
+                p2_fast,
+            )
 
         outputs.update(
             {
-                'e_p2_off': data.sel(col=s_e_col + '_off'),
                 'e_p2_on': data.sel(col=s_e_col + '_on'),
-                'p2_fast': p2_slow,
+                'e_p2_off_slow': data.sel(col=s_e_col + '_off_slow'),
+                'p2_fast': p2_fast,
                 'p2_slow': p2_slow,
                 'zeta': zeta,
             }
@@ -1089,3 +1131,4 @@ def generate_settled_runlist(
         output_name = os.path.basename(dr.metadata['settings_file']).split('.')[0]
         output_name += '_settled.csv'
     df.to_csv(output_dir / output_name, index=False)
+
