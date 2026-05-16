@@ -58,7 +58,7 @@ def _gui(no_console_stdout: bool = False):
         'analysis.',
         functions={
             'make_eta_repeatability_model': anl.make_eta_repeatability_model,
-            'make_k_coeffs': anl.fit_thermoelectric,
+            'fit_thermoelectric': anl.fit_thermoelectric,
             'make_eta': anl.make_eta,
             'dc_lead_correction': anl.dc_lead_correction,
             'apply_uncertainty_model':anl.apply_uncertainty_model,
@@ -66,7 +66,7 @@ def _gui(no_console_stdout: bool = False):
 
         },
         output_group_saveable=[
-            'make_k_coeffs',
+            'fit_thermoelectric',
             'make_eta',
             'make_eta_hist_model',
             'dc_lead_correction',

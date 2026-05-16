@@ -562,8 +562,11 @@ def read_v1(
     for file in runs:
         print(file)
         file = Path(file)
+        if not file.exists():
+            raise FileNotFoundError(f'no such thing as {file}')
         if file.is_dir():
             file = [f for f in file.glob('*metadata*')][0]
+            print('found', file, 'in', file.parent)
         try:
             config = [f for f in file.parent.glob('*settings*')][0]
         except IndexError:
