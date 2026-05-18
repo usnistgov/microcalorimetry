@@ -10,8 +10,8 @@
                 },      
                 "initial_wait":{
                     "type":"number",
-                    "description":"Warm up time before the measurement starts (in seconds).",
-                    "minimum":0
+                    "description":"Warm up time before the measurement starts (in seconds). Must be > 0 so data record has time to initialize instrument columns with a sample.",
+                    "minimum":0.5
                 },          
                 "minimum_wait":{
                     "type":"number",

@@ -1324,7 +1324,6 @@ class MicrocalorimeterRunner:
 
         """
         # determine if ready to advance
-
         self._batch_arm()
         self._batch_trigger()
         self.update_statistics()
@@ -1443,7 +1442,7 @@ class MicrocalorimeterRunner:
 
     def iterate(self):
         """
-        Pole instruments, record data, advance to next measurement if ready.
+        Poll instruments, record data, advance to next measurement if ready.
 
         Returns
         -------
@@ -1506,6 +1505,14 @@ class MicrocalorimeterRunner:
             self.change_source_state(
                 source_on=True, dBm=rf_power_setting, f_GHz=Frequency_GHz
             )
+            # fast measurements (like for powertables) sometimes need
+            # to add a delay here so everything has time to respond 
+            # to the change in signal.
+            try:
+                time.sleep(self.parameters['levelling_settings']['on_trigger_delay'])
+            except KeyError:
+                print("Cant find 'on trigger delay' in 'levelling_settings'. Defaulting to 2 seconds.")
+                time.sleep(0)
             self._end_of_iteration()
             return
 

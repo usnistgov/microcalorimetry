@@ -100,6 +100,15 @@ class GraphicsTabs(customtkinter.CTkTabview):
             if ol not in self.plots_dict:
                 print('Caught hidden tab, ', ol, ', closing it')
                 plt.close(ol)
+    
+    def add_hidden_tabs(self):
+        open_labels = plt.get_figlabels()
+        for ol in open_labels:
+            if ol not in self.plots_dict:
+                print('Caught hidden tab, ', ol, ',  it')
+                fig = plt.figure(ol)
+                name = str(plt.figure(ol).number)
+                self.add_plot(fig, name)
 
     def add_dummy_plot(self, name):
         fig = Figure(figsize=(5, 4), dpi=100)

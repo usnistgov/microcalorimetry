@@ -13,7 +13,13 @@
                 },
                 "off_trigger_delay": {
                     "type": "number",
-                    "description": "How long to wait before turning OFF RF source after triggering meters for fast off measurement.",
+                    "description": "How long to wait after turning OFF RF source before triggering meters for fast off measurement.",
+                    "minimum": 0,
+                    "examples": [2.0]
+                },
+                "on_trigger_delay": {
+                    "type": "number",
+                    "description": "How long to wait after turning ON RF source before triggering meters for fast off measurement.",
                     "minimum": 0,
                     "examples": [2.0]
                 },
