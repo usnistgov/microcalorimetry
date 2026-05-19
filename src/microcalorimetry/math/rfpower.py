@@ -32,6 +32,30 @@ def dcbias_eta_correction(
     return eta / (1 + epsDC)
 
 
+def compression_ratio(
+    power: xr.DataArray,
+    power_minus_1dB: xr.DataArray
+    )->xr.DataArray:
+    """
+    Calculate the compressionr ratio at power.
+
+    Parameters
+    ----------
+    power : xr.DataArray
+        Power (in Watts) measured by sensor.
+    power_minus_1dB : xr.DataArray
+        Power (in Watts) measured by sensor at source setting minus 1 dB.
+
+    Returns
+    -------
+    ratio: xr.DataArray
+        Compression ratio.
+    """
+    pdBm = 10*np.log10(power/1000)
+    pdBm_m1 = 10*np.log10(power_minus_1dB/1000)
+    return 1 - (pdBm - pdBm_m1)
+
+
 def openloop_thermoelectric_power(
     coeffs: xr.DataArray,
     e: xr.DataArray,

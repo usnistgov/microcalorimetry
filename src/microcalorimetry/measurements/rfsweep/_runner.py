@@ -24,6 +24,7 @@ from rminstr.instruments.KS_E8257D import SignalGenerator as KS_E8257D
 from rminstr.instruments.DP8200 import VoltageGenerator as DP8200
 from rminstr.instruments.Fluke_5720A import VoltageGenerator as Fluke_5720A_VoltageGenerator
 from rminstr.instruments.RS_NRP75TWG import RFPowerMeter as RS_NRP75TWG_RFPowerMeter
+import rminstr.instruments.RS_NRPxxTn as RS_NRPxxTn
 from rminstr.instruments.communications import GPIBInterface
 from rminstr.data_structures import (
     ExptParameters,
@@ -80,7 +81,12 @@ INSTRUMENT_CLASSES = {
         },
     #   "RS_ZVA67": {"VNA_source": RS_ZVA67_VNA},
     'DP8200': {'RF_amplitude_adjuster': DP8200},
-    'RS_NRP75TWG': {'power_meter': RS_NRP75TWG_RFPowerMeter},
+    'RS_NRP75TWG': {
+        'power_meter': RS_NRP75TWG_RFPowerMeter,
+        },
+    'RS_NRPxxTn': {
+        'power_meter': RS_NRPxxTn.RFPowerMeter
+        },
 }
 
 # these are the keys use to identify the physical meaning
@@ -925,7 +931,7 @@ class MicrocalorimeterRunner:
         if self.done:
             return
 
-        CONSOLE_MANAGER.wipe_to_origin()
+        # CONSOLE_MANAGER.wipe_to_origin()
         print('-' * 60)
         RJ = 30
 
@@ -1293,7 +1299,11 @@ class MicrocalorimeterRunner:
             state = instrument.query_state()
             if state in ['measuring', 'data_available']:
                 # print(name, 'in _fetch_data', instrument.query_state())
-                instrument.wait_until_data_available()
+                try:
+                    instrument.wait_until_data_available()
+                except Exception as e:
+                    msg = f'Caught waiting for {name} : {e}'
+                    raise type(e)(msg) from e
                 out_data = instrument.fetch_data()
                 
                 voltage = out_data['Voltage (V)']

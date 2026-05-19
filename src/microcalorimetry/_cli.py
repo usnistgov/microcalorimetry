@@ -46,6 +46,7 @@ def _gui(no_console_stdout: bool = False):
             'rfsweep.run': rfsweep._main.run_gui,
             'rfsweep.make_settled_runlist': rfsweep.generate_settled_runlist,
             'rfsweep.make_runlist_from_loss': rfsweep.runlist_from_loss,
+            'rfsweep.reduce_initial_power': rfsweep.reduce_initial_power,
         },
         output_group_saveable=[
             'dcsweep.parse_v0',
@@ -59,10 +60,12 @@ def _gui(no_console_stdout: bool = False):
         functions={
             'make_eta_repeatability_model': anl.make_eta_repeatability_model,
             'fit_thermoelectric': anl.fit_thermoelectric,
+            'compression_check': anl.compression_check,
             'make_eta': anl.make_eta,
             'dc_lead_correction': anl.dc_lead_correction,
             'apply_uncertainty_model':anl.apply_uncertainty_model,
             'review_eta': anl.review_eta,
+
 
         },
         output_group_saveable=[
@@ -70,7 +73,8 @@ def _gui(no_console_stdout: bool = False):
             'make_eta',
             'make_eta_hist_model',
             'dc_lead_correction',
-            'apply_uncertainty_model'
+            'apply_uncertainty_model',
+            'compression_check'
         ],
     )
 

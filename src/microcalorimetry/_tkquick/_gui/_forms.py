@@ -35,6 +35,7 @@ npdoc_typedict = {
     'configs.S11': Path,
     'microcalorimetry.configs.ParsedDCSweep': Path,
     'configs.ParsedRFSweep': Path,
+    'configs.RFSweep': Path,
     'configs.ThermoelectricFitCoefficients': Path,
 }
 
@@ -58,6 +59,7 @@ npdoc_defaults = {
     'configs.GC': 'path.(h5)',
     'configs.S11': 'path.(h5,dut)',
     'configs.ParsedRFSweep': 'path.(h5)',
+    'configs.RFSweep': 'file.h5/group',
     'configs.ThermoelectricFitCoefficients': 'path.(h5)',
     'list[Path]': 'paths/to/thing.ext, path/to/thing2.ext',
     'list[configs.EtaHistorical]': 'paths/to/thing.yml, path/to/thing.yml',
