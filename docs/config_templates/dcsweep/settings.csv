@@ -1,6 +1,5 @@
 ﻿key_0,key_1,key_2,value,type,comment
 # These are settings for the data record,,,,,
-record_settings,meas_name,,dcsweep,str,name of datarecord
 record_settings,maxlen,,5000,int,max length of data record
 record_settings,minlen,,0,int,min length of data record
 ,,,,,
@@ -25,6 +24,12 @@ serials,NVM_sensor,,SERIAL_NUMBER,str,Serial of NVM2
 ,,,,,
 # other run settings,,,,,
 monitor_thermopile,,,TRUE,bool,"if true, the NVM will be connected to and monitored. Otherwise the NVM settings will not be used"
+monitor_thermometer,,,FALSE,bool,"if true, will monitor thermometers."
+thermometer_source,,,25e-6,float, "amount to source into the thermometer if monitoring one"
+step_duration,,,5,float,"length of time per step. In seconds."
+first_sample_delay,,,0,float,"Delay between source adjusting and first sample."
+off_duration,,,5,float,"Duration of off measurements between samples. Set to zero to turn off."
+
 ,,,,,
 # fast period stair case settings,,,,,
 fast_settings,duration_per_level,,1,float,determines how long to measure immediatley after a a step

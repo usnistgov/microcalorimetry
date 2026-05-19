@@ -49,15 +49,19 @@ def check_dcsweep_template(template: Path):
             raise ValueError(f'{f.name} not in {dcsweep_allowed_files}')
         files.append(f)
     # now run checks
-    configs.DCSweepConfiguration(
-        template / 'settings.csv',
-    )
-    dcsweep.run(
-        template / 'settings.csv',
-        template / 'measlist.csv',
-        output_dir=IGNORED,
-        dry_run=True,
-    )
+    try:
+        configs.DCSweepConfiguration(
+            template / 'settings.csv',
+        )
+        dcsweep.run(
+            template / 'settings.csv',
+            template / 'measlist.csv',
+            output_dir=IGNORED,
+            dry_run=True,
+        )
+    except Exception as e:
+        msg = f'caught on {template} : {e}'
+        raise type(e)(msg) from e
 
 
 def check_rfsweep_template(template: Path):

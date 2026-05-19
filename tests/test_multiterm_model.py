@@ -499,3 +499,7 @@ def test_thermal_weights_test(make_plots: bool = False):
         figs[0].suptitle(
             'C24N118 calculated using KSTE (w/ Mismatch) +TF $k_{ci} 4-Terms$'
         )
+
+
+if __name__ == '__main__':
+    test_thermal_weights_test(make_plots=True)

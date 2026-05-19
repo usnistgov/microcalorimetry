@@ -21,6 +21,7 @@ import inspect
 from microcalorimetry._tkquick.dtypes import Folder
 from typing import TYPE_CHECKING, Mapping
 from datetime import timedelta
+
 if TYPE_CHECKING:
     pass
 import microcalorimetry.configs as configs
@@ -39,18 +40,17 @@ def time_delta(t, t0, unit: str):
         return tdel
 
 
-
 class MeasurementManager:
     def __init__(
         self,
-        smus: Mapping[str,Instrument],
+        smus: Mapping[str, Instrument],
         thermometers: Mapping[str, Instrument],
-        nvms: Mapping[str,Instrument],
-        interface: GPIBInterface
-        ):
-        self.smus: Mapping[str,Instrument] = smus
-        self.thermometers: Mapping[str,Instrument] = thermometers
-        self.nvms: Mapping[str,Instrument] = nvms
+        nvms: Mapping[str, Instrument],
+        interface: GPIBInterface,
+    ):
+        self.smus: Mapping[str, Instrument] = smus
+        self.thermometers: Mapping[str, Instrument] = thermometers
+        self.nvms: Mapping[str, Instrument] = nvms
         self.instruments: Mapping[Instrument] = smus | thermometers | nvms
         self.interface: GPIBInterface = interface
 
@@ -61,34 +61,32 @@ class MeasurementManager:
         # clean up data outputs
         print('shutting down')
         # turn off things sourceing
-        for smu in (list(self.smus.values()) + list(self.thermometers.values())):
+        for smu in list(self.smus.values()) + list(self.thermometers.values()):
             smu.setup(source='off')
         for instrument in self.instruments.values():
             instrument.close()
 
-    def update_smu_dr(self, dr: ActiveRecord, data: dict, timestamp: float, name: str = 'SMU'):
+    def update_smu_dr(
+        self, dr: ActiveRecord, data: dict, timestamp: float, name: str = 'SMU'
+    ):
         # update fast data while smu is running slow
-        dr.update(
-            f'V_{name} (V)', data['Voltage (V)'][0], timestamp
-        )
-        dr.update(
-            f'I_{name} (A)', data['Current (A)'][0], timestamp
-        )
+        dr.update(f'V_{name} (V)', data['Voltage (V)'][0], timestamp)
+        dr.update(f'I_{name} (A)', data['Current (A)'][0], timestamp)
 
     def arm_all(self):
         for i in self.instruments.values():
             i.arm()
 
     def measure(
-            self,
-            dr: ActiveRecord,
-            source_value: float,
-            first_sample_delay: float,
-            step_duration: float,
-            print_label: str = 'Normal Mesurement'
-        ):
+        self,
+        dr: ActiveRecord,
+        source_value: float,
+        first_sample_delay: float,
+        step_duration: float,
+        print_label: str = 'Normal Mesurement',
+    ):
         step_count = 0
-        step_start = time.time() # sample until the step is done
+        step_start = time.time()  # sample until the step is done
         while (time.time() - step_start < step_duration) or (step_count < 1):
             # First sample of step delay
             # by a bit
@@ -102,66 +100,70 @@ class MeasurementManager:
             else:
                 for smu in self.smus.values():
                     smu.setup(
-                        source_level = source_value,
-                        )
+                        source_level=source_value,
+                    )
                 self.arm_all()
                 for smu in self.smus.values():
                     smu.trigger()
                 t_adjust = time.time()
                 time.sleep(first_sample_delay)
-                t_trigger = self.interface.group_trigger(*self.nvms.values(),*self.thermometers.values())
+                t_trigger = self.interface.group_trigger(
+                    *self.nvms.values(), *self.thermometers.values()
+                )
 
-            step_count +=1
+            step_count += 1
 
             # collect the samples and add to record
             for nvm_name, nvm in self.nvms.items():
-                nvm.wait_until_data_available(timeout = 10)
+                nvm.wait_until_data_available(timeout=10)
                 data = nvm.fetch_data()
-                dr.update(
-                    f'V_{nvm_name} (V)',
-                    data['Voltage (V)'][0],
-                    t_trigger
-                )
+                dr.update(f'V_{nvm_name} (V)', data['Voltage (V)'][0], t_trigger)
 
             for smu_name, smu in self.smus.items():
-                smu.wait_until_data_available(timeout = 10)
+                smu.wait_until_data_available(timeout=10)
                 heater_data = smu.fetch_data()
-                self.update_smu_dr(dr, heater_data,timestamp= t_trigger, name = smu_name)
+                self.update_smu_dr(dr, heater_data, timestamp=t_trigger, name=smu_name)
 
             for thermometer_name, thermometer in self.thermometers.items():
-                thermometer.wait_until_data_available(timeout = 10)
+                thermometer.wait_until_data_available(timeout=10)
                 self.update_smu_dr(
                     dr,
                     thermometer.fetch_data(),
-                    timestamp= t_trigger,
-                    name = thermometer_name
+                    timestamp=t_trigger,
+                    name=thermometer_name,
                 )
 
             dr.update('SOURCE_SETTING (A)', source_value, t_trigger)
-            dr.update('time_since_source_adjust (s)',t_trigger - t_adjust, t_trigger)
-
+            dr.update('time_since_source_adjust (s)', t_trigger - t_adjust, t_trigger)
 
             # print record state results:
-            time_left_in_step = max(step_duration - (time.time() - step_start),0)
+            time_left_in_step = max(step_duration - (time.time() - step_start), 0)
             print('')
             print(f'Status {print_label}')
-            print( '====================')
-            print(' ','time left in step: ', timedelta(seconds=time_left_in_step))
-            print(' ','time since adjust: ', dr['time_since_source_adjust (s)'])
+            print('====================')
+            print(' ', 'time left in step: ', timedelta(seconds=time_left_in_step))
+            print(' ', 'time since adjust: ', dr['time_since_source_adjust (s)'])
             print('Heater')
             print('------')
-            print(' ',f'SOURCE_SETTING (A): ', dr[f'SOURCE_SETTING (A)'])
-            print(' ',f'V_SMU (V): ', dr[f'V_SMU (V)'])
-            print(' ',f'I_SMU (A): ', dr[f'I_SMU (A)'])
-            print(' ',f'P SMU (mW): ', dr[f'V_SMU (V)']*dr[f'I_SMU (A)']*1000)
-            print(' ',f'R SMU (kOhms): ', dr[f'V_SMU (V)']/dr[f'I_SMU (A)']/1000)
+            print(' ', f'SOURCE_SETTING (A): ', dr[f'SOURCE_SETTING (A)'])
+            print(' ', f'V_SMU (V): ', dr[f'V_SMU (V)'])
+            print(' ', f'I_SMU (A): ', dr[f'I_SMU (A)'])
+            print(' ', f'P SMU (mW): ', dr[f'V_SMU (V)'] * dr[f'I_SMU (A)'] * 1000)
+            print(' ', f'R SMU (kOhms): ', dr[f'V_SMU (V)'] / dr[f'I_SMU (A)'] / 1000)
             for thermometer_name in self.thermometers:
                 print('----------------')
-                print(' ',f'R {thermometer_name} (kOhms): ', dr[f'V_{thermometer_name} (V)']/dr[f'I_{thermometer_name} (A)']/1000)
+                print(
+                    ' ',
+                    f'R {thermometer_name} (kOhms): ',
+                    dr[f'V_{thermometer_name} (V)']
+                    / dr[f'I_{thermometer_name} (A)']
+                    / 1000,
+                )
             for nvm_name in self.nvms:
                 print('----------------')
-                print(' ',f'V_{nvm_name} (V): ', dr[f'V_{nvm_name} (V)'])
+                print(' ', f'V_{nvm_name} (V): ', dr[f'V_{nvm_name} (V)'])
             # input('pause...:')
+
 
 def run(
     settings: str,
@@ -199,9 +201,6 @@ def run(
 
     """
 
-
-
-
     # read run settings
     ep = ExptParameters(settings, measlist)
 
@@ -210,17 +209,18 @@ def run(
         ep2 = ExptParameters(settings)
         ep2 = configs.DCSweepConfiguration(ep2.config)
 
-
     # set up an interface
     interface_number = [i.split(':')[0][-1] for i in ep.config['addresses'].values()][0]
-    gpib_intfc = GPIBInterface(f'GPIB{interface_number}::INTFC')
 
-    print(f"Using GPIB{interface_number} interface")
-
-
+    print(f'Using GPIB{interface_number} interface')
 
     # setup a data record
-    columns = ['V_SMU (V)', 'I_SMU (A)', 'SOURCE_SETTING (A)', 'time_since_source_adjust (s)']
+    columns = [
+        'V_SMU (V)',
+        'I_SMU (A)',
+        'SOURCE_SETTING (A)',
+        'time_since_source_adjust (s)',
+    ]
 
     # create a column for each nvm
     nvm_names = ep.config['nvm_names']
@@ -229,7 +229,10 @@ def run(
 
     monitor_thermometer = ep.config['monitor_thermometer']
     # create a column for each nvm
-    thermometer_names = ep.config['thermometer_names']
+    try:
+        thermometer_names = ep.config['thermometer_names']
+    except KeyError:
+        thermometer_names = []
     if type(thermometer_names) is str:
         thermometer_names = [thermometer_names]
     # for thermometer_name in thermometer_names:
@@ -239,8 +242,6 @@ def run(
     columns += [f'V_{name} (V)' for name in nvm_names]
     columns += [f'I_{name} (A)' for name in thermometer_names]
     columns += [f'V_{name} (V)' for name in thermometer_names]
-
-
 
     output_dir = path.new_dir(output_dir, name)
 
@@ -255,6 +256,7 @@ def run(
     if dry_run:
         return
 
+    gpib_intfc = GPIBInterface(f'GPIB{interface_number}::INTFC')
     # active record will output data if measurement stops for whatever reason
     # and knows to make local backups if something goes wrong
     with ActiveRecord(
@@ -281,29 +283,37 @@ def run(
                 _thermometer = importer.import_instrument(
                     ep.config['models'][thermometer_name], 'SMUSourceSweep'
                 )
-                thermometers.append(_thermometer(ep.config['addresses'][thermometer_name]))
-                thermometers[-1].initial_setup(**ep.config['initial_setup'][thermometer_name])
+                thermometers.append(
+                    _thermometer(ep.config['addresses'][thermometer_name])
+                )
+                thermometers[-1].initial_setup(
+                    **ep.config['initial_setup'][thermometer_name]
+                )
                 thermometers[-1].setup(**ep.config['setup'][thermometer_name])
                 # set to 2 values so that it is the same as when the SMU
                 # sweeps
-                print(thermometer_name, 'src=',ep.config['thermometer_source'])
-                thermometers[-1].setup(source_level = ep.config['thermometer_source'], source = 'on')
-        
+                print(thermometer_name, 'src=', ep.config['thermometer_source'])
+                thermometers[-1].setup(
+                    source_level=ep.config['thermometer_source'], source='on'
+                )
+
         # Here is the measurement loop
         # measurement manager shuts things down if measurmeent
         # stops for whatever reason
         t0 = time.time()
         with MeasurementManager(
-                smus = {'SMU':smu},
-                thermometers = {therm_name:therm for therm_name, therm in zip(thermometer_names, thermometers)},
-                nvms = {nvm_name:nvm for nvm_name, nvm in zip(nvm_names, nvms)},
-                interface=gpib_intfc
-                ) as mm:
+            smus={'SMU': smu},
+            thermometers={
+                therm_name: therm
+                for therm_name, therm in zip(thermometer_names, thermometers)
+            },
+            nvms={nvm_name: nvm for nvm_name, nvm in zip(nvm_names, nvms)},
+            interface=gpib_intfc,
+        ) as mm:
             # i'm initializing the SMU inside the context manager
             # so if something goes wrong the context manager can shut it off
             smu.initial_setup(**ep.config['initial_setup']['SMU'])
-            smu.setup(**ep.config['setup']['SMU'], source= 'on')
-
+            smu.setup(**ep.config['setup']['SMU'], source='on')
 
             # initialize measurement loop
             ep.advance()
@@ -314,18 +324,18 @@ def run(
                 if ep.config['off_duration'] > 0:
                     mm.measure(
                         dr,
-                        source_value = 0.0,
-                        first_sample_delay = ep.config['first_sample_delay'],
+                        source_value=0.0,
+                        first_sample_delay=ep.config['first_sample_delay'],
                         step_duration=ep.config['off_duration'],
-                        print_label = 'Zero Measurement'
+                        print_label='Zero Measurement',
                     )
                 # measure sample
                 mm.measure(
                     dr,
-                    source_value = ep.config['SOURCE_SETTING (A)'],
-                    first_sample_delay = ep.config['first_sample_delay'],
+                    source_value=ep.config['SOURCE_SETTING (A)'],
+                    first_sample_delay=ep.config['first_sample_delay'],
                     step_duration=ep.config['step_duration'],
-                    print_label = 'Normal Sample'
+                    print_label='Normal Sample',
                 )
 
                 dr.batch_update()
@@ -429,7 +439,7 @@ def parse_v0(
     thermometer_instr_name: str = 'Thermometer',
     zero_threshhold: float = 1e-6,
     transition_threshhold_watts: float = 0.1e-4,
-    make_plots: bool = True
+    make_plots: bool = True,
 ) -> tuple[configs.ParsedDCSweep, list[plt.Figure]]:
     r"""
     Load and analyze the initial draft of a DC sweep run.
@@ -490,19 +500,19 @@ def parse_v0(
         settings = meta_dir / 'settings.csv'
     if measlist is None:
         measlist = meta_dir / 'measlist.csv'
-        
+
     # original draft of the measurement
-    
-    e, heater_v,heater_i, fig = staircase_analysis.legacy_to_parsed_dc(
+
+    e, heater_v, heater_i, fig = staircase_analysis.legacy_to_parsed_dc(
         metadata_path=str(Path(metadata)),
         settings=str(Path(settings)),
         meas_list=str(Path(measlist)),
-        on_time_window = on_time_window,
-        off_time_window = off_time_window,
-        heater_instr_name = heater_instr_name,
-        sensor_instr_name = sensor_instr_name,
-        zero_threshhold = zero_threshhold,
-        transition_threshhold_watts = transition_threshhold_watts,
+        on_time_window=on_time_window,
+        off_time_window=off_time_window,
+        heater_instr_name=heater_instr_name,
+        sensor_instr_name=sensor_instr_name,
+        zero_threshhold=zero_threshhold,
+        transition_threshhold_watts=transition_threshhold_watts,
     )
 
     parsed = {}
@@ -529,13 +539,13 @@ def parse_v0(
 def parse_v1(
     metadata: list[Path],
     e_col: str,
-    on_min_wait_time:float,
+    on_min_wait_time: float,
     on_max_wait_time: float,
     off_min_wait_time: float,
     off_max_wait_time: float,
     min_pwr_setting: float,
-    throw_away_min_time: float
-    ) -> tuple[configs.ParsedDCSweep, list[plt.Figure]]:
+    throw_away_min_time: float,
+) -> tuple[configs.ParsedDCSweep, list[plt.Figure]]:
     """
     Parse version 1 of a DC sweep calibration measurement.
 
@@ -572,21 +582,20 @@ def parse_v1(
 
     """
 
-
     # distinguish between list of paths and single path
     if isinstance(metadata, str) or isinstance(metadata, Path):
         metadata = [metadata]
 
     # run through parser to extract parameters from the timeseries
     parsed, figs = staircase_analysis.parse_v1(
-        metadata = metadata,
-        e_col = e_col,
-        throw_away_min_time = throw_away_min_time,
-        on_min_wait_time = on_min_wait_time,
-        on_max_wait_time = on_max_wait_time,
-        off_min_wait_time = off_min_wait_time,
-        off_max_wait_time = off_max_wait_time,
-        min_pwr_setting = min_pwr_setting,
+        metadata=metadata,
+        e_col=e_col,
+        throw_away_min_time=throw_away_min_time,
+        on_min_wait_time=on_min_wait_time,
+        on_max_wait_time=on_max_wait_time,
+        off_min_wait_time=off_min_wait_time,
+        off_max_wait_time=off_max_wait_time,
+        min_pwr_setting=min_pwr_setting,
     )
 
     # attatch metadata
@@ -594,16 +603,17 @@ def parse_v1(
         output.attrs['metadata'] = str([str(p) for p in metadata])
     return parsed, figs
 
+
 # _parse_cli = clitools.format_from_npdoc(parse)(_parse_cli)
 
 
 def run_gui(
-        settings: Path,
-        measlist: Path,
-        output_dir: Folder,
-        name: str = 'dcsweep',
-        dry_run: bool = False
-        ):
+    settings: Path,
+    measlist: Path,
+    output_dir: Folder,
+    name: str = 'dcsweep',
+    dry_run: bool = False,
+):
     """
     dcsweep runner GUI.
 
@@ -640,7 +650,7 @@ def run_gui(
 @click.argument('settings', type=Path)
 @click.argument('measlist', type=Path)
 @click.argument('output_dir', type=Path)
-@click.option('--name',type = str, default = 'dcsweep')
+@click.option('--name', type=str, default='dcsweep')
 @click.option('--dry-run', is_flag=True, default=False)
 def _run_cli(*args, **kwargs):
     print(args)
@@ -648,4 +658,3 @@ def _run_cli(*args, **kwargs):
 
 
 _run_cli = clitools.format_from_npdoc(run)(_run_cli)
-

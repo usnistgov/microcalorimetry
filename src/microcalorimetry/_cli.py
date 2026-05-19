@@ -25,6 +25,7 @@ def _gui(no_console_stdout: bool = False):
     import microcalorimetry.measurements as measurements
     import microcalorimetry.analysis as anl
     import microcalorimetry.export as export
+    from pathlib import Path
 
     app = GUI(
         'microcalorimetry',
@@ -32,6 +33,7 @@ def _gui(no_console_stdout: bool = False):
         stderr_gui=no_console_stdout,
         right_sidebar=HDF5viewer,
         right_sidebar_kwargs=dict(width=350),
+        icon_path=Path(__file__).parent / 'graphics/icon.ico',
     )
 
     app.add_function_tab(
@@ -48,11 +50,7 @@ def _gui(no_console_stdout: bool = False):
             'rfsweep.make_runlist_from_loss': rfsweep.runlist_from_loss,
             'rfsweep.reduce_initial_power': rfsweep.reduce_initial_power,
         },
-        output_group_saveable=[
-            'dcsweep.parse_v0',
-            'dcsweep.parse_v1',
-            'rfsweep.parse'
-            ],
+        output_group_saveable=['dcsweep.parse_v0', 'dcsweep.parse_v1', 'rfsweep.parse'],
     )
 
     app.add_function_tab(
@@ -63,10 +61,8 @@ def _gui(no_console_stdout: bool = False):
             'compression_check': anl.compression_check,
             'make_eta': anl.make_eta,
             'dc_lead_correction': anl.dc_lead_correction,
-            'apply_uncertainty_model':anl.apply_uncertainty_model,
+            'apply_uncertainty_model': anl.apply_uncertainty_model,
             'review_eta': anl.review_eta,
-
-
         },
         output_group_saveable=[
             'fit_thermoelectric',
@@ -74,7 +70,7 @@ def _gui(no_console_stdout: bool = False):
             'make_eta_hist_model',
             'dc_lead_correction',
             'apply_uncertainty_model',
-            'compression_check'
+            'compression_check',
         ],
     )
 

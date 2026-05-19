@@ -22,10 +22,10 @@ models,NVM,,HP34420A,str,Voltmeter model with a 'voltmeter' functionality.
 models,NVM_sensor,,HP34420A,str,Voltmeter model with a 'voltmeter' functionality.
 ,,,,,
 # serial and model information goes here,,,,,
-serials,SMU,,2634,str,serial of SMU
+serials,SMU,,XXXX,str,serial of SMU
 serials,Thermometer,,4441,str,serial of SMU
-serials,NVM,,0711,str,serial of NVM
-serials,NVM_sensor,,0723,str,Serial of NVM_sensor
+serials,NVM,,XXXX,str,serial of NVM
+serials,NVM_sensor,,XXXX,str,Serial of NVM_sensor
 ,,,,,
 # other run settings,,,,,
 monitor_thermopile,,,TRUE,bool,"if true, the NVM will be connected to and monitored. Otherwise the NVM settings will not be used"

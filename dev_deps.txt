@@ -285,6 +285,7 @@ packaging==25.0 \
     #   ipykernel
     #   pytest
     #   sphinx
+    #   spyder-kernels
 parso==0.8.5 \
     --hash=sha256:034d7354a9a018bdce352f48b2a8a450f05e9d6ee85db84764e9b6bd96dafe5a \
     --hash=sha256:646204b5ee239c396d040b90f9e272e9a8017c630092bf59980beb62fd033887
@@ -538,9 +539,9 @@ sphinxcontrib-serializinghtml==2.0.0 \
     --hash=sha256:6e2cb0eef194e10c27ec0023bfeb25badbbb5868244cf5bc5bdc04e4464bf331 \
     --hash=sha256:e9d912827f872c029017a53f0ef2180b327c3f7fd23c87229f7a8e8b70031d4d
     # via sphinx
-spyder-kernels==3.0.5 \
-    --hash=sha256:9cc808e0ec4426b9ba911128e221fa2234e6c8d6e08526132e90112ff9c2bb7c \
-    --hash=sha256:ff7a1e832eed723575882b86c81c8f82ed8d6929c05c399bac2771d605578cd8
+spyder-kernels==3.1.4 \
+    --hash=sha256:0267bc5fc09def7df4d1278d1408929e09519b377e4aab4498a2df2c694af4af \
+    --hash=sha256:100c8c85f963f41879ceb39ebd1482832cac09f2dc46a8d5d5b7764dd710c5cc
 stack-data==0.6.3 \
     --hash=sha256:836a778de4fec4dcd1dcd89ed8abff8a221f58308462e1c4aa2a3cf30148f0b9 \
     --hash=sha256:d5558e0c25a4cb0853cddad3d77da9891a08cb85dd9f9f91b9f8cd66e511e695

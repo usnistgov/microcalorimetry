@@ -34,6 +34,7 @@ HISTORICAL_DATA = configs.EtaHistorical(
 def test_C24N118_from_scratch(
     resave_reference_results: Path = False,
     mutable_dir='C24N118',
+    make_plots: bool = False,
 ):
     """
     This function calculates the Correction factor of C23N118 from
@@ -58,10 +59,10 @@ def test_C24N118_from_scratch(
 
     # parse the voltage steps
     metadata = SRUNS / 'C24S002_k_c000_r000' / 'voltage_stair_case_metadata.csv'
-    dc_parsed, figures = dcsweep.parse(
+    dc_parsed, figures = dcsweep.parse_v0(
         metadata=metadata,
         measlist=metadata.parents[0] / 'meas_list.csv',
-        make_plots=False,
+        transition_threshhold_watts=1e-4,
     )
     print(dc_parsed.keys())
     # make sensitivity coeffs for each NVM column
@@ -680,8 +681,8 @@ if __name__ == '__main__':
     import matplotlib as mpl
     import matplotlib.pyplot as plt
 
-    mpl.use('QtAgg')
-    fig = test_C24N118_from_scratch(resave_reference_results=False)
+    # mpl.use('QtAgg')
+    fig = test_C24N118_from_scratch(resave_reference_results=False, make_plots=True)
 
     fig = test_S24P02_from_scratch(
         # dont switch this to True unless you want to override reference data.
