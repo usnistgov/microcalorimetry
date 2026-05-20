@@ -63,3 +63,4 @@ measurement_description,RF_source_name,,,RF Source Name,str,name of the source b
 measurement_description,connect_number,,,0,int,connect number of internal sensor for calorimetry measurements. Corresponds to experimental data directory.
 measurement_description,lead_resistance,,,200,float,lead resistance in ohms. For header.
 measurement_description,DC_source_type,,,NTC_TYPE_IV,str,"options are: PTC_SMU, NTC_SMU, NTC_TYPE_IV, PTC_TYPE_IV"
+measurement_description,RF_source_type,,,signal_generator,str,"options are: signal_generator, VNA"

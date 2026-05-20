@@ -1,0 +1,17 @@
+key_0,key_1,key_2,key_3,value,type,comment
+signal_config,DUT_power,type,,thermoelectric,str,
+signal_config,DUT_power,units,,W,str,
+signal_config,DUT_power,can_level,,TRUE,bool,
+signal_config,DUT_power,coeffs,,0.2126,float,
+signal_config,DUT_power,input_signals,,e,str
+signal_config,DUT_power,input_signals,,therm_i,str
+signal_config,DUT_power,input_signals,,therm_v,str
+signal_config,DUT_power,e,units,V,str
+signal_config,DUT_power,e,column,NVM_sensor_volts,str
+signal_config,DUT_power,e,instrument,NVM1,str
+signal_config,DUT_power,therm_i,units,A,str
+signal_config,DUT_power,therm_i,column,therm_amps,str
+signal_config,DUT_power,therm_i,instrument,SMU0,str
+signal_config,DUT_power,therm_v,units,V,str
+signal_config,DUT_power,therm_v,column,therm_volts,str
+signal_config,DUT_power,therm_v,instrument,SMU0,str

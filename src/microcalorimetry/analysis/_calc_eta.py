@@ -3,7 +3,7 @@ from rmellipse.uobjects import RMEMeas
 
 # local packages
 from microcalorimetry.math import rfpower, vna, numbers, fitting, rmemeas_extras
-from microcalorimetry._helpers._collections import try_sel, mean_unique_values
+from microcalorimetry._helpers._collections import try_sel
 import microcalorimetry.configs as configs
 import microcalorimetry._gwex as _gwex
 import warnings
@@ -454,7 +454,7 @@ def make_eta(
     basic = RMEProp(sensitivity=uncertainties)
 
     effective_efficiency = basic.propagate(rfpower.effective_efficiency)
-    mean_unique = basic.propagate(mean_unique_values)
+    mean_unique = basic.propagate(numbers.mean_unique_values)
 
     # load the models into memory from the containers
     parsed_rfsweep = configs.ParsedRFSweep(parsed_rfsweep)

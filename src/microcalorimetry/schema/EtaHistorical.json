@@ -1,5 +1,5 @@
 {
-    "title": "Historical Eta Measurments List",
+    "title": "Historical Eta Measurements List",
     "type": "object",
     "description":"Describes historical Eta measurements to be used when calculating/reviewing Eta measurements.",
     "properties": {

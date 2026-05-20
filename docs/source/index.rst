@@ -82,9 +82,17 @@ Table of Contents
    :maxdepth: 3
 
    package_structure/index.rst
-   schemas/index.rst
-   auto_examples/index.rst
+   configuring_measurements/index.rst
+   python_dtypes.rst
    cli.rst
+   config_ref/index.rst
+
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
+
+
 
 
 * :ref:`genindex`

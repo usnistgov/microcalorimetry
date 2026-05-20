@@ -2,7 +2,7 @@
     "definitions": {
         "DataModelContainer": {
             "title": "Data DataModel Container",
-            "description": "Generic container all other containers inherity from. Either a path with a group, or a dataset itself.",
+            "description": "Generic container all other containers inherit from. Either a path with a group, or a dataset itself.",
             "examples":["path/to/data.file","path/to/data.hdf5/path/to/group"]
         },
         "additionalProperties": false

@@ -1,0 +1,13 @@
+key_0,key_1,key_2,key_3,value,type,comment
+signal_config,RF_source_power,type,,RF_source,str, Type of signal for RF source is always RF source
+signal_config,RF_source_power,units,,W,str, units always W
+signal_config,RF_source_power,can_level,,FALSE,bool, whether signal can be levelled to
+signal_config,RF_source_power,input_signals,,vdc,str, input voltage signal from AM
+signal_config,RF_source_power,input_signals,,power,str, commanded power over GPIB
+signal_config,RF_source_power,power,units,dBm,str, units of input power signal over GPIB always dBm
+signal_config,RF_source_power,power,column,rf_power_setting,str, column where power originates
+signal_config,RF_source_power,power,instrument,RF_source,str, instrument associated with column
+signal_config,RF_source_power,vdc,units,V,str, units of input AM voltage signal
+signal_config,RF_source_power,vdc,column,AM_voltage,str, column storing the AM voltage
+signal_config,RF_source_power,vdc,instrument,RF_amplitude_adjuster,str, instrument associated with AM voltage signal
+

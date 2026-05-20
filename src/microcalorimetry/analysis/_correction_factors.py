@@ -8,8 +8,8 @@ from rmellipse.uobjects import RMEMeas
 from typing import Iterable
 
 # local packages
-from microcalorimetry.math import rfpower, fitting, rmemeas_extras
-from microcalorimetry._helpers._collections import try_sel, mean_unique_values, concat
+from microcalorimetry.math import rfpower, fitting, rmemeas_extras, numbers
+from microcalorimetry._helpers._collections import try_sel, concat
 import microcalorimetry.configs as configs
 import microcalorimetry._gwex as _gwex
 import xarray as xr
@@ -177,6 +177,7 @@ def make_correction_factor(
     inputs.pop('gc_regressor_rows')
 
     basic = RMEProp(sensitivity=not nominals)
+    
 
     calc_delta_power = basic.propagate(rfpower.calorimetric_power_delta_general)
     calc_te_power = basic.propagate(rfpower.openloop_thermoelectric_power)
@@ -184,7 +185,7 @@ def make_correction_factor(
     calc_row = basic.propagate(rfpower.gc_device_row)
     calc_gc = basic.propagate(rfpower.gc_correction_factor)
     concat_along = basic.propagate(concat)
-    mean_unq = basic.propagate(mean_unique_values)
+    mean_unq = basic.propagate(numbers.mean_unique_values)
     polyderive = basic.propagate(fitting.polyderive)
     polyval = basic.propagate(fitting.polyval2)
 

@@ -48,7 +48,7 @@
           "type":["string","array"],
           "items":{
             "type":"string",
-            "enum":["e", "vdc", "idc", "power"]
+            "enum":["e", "vdc", "idc", "power","therm_i","therm_v"]
           }
         }
       },
@@ -74,7 +74,16 @@
         },
         "coeffs": {},
         "e": {
-          "$ref": "RFSweepSignalConfig.json#/definitions/RecordedQuantity"
+          "$ref": "RFSweepSignalConfig.json#/definitions/RecordedQuantity",
+          "description": "Thermopile output voltage."
+        },
+        "therm_v": {
+          "$ref": "RFSweepSignalConfig.json#/definitions/RecordedQuantity",
+          "description": "Voltage associated with the thermometer (optional)."
+        },
+        "therm_i": {
+          "$ref": "RFSweepSignalConfig.json#/definitions/RecordedQuantity",
+          "description": "Current of the thermometer  (optional)."
         }
       },
       "required": [

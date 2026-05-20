@@ -97,7 +97,7 @@ class AnalysisStageFrame(customtkinter.CTkTabview):
                 fields[p.name] = field
 
         if len(optional_args) > 0:
-            toggleframe = ToggleFrame(frame, i + 2, 'Fields with Defaults (Optional)')
+            toggleframe = ToggleFrame(frame, i + 2, 'Fields with Defaults')
 
             for j, p in enumerate(optional_args):
                 default = defaults[p.name]

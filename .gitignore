@@ -4,6 +4,7 @@
 # ignoring any hdf5 files with test marker, to save space. They are massive
 *_test.hdf5
 htmlcov/
+uv.lock
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

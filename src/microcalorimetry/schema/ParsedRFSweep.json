@@ -12,6 +12,10 @@
                     "$ref": "RFSweep.json#/definitions/RFSweep",
                     "description": "Calorimeter thermopile voltages in RF on state."
                 },
+                "RF_source_on":{
+                    "$ref": "RFSweep.json#/definitions/RFSweep",
+                    "description": "Final value of the RF source."
+                },
                 "E_off": {
                     "$ref": "RFSweep.json#/definitions/RFSweep",
                     "description": "Power inferred by the thermopile in calorimeters RF off state."
@@ -65,7 +69,7 @@
                 "e_off",
                 "e_on"
             ],
-            "additionalProperties":false
+            "additionalProperties":true
         }
     }
 }

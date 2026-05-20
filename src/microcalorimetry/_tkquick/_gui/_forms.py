@@ -35,6 +35,7 @@ npdoc_typedict = {
     'configs.S11': Path,
     'microcalorimetry.configs.ParsedDCSweep': Path,
     'configs.ParsedRFSweep': Path,
+    'configs.RFSweep': Path,
     'configs.ThermoelectricFitCoefficients': Path,
 }
 
@@ -58,6 +59,7 @@ npdoc_defaults = {
     'configs.GC': 'path.(h5)',
     'configs.S11': 'path.(h5,dut)',
     'configs.ParsedRFSweep': 'path.(h5)',
+    'configs.RFSweep': 'file.h5/group',
     'configs.ThermoelectricFitCoefficients': 'path.(h5)',
     'list[Path]': 'paths/to/thing.ext, path/to/thing2.ext',
     'list[configs.EtaHistorical]': 'paths/to/thing.yml, path/to/thing.yml',
@@ -92,7 +94,7 @@ def get_form_field(master, row, npparam, default, level=0):
     # print(fieldname, type_str, dtype)
 
     if dtype is str or dtype is float or dtype is int:
-        if 'Options Format' in p.desc and '-' * 14 in p.desc:
+        if 'Options Format' in ' '.join(p.desc) and '-' * 14 in ' '.join(p.desc):
             field = DropDownBox(master, row, npparam, default)
 
         else:
@@ -278,10 +280,12 @@ class DropDownBox:
 
         # build form fields
         desc = npparam.desc
+        print('desc is', type(desc))
         i = None
         self.fields = {}
         for di, d in enumerate(desc):
-            if desc[di] == 'Options Format':
+            # print(d)
+            if desc[di].lstrip() == 'Options Format':
                 i = di + 3
         if i is None:
             raise Exception('Bad Formatting on Options Format Field DOC String')
@@ -364,9 +368,19 @@ class ToggleFrame(ctk.CTkFrame):
         self.label.grid(row=0, column=0, sticky='e', padx=(0, 10))
 
         self.toggle_button = ctk.CTkButton(
-            self.label_frame, text='>', command=self._toggle_open_close, width=20
+            self.label_frame, text='collapse', command=self._toggle_open_close, width=20
         )
         self.toggle_button.grid(row=0, column=1, sticky='ne', padx=0)
+    
+    def collapse(self):
+        child = self.form_frame
+        child.grid_remove()
+        self.toggle_button.configure(text='uncollapse')
+    
+    def uncollapse(self):
+        child = self.form_frame
+        child.grid()
+        self.toggle_button.configure(text='  collapse')
 
     def _toggle_open_close(self):
         """
@@ -376,17 +390,16 @@ class ToggleFrame(ctk.CTkFrame):
         """
         child = self.form_frame
         if child.winfo_viewable():
-            child.grid_remove()
-            self.toggle_button.configure(text='>')
+            self.collapse()
         else:
-            child.grid()
-            self.toggle_button.configure(text='V')
-
+            self.uncollapse()
 
 class DictionairyEntry(ctk.CTkFrame):
     def __init__(self, master, row, npparam):
         super().__init__(master)
         self.grid(row=row, column=0, sticky='ew', columnspan=2, pady=10)
+        theme_data = ctk.ThemeManager.theme
+        self.configure(fg_color = theme_data["CTk"]["fg_color"][1])
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
@@ -407,7 +420,7 @@ class DictionairyEntry(ctk.CTkFrame):
         self.label.grid(row=0, column=0, sticky='e', padx=(0, 10))
 
         self.toggle_button = ctk.CTkButton(
-            self.label_frame, text='>', command=self._toggle_open_close, width=20
+            self.label_frame, text=' collapse', command=self._toggle_open_close, width=20
         )
         self.toggle_button.grid(row=0, column=1, sticky='ne', padx=0)
 
@@ -428,8 +441,25 @@ class DictionairyEntry(ctk.CTkFrame):
             split = desc[i].split(' : ')
             name = split[0]
             dtype_str = split[1]
-            new_desc = desc[i + 1]
-            i += 2
+            new_desc = [desc[i + 1].lstrip()]
+            min_whitespace = len(desc[i + 1]) - len(desc[i + 1].lstrip())
+            # search for when leading whitespace get smaller,
+            # indicates indent has gone down and we've moved on to the next
+            # parameter
+            searching = True
+            i_search_param = i+2
+            while searching:
+                check = desc[i_search_param]
+                new_leading_whitespace = len(check) - len(check.lstrip())
+                # reach end of parameter description
+                if new_leading_whitespace < min_whitespace:
+                    searching = False
+                else:
+                    i_search_param +=1
+                    new_desc += [check.lstrip()]
+
+            print(new_desc)
+            i = i_search_param
 
             p = dummy_npparam(name, dtype_str, new_desc)
             default = npdoc_defaults[dtype_str]
@@ -437,6 +467,8 @@ class DictionairyEntry(ctk.CTkFrame):
             field = get_form_field(self.form_frame, row_count, p, None, level=1)
             row_count += 1
             self.fields[p.name] = field
+        
+        self.collapse()
 
     def get(self):
         return {k: v.get() for k, v in self.fields.items()}
@@ -444,6 +476,16 @@ class DictionairyEntry(ctk.CTkFrame):
     def setfield(self, setdict):
         for k in setdict:
             self.fields[k].setfield(setdict[k])
+    
+    def collapse(self):
+        child = self.form_frame
+        child.grid_remove()
+        self.toggle_button.configure(text='uncollapse')
+    
+    def uncollapse(self):
+        child = self.form_frame
+        child.grid()
+        self.toggle_button.configure(text='  collapse')
 
     def _toggle_open_close(self):
         """
@@ -453,11 +495,9 @@ class DictionairyEntry(ctk.CTkFrame):
         """
         child = self.form_frame
         if child.winfo_viewable():
-            child.grid_remove()
-            self.toggle_button.configure(text='>')
+            self.collapse()
         else:
-            child.grid()
-            self.toggle_button.configure(text='V')
+            self.uncollapse()
 
 
 class NumpyArrayEntry:

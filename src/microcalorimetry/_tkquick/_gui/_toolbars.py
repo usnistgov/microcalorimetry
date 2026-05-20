@@ -109,7 +109,7 @@ def funcrunbutton(tabview, toolbar: 'ClassMethodToolBar'):
             except Exception as e:
                 print('FUNCTION FAILED')
                 print('---------------')
-                toolbar.parent.master.parent.graphicstabs.close_hidden_tabs()
+                toolbar.parent.master.parent.graphicstabs.add_hidden_tabs()
                 print('ERROR TRACE BACK')
                 print('----------------')
                 raise e

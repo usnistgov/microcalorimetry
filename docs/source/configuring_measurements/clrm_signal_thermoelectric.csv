@@ -1,0 +1,9 @@
+key_0,key_1,key_2,key_3,value,type,comment
+signal_config,calorimeter_power,type,,thermoelectric,str,thermoelectric sensor of the calorimeter
+signal_config,calorimeter_power,units,,W,str,units produced from derived signal always W
+signal_config,calorimeter_power,can_level,,FALSE,bool,cant level to the calorimeter
+signal_config,calorimeter_power,coeffs,,0.033,float,voltage / W of the calorimeter's thermopile (can be an estimate)
+signal_config,calorimeter_power,input_signals,,e,str,input signals from data record to derive calorimeter power estimate
+signal_config,calorimeter_power,e,units,V,str, units of input signal
+signal_config,calorimeter_power,e,column,NVM_volts,str, column corresponding to input signal
+signal_config,calorimeter_power,e,instrument,NVM1,str, name of instrument associated with the signal

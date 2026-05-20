@@ -100,6 +100,15 @@ class GraphicsTabs(customtkinter.CTkTabview):
             if ol not in self.plots_dict:
                 print('Caught hidden tab, ', ol, ', closing it')
                 plt.close(ol)
+    
+    def add_hidden_tabs(self):
+        open_labels = plt.get_figlabels()
+        for ol in open_labels:
+            if ol not in self.plots_dict:
+                print('Caught hidden tab, ', ol, ',  it')
+                fig = plt.figure(ol)
+                name = str(plt.figure(ol).number)
+                self.add_plot(fig, name)
 
     def add_dummy_plot(self, name):
         fig = Figure(figsize=(5, 4), dpi=100)
@@ -238,12 +247,7 @@ class HDF5GroupRow:
 
         if '__class__.__name__' in group.attrs.keys():
             cname = group.attrs['__class__.__name__']
-            if cname == 'RMEMeas' or cname == 'MUFmeas':
-                try:
-                    dfm = group['cov'].attrs['dataformat']
-                except KeyError:
-                    pass
-                is_RMEMeas = True
+            is_RMEMeas = cname == 'RMEMeas' or cname == 'MUFmeas'
 
         self.name = group.name
         self.position = position
@@ -256,7 +260,7 @@ class HDF5GroupRow:
                 text=' ' * 7 + group.name.split('/')[-1],
                 fg_color='transparent',
                 anchor='w',
-                command=self.rebuild,
+                command=self.go_down,
             )
             self.plot = ctk.CTkLabel(master=master, text='')
             self.plot.grid(row=position, column=2)
@@ -278,12 +282,18 @@ class HDF5GroupRow:
             self.plot.grid(row=position, column=2)
             print(self.plot.get())
 
-        self.objbutt.grid(row=position, column=0, sticky='ew')
+        self.objbutt.grid(row=position, column=0, columnspan = 2, sticky='ew')
 
-        # try to identify the dataformat
-
-        self.dfm = ctk.CTkLabel(master=master, text=dfm)
-        self.dfm.grid(row=position, column=1, sticky='ew')
+        # button to delete groups
+        self.edit_but = ctk.CTkOptionMenu(
+                master=master,
+                width=50,
+                height=20,
+                values=["delete","clip"],
+                command=self.edit,
+            )
+        self.edit_but.set('edit')
+        self.edit_but.grid(row=position, column=1, sticky='e')
 
         # make a metadata page
         color = self.master.cget('fg_color')[0]
@@ -299,11 +309,32 @@ class HDF5GroupRow:
 
         # print('HDF5 row ', position, ' for ', group.name, is_RMEMeas)
 
+    def edit(self, choice):
+        reset = True
+        match choice:
+            case 'delete':
+                print("deleting : ", self.name)
+                with h5py.File(self.hdf5_file, 'a') as f:
+                    del f[self.name]
+                self.master.refresh()
+                reset = False
+            case 'clip':
+                import subprocess
+                path = str(Path(self.hdf5_file))  + self.name
+                print('Copying', path, 'to clip')
+                subprocess.run("clip", input=path, check=True, encoding="utf-8")
+
+            case _:
+                print(choice, 'not defined')
+                return
+        if reset:
+            self.edit_but.set('edit')
+
     def destroy(self):
-        for item in [self.objbutt, self.dfm, self.plot, self.metabut]:
+        for item in [self.objbutt, self.plot, self.edit_but, self.metabut]:
             item.destroy()
 
-    def rebuild(self):
+    def go_down(self):
         # print('callback from ', self.name, ' row ', self.position)
         self.master.build(path=self.name)
 
@@ -355,19 +386,27 @@ class HDF5viewer(customtkinter.CTkScrollableFrame):
         self.grid_columnconfigure(0, weight=2)
         # self._scrollbar.configure(width = 0)
         # refresh button
-        self.refresh_button = ctk.CTkButton(
-            master=self, command=self.build, text='home', fg_color='transparent'
+        self.root_button = ctk.CTkButton(
+            master=self, command=self.build, text='root', fg_color='transparent'
         )
-        self.refresh_button.grid(row=0, column=0, columnspan=1, sticky='nesw')
+        self.root_button.grid(row=0, column=0, columnspan=1, sticky='nesw')
+        
+        self.refresh_button = ctk.CTkButton(
+            master=self, command=self.refresh, text='refresh', fg_color='transparent'
+        )
+        self.refresh_button.grid(row=0, column=1, columnspan=1, sticky='nesw')
+
+        
         self.file_button = ctk.CTkButton(
             master=self, command=self.set_file, text='open_file', fg_color='transparent'
         )
-        self.file_button.grid(row=0, column=1, columnspan=3, sticky='nesw')
+        self.file_button.grid(row=0, column=2, columnspan=2, sticky='nesw')
+        
 
         # make the column headers
         self.label = ctk.CTkLabel(master=self, text='Objects', justify='left')
         self.label.grid(row=1, column=0, padx=(0, 10), pady=10, sticky='ew')
-        self.label = ctk.CTkLabel(master=self, text='DFM', justify='left')
+        self.label = ctk.CTkLabel(master=self, text='Del', justify='left')
         self.label.grid(row=1, column=1, padx=(0, 10), pady=10, sticky='e')
         self.label = ctk.CTkLabel(master=self, text='Plot', justify='right')
         self.label.grid(row=1, column=2, padx=(0, 10), pady=10, sticky='e')
@@ -402,6 +441,9 @@ class HDF5viewer(customtkinter.CTkScrollableFrame):
                 new_root = f[self.root].parent.name
                 # print('new root: ', new_root, 'from ', self.root)
             self.build(path=new_root)
+
+    def refresh(self):
+        self.build(path = self.root)
 
     def build(self, path=None):
         for thing in self.h5rows:
@@ -505,131 +547,97 @@ def plot_RMEMeas(file, hdf5_path, fig=None):
     """
     figs = []
     plotted = False
-
+    k = 2
     with h5py.File(file, 'r') as f:
         data = f[hdf5_path]
 
-        if 'dataformat' in data['cov'].attrs:
-            dfm = data['cov'].attrs['dataformat']
-            data = load_object(f[hdf5_path],load_big_objects = True)
-            print('has format, using plot function')
-            if dfm == 's1p_c':
-                return review_s1p(file, hdf5_path)
-            if dfm == 'mck':
-                if not fig:
-                    fig, ax = plt.subplots(1, 1)
-                    figs.append(fig)
-                else:
-                    ax = fig.axes[0]
-                stdunc = data.stdunc(k=1)[1]
-                xlabel = data.nom.dims[0]
-                ylabel = hdf5_path.split('/')[-1]
-                xvals = data.nom.coords[xlabel]
-                ax.errorbar(
-                    xvals,
-                    data.nom,
-                    yerr=stdunc,
-                    fmt='o',
-                    ecolor='red',
-                    capsize=3,
-                    label='.../' + '/'.join(hdf5_path.split('/')[-2:]),
-                )
-                ax.set_xlabel('Polynomial Coefficient Term Name')
-                ax.set_ylabel(r'Coefficient $\frac{W}{V^n}$')
-                ax.set_title(hdf5_path)
-                ax.legend(loc='best')
-                ax.grid(visible=True, axis='y')
-                fig.tight_layout()
-                return figs
-        if not plotted:
-            data = RMEMeas.from_h5(f[hdf5_path])
-            print('couldnt find format specific plot. Trying generic.')
-            if len(data.nom.shape) == 1 and data.nom.dtype is not complex:
-                print('1d array, plotting as line')
-                if not fig:
-                    fig, ax = plt.subplots(1, 1)
-                    figs.append(fig)
-                else:
-                    ax = fig.axes[0]
-
-                stdunc = data.stdunc().cov
-                xlabel = data.nom.dims[0]
-                ylabel = hdf5_path.split('/')[-1]
-                xvals = data.nom.coords[xlabel]
-                ax.errorbar(
-                    xvals,
-                    data.nom,
-                    yerr=stdunc,
-                    fmt='o',
-                    capsize=3,
-                    label='.../' + '/'.join(hdf5_path.split('/')[-2:]),
-                )
-                
-                ax.set_xlabel(xlabel)
-                ax.set_ylabel(ylabel)
-                ax.set_title(hdf5_path)
-                ax.legend(loc='best')
-                fig.tight_layout()
-
-            elif (
-                len(data.nom.shape) == 2
-                and data.nom.dtype is not complex
-                and data.nom.shape[1] == 1
-            ):
-                data = data[:, 0]
-                if not fig:
-                    fig, ax = plt.subplots(1, 1)
-                    figs.append(fig)
-                else:
-                    ax = fig.axes[0]
-                stdunc = data.stdunc().cov[:,1]
-                xlabel = data.nom.dims[0]
-                ylabel = hdf5_path.split('/')[-1]
-                xvals = data.nom.coords[xlabel]
-                ax.errorbar(
-                    xvals,
-                    data.nom,
-                    yerr=stdunc,
-                    fmt='o',
-                    capsize=3,
-                    label='.../' + '/'.join(hdf5_path.split('/')[-2:]),
-                )
-                ax.set_xlabel(xlabel)
-                ax.set_ylabel(ylabel)
-                ax.set_title(hdf5_path)
-                ax.legend(loc='best')
-                fig.tight_layout()
-            elif len(data.nom.shape) == 2 and data.nom.dtype is not complex:
-                data_full = data
-                if not fig:
-                    fig, axs = plt.subplots(1, 2)
-                    figs.append(fig)
-                else:
-                    axs = fig.axes
-                for i, ax in enumerate(axs):
-                    data = data_full[:, i]
-                    ub = data.uncbounds(k=1)[0]
-                    lb = data.uncbounds(k=-1)[0]
-                    xlabel = data_full.nom.dims[0]
-                    ydim = data_full.nom.dims[1]
-                    ylabel = ydim + ' : ' + str(data_full.nom.coords[ydim][i].values)
-                    xvals = data.nom.coords[xlabel]
-                    ax.plot(
-                        xvals,
-                        data.nom,
-                        'o-',
-                        lw=2,
-                        label='.../' + '/'.join(hdf5_path.split('/')[-2:]),
-                    )
-                    ax.plot(xvals, lb, '--k', label='k = 1')
-                    ax.plot(xvals, ub, '--k')
-                    ax.set_xlabel(xlabel)
-                    ax.set_ylabel(ylabel)
-                    ax.legend(loc='best')
-                fig.suptitle(hdf5_path)
-                fig.tight_layout()
+        data = RMEMeas.from_h5(f[hdf5_path])
+        if len(data.nom.shape) == 1 and data.nom.dtype is not complex:
+            print('1d array, plotting as line')
+            if not fig:
+                fig, ax = plt.subplots(1, 1)
+                figs.append(fig)
             else:
-                print('Couldnt plot shape/dtype')
+                ax = fig.axes[0]
+
+            stdunc = data.stdunc(k=k).cov
+            xlabel = data.nom.dims[0]
+            ylabel = hdf5_path.split('/')[-1]
+            xvals = data.nom.coords[xlabel]
+            ax.errorbar(
+                xvals,
+                data.nom,
+                yerr=stdunc,
+                fmt='o',
+                capsize=3,
+                label=f'(k={k}) .../' + '/'.join(hdf5_path.split('/')[-2:]),
+            )
+            
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel(ylabel)
+            ax.set_title(hdf5_path)
+            ax.legend(loc='best')
+            fig.tight_layout()
+
+        elif (
+            len(data.nom.shape) == 2
+            and data.nom.dtype is not complex
+            and data.nom.shape[1] == 1
+        ):
+            data = data[:, 0]
+            if not fig:
+                fig, ax = plt.subplots(1, 1)
+                figs.append(fig)
+            else:
+                ax = fig.axes[0]
+            stdunc = data.stdunc(k=k).cov[:,1]
+            xlabel = data.nom.dims[0]
+            ylabel = hdf5_path.split('/')[-1]
+            xvals = data.nom.coords[xlabel]
+            ax.errorbar(
+                xvals,
+                data.nom,
+                yerr=stdunc,
+                fmt='o',
+                capsize=3,
+                label=f'(k={k}) .../' + '/'.join(hdf5_path.split('/')[-2:]),
+            )
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel(ylabel)
+            ax.set_title(hdf5_path)
+            ax.legend(loc='best')
+            fig.tight_layout()
+        elif len(data.nom.shape) == 2 and data.nom.dtype is not complex:
+            data_full = data
+            if not fig:
+                fig, axs = plt.subplots(1, 2)
+                figs.append(fig)
+            else:
+                axs = fig.axes
+            for i, ax in enumerate(axs):
+                data = data_full[:, i]
+                ub = data.uncbounds(k=k)[0]
+                lb = data.uncbounds(k=-k)[0]
+                xlabel = data_full.nom.dims[0]
+                ydim = data_full.nom.dims[1]
+                ylabel = ydim + ' : ' + str(data_full.nom.coords[ydim][i].values)
+                xvals = data.nom.coords[xlabel]
+                ax.plot(
+                    xvals,
+                    data.nom,
+                    'o-',
+                    lw=2,
+                    label=f'(k={k}).../' + '/'.join(hdf5_path.split('/')[-2:]),
+                )
+                ax.plot(xvals, lb, '--k', label='k = 1')
+                ax.plot(xvals, ub, '--k')
+                ax.set_xlabel(xlabel)
+                ax.set_ylabel(ylabel)
+                ax.legend(loc='best')
+            fig.suptitle(hdf5_path)
+            fig.tight_layout()
+        else:
+            print('Couldnt plot shape/dtype')
 
     return tuple(figs)
 

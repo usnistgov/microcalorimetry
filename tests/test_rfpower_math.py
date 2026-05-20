@@ -75,6 +75,7 @@ def test_openloop_te_power():
         test_power = rfpower.openloop_thermoelectric_power(
             test_arr.nom, test_volts, p_of_e=tc.p_of_e
         )
+        print(test_power[0])
 
         ref_coeffs = copy(test_coeffs)
         ref_coeffs[-1] -= tc.volts
@@ -82,7 +83,7 @@ def test_openloop_te_power():
         # check the root I found is in the roots numpy found
         assert any(
             [
-                np.isclose(float(np.real(rp)), float(np.real(test_power)))
+                np.isclose(float(np.real(rp)), float(np.real(test_power[0])))
                 for rp in ref_roots
             ]
         )

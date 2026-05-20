@@ -17,7 +17,6 @@ templates = Path(__file__).parents[1] / 'docs/config_templates'
 templates = [t for t in templates.rglob('*') if t.is_dir()]
 
 # for testing dc sweep templates
-dcsweep_allowed_files = ['measlist.csv', 'settings.csv', 'README.md']
 dcsweep_template_pattern = 'dcsweep*'
 
 # for testing rfsweep templates
@@ -35,29 +34,26 @@ def test_template(template: Path):
         check_dcsweep_template(template)
     elif fnmatch(template.stem, rfsweep_template_pattern):
         check_rfsweep_template(template)
-    else:
-        raise ValueError(
-            f'{template.stem} template type not recognized or testable. If new type of template, add a check function and pattern to this module.'
-        )
+    
 
 
 def check_dcsweep_template(template: Path):
     """Dry runs a DC sweep template."""
-    files = []
-    for f in template.glob('*'):
-        if f.name not in dcsweep_allowed_files:
-            raise ValueError(f'{f.name} not in {dcsweep_allowed_files}')
-        files.append(f)
+    meas_configs = [csv for csv in template.glob('*.csv')]
+    print(meas_configs)
+    runlist = template / 'runlist.csv'
+    meas_configs.remove(runlist)
     # now run checks
-    configs.DCSweepConfiguration(
-        template / 'settings.csv',
-    )
-    dcsweep.run(
-        template / 'settings.csv',
-        template / 'measlist.csv',
-        output_dir=IGNORED,
-        dry_run=True,
-    )
+    try:
+        dcsweep.run(
+            config_files=meas_configs,
+            runlist = runlist,
+            output_dir=IGNORED,
+            dry_run=True,
+        )
+    except Exception as e:
+        msg = f'caught on {template} : {e}'
+        raise type(e)(msg) from e
 
 
 def check_rfsweep_template(template: Path):

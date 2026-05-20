@@ -94,7 +94,7 @@ def get_latest_minor_versions(version_list):
 # The full version, including alpha/beta/rc tags
 
 project = 'Microcalorimetry'
-copyright = '2025, National Institute of Standards and Technology'
+copyright = '2026, National Institute of Standards and Technology'
 author = 'Daniel C. Gray, Zenn C. Roberts, Aaron M. Hagerstrom'
 
 ## check for warn on example fail env variable

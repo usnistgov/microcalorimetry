@@ -8,7 +8,7 @@
                     "description":"Names of the columns in the run settings file.",
                     "prefixItems": [
                         { "type":"string","enum": ["Frequency_GHz"]},
-                        { "type":"string","enum": ["Intial_source_power_dBm"] },
+                        { "type":"string","enum": ["Initial_source_power_dBm"] },
                         { "type":"string","enum": ["Target_source_power_dBm"] },
                         { "type":"string","enum": ["Source_source_power_dBm"] }
                     ]
