@@ -6,12 +6,3 @@ C24N132_054:
   tests/sample_historical_data/C24N132/C24N132_054.eff
 C24N132_055:
   tests/sample_historical_data/C24N132/C24N132_055.eff
-# These are bad apparently
-# C24N132_056:
-#   tests/sample_historical_data/C24N132/C24N132_056.eff
-# C24N132_057:
-#   tests/sample_historical_data/C24N132/C24N132_057.eff
-C24N132_059:
-  tests/sample_historical_data/C24N132/C24N132_059.eff
-C24N132_061:
-  tests/sample_historical_data/C24N132/C24N132_061.eff
