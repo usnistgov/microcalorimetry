@@ -1,0 +1,34 @@
+key_0,key_1,key_2,key_3,value,type,comment
+,,,,,,
+instruments,names,,,SMU0,str,human-readable name (arbitrary and unique)
+output_settings,columns,,,therm_volts,str,Name of output column in record. Only columns that are not in the default set need to be declared.
+output_settings,columns,,,therm_amps,str,Name of output column in record. Only columns that are not in the default set need to be declared. 
+,,,,,,
+instruments,SMU0,model,,K2450,str,make and model of instrument; used to determine which commands to use
+instruments,SMU0,serial,,serial,str,Serial or internal tag
+instruments,SMU0,*IDN?,,NA,str,last 4 digits of serial number
+instruments,SMU0,GPIB_address,,address,str,GPIB address
+instruments,SMU0,role,,thermometer_monitor,str,an instrument's role is its specific use in the context of this measurement
+instruments,SMU0,voltage_output_column,,therm_volts,str,voltage column of thermometer
+instruments,SMU0,current_output_column,,therm_amps,str,current column of thermometer
+instruments,SMU0,initial_settings,wiring,2W,str,initial settings
+instruments,SMU0,initial_settings,source_measure,SIMV,str,initial settings
+instruments,SMU0,initial_settings,panel,front,str,initial settings
+instruments,SMU0,initial_settings,measure_for_duration_or_count,count,str,initial settings
+instruments,SMU0,initial_settings,source_level,25e-6,float,initial_settings
+instruments,SMU0,initial_settings,source,on,str,initial_settings
+instruments,SMU0,initial_settings,source_range,auto,str,initial_settings
+instruments,SMU0,initial_settings,measure_range,auto,str,initial_settings
+instruments,SMU0,initial_settings,over_voltage_protection,2,float,initial_settings
+instruments,SMU0,initial_settings,source_readback,TRUE,bool,initial_settings
+instruments,SMU0,initial_settings,measure_autozero,TRUE,bool,initial_settings
+instruments,SMU0,initial_settings,source_delay,auto,str,initial_settings
+instruments,SMU0,initial_settings,count_per_level,1,int,initial_settings
+instruments,SMU0,initial_settings,nplc,10,float,initial_settings
+instruments,SMU0,monitor_mode_settings,count_per_level,1,int,initial_settings
+instruments,SMU0,monitor_mode_settings,nplc,10,float,initial_settings
+# fast off settings
+instruments,SMU0,fast_off_mode_settings,enable,True,bool,"if False, do not poll voltmeter in this mode"
+instruments,SMU0,fast_off_mode_settings,count_per_level,20,int,initial_settings
+instruments,SMU0,fast_off_mode_settings,nplc,10,float,initial_settings_available (seconds)
+instruments,SMU0,fast_off_mode_settings,timeout,30,float, timeout on waiting for data.

@@ -1,0 +1,8 @@
+key_0,key_1,value,type,comment
+stats_settings,initial_wait,57600,float,time the program will spend warming up before the measurement at index 0 (units: seconds)
+stats_settings,use_traditional_stats,TRUE,bool,If True: use kendal test and runs test to check stability
+stats_settings,minimum_wait,1800,float,minimum waiting time at each frequency point in seconds
+stats_settings,stats_window,1800,float,thermopile voltage must be stable over this time interval to proceed to next frequency point (units: seconds)
+stats_settings,stats_Rcv,-3.4,float,used by runs test. higher = more stringent test
+stats_settings,stats_Tcv,0.25,float,used by Kendall test. Higher = more stringent
+stats_settings,measurement_interval,3,float,thermopile voltage sampling interval for computing stability stats in seconds

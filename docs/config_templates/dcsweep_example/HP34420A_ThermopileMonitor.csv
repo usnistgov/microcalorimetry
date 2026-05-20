@@ -1,0 +1,10 @@
+key_0,key_1,key_2,key_3,value,type,comment
+,,,,,,
+instruments,NVM1,*IDN?,,"HEWLETT-PACKARD,34420A,0,5.0-5.0-2.0",str,expected IDN string
+instruments,NVM1,model,,HP34420A,str,make and model of instrument; used to determine which commands to use
+instruments,NVM1,serial,,SERIAL,str,last 4 digits of serial number
+instruments,NVM1,GPIB_address,,GPIB0::16::INSTR,str,GPIB address
+instruments,NVM1,role,,thermopile_monitor,str,an instrument's role is its specific use in the context of this measurement
+instruments,NVM1,initial_settings,v_range,auto,str,settings for this instrument in monitor mode
+instruments,NVM1,initial_settings,nplc,100,float,settings for this instrument in monitor mode
+instruments,NVM1,initial_settings,num_readings,1,int,settings for this instrument in monitor mode

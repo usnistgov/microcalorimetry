@@ -87,16 +87,17 @@ def _gui(no_console_stdout: bool = False):
 
 
 # %% Analysis subgroups
-@_main.group(
-    name='anl',
-    cls=LazyGroup,
-    lazy_subcommands={
-        'make-k-coeffs': 'microcalorimetry.analysis._sensitivity._cli_make_k_coeffs'
-    },
-    help='Commands for performing analysis.',
-)
-def _anl():
-    pass
+# leaving this out for now, might come back to it later.
+# @_main.group(
+#     name='anl',
+#     cls=LazyGroup,
+#     lazy_subcommands={
+#         'make-k-coeffs': 'microcalorimetry.analysis._sensitivity._cli_make_k_coeffs'
+#     },
+#     help='Commands for performing analysis.',
+# )
+# def _anl():
+#     pass
 
 
 # %% DCSweep subgroup
@@ -105,7 +106,7 @@ def _anl():
     cls=LazyGroup,
     lazy_subcommands={
         'run': 'microcalorimetry.measurements.dcsweep._main._run_cli',
-        'parse': 'microcalorimetry.measurements.dcsweep._main._parse_cli',
+        # 'parse': 'microcalorimetry.measurements.dcsweep._main._parse_cli',
     },
     help='Commands for interacting with DCSweep measurements.',
 )

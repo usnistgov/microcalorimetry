@@ -20,7 +20,7 @@
                 },
                 "use_traditional_stats":{
                     "type":"boolean",
-                    "description":"If True, use kendal test and runs test to check stability."
+                    "description":"If True, use Kendal test and runs test to check stability."
                 },
                 "stats_window":{
                     "type":"number",
@@ -28,7 +28,7 @@
                 },
                 "stats_Rcv":{
                     "type":"number",
-                    "description":"Used by runs test. Hiher = more stringent test."
+                    "description":"Used by runs test. Higher = more stringent test."
                 },
                 "stats_Tcv":{
                     "type":"number",

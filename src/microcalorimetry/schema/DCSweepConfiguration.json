@@ -16,78 +16,6 @@
             },
             "additionalProperties": false
         },
-        "nvm_names": {
-            "type": ["array", "string"],
-            "items": {
-                "type": "string"
-            },
-            "description": "Array of names for each nano-voltmeter instrument",
-            "additionalProperties": false
-        },
-        "thermometer_names": {
-            "type": ["array", "string"],
-            "items": {
-                "type": "string"
-            },
-            "description": "Array of names for each thermometer instrument.",
-            "additionalProperties": false
-        },
-        "addresses": {
-            "type": "object",
-            "description": "Key-value pairs of GPIB addresses corresponding to each instrument's name. There is an expected instrument named SMU.",
-            "Properties": {
-                "SMU": {
-                    "type": "string",
-                    "description": "Address of the SMU."
-                }
-            },
-            "additionalProperties": {
-                "type": "string",
-                "description": "Addresses of the nanovoltmeters."
-            }
-        },
-        "models": {
-            "type": "object",
-            "description": "Key-value pairs of model names corresponding to each instrument's name. Their is an expected instrument named SMU.",
-            "properties": {
-                "SMU": {
-                    "type": "string",
-                    "description": "Model name of the SMU.",
-                    "enum": [
-                        "K2450"
-                    ]
-                }
-            },
-            "additionalProperties": {
-                "type": "string",
-                "description": "additional model names.",
-                "enum": [
-                    "HP34420A","K2450"
-                ]
-            }
-        },
-        "serials": {
-            "type": "object",
-            "description": "KeyValue pairs of serial numbers corresponding to each instrument.",
-            "additionalProperties": {
-                "type": "string"
-            }
-        },
-        "monitor_thermopile": {
-            "type": "boolean",
-            "description": "Activates monitoring of thermopiles. Usually on.",
-            "additionalProperties": false
-        },
-        "monitor_thermometer": {
-            "type": "boolean",
-            "description": "Activates monitoring of thermometers.",
-            "additionalProperties": false
-        },
-        "thermometer_source": {
-            "type": "number",
-            "description": "How much to source into thermometers.",
-            "additionalProperties": false
-        },
         "first_sample_delay": {
             "type": "number",
             "description": "How long to wait after adjusting source before taking first sample (seconds).",
@@ -103,80 +31,13 @@
             "description": "How long to hold each setting in seconds.",
             "additionalProperties": false
         },
-        "fast_settings": {
-            "description": "Describe the behaviour of the SMU during the fast period immediatley before and after a step-change in the source value.",
-            "allOf": [
-                {
-                    "$ref": "#/definitions/DCSweepModeSettings"
-                },
-                {
-                    "type": "object",
-                    "properties": {
-                        "initial_level_duration": {
-                            "type": "number",
-                            "description": "how long to measure immediatley before a step change in the source value on fast mode.",
-                            "minimum": 1
-                        }
-                    }
-                }
-            ],
-            "required": [
-                "initial_level_duration"
-            ]
-        },
-        "slow_settings": {
-            "$ref": "#/definitions/DCSweepModeSettings",
-            "description": "Describe the behaviour of the SMU during the slow period following a step-change in the source value.",
-            "additionalProperties": false
-        },
-        "initial_setup": {
-            "type": "object",
-            "description": "describes the initial setup configuration of the SMU.",
-            "properties": {
-                "SMU": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                        "wiring": {
-                            "type": "string",
-                            "enum": [
-                                "4W"
-                            ],
-                            "description": "describes 2 or 4 wire configuration of the SMU. Only 4W supported."
-                        },
-                        "source_measure": {
-                            "type": "string",
-                            "enum": [
-                                "SVMI",
-                                "SIMV"
-                            ],
-                            "description": "Source volts (V) measure current (A) OR Source current (A) measure volts (V). Units of source/measure settings correspond to this setting."
-                        },
-                        "panel": {
-                            "type": "string",
-                            "enum": [
-                                "front",
-                                "rear"
-                            ],
-                            "description": "Use front or rear panels for the measurement."
-                        }
-                    }
-                }
-            }
-        },
-        "setup": {
+        "instruments": {
             "type": "object",
             "additionalProperties": {
-                "$ref": "InstrumentSettings.json#/definitions/HP34420A Voltmeter",
-                "description": "Additional voltmeter settings under a key corresponding to the nvm_names array."
-            },
-            "description": "describes additional setup of the SMU and Nanovoltmeter.",
-            "properties": {
-                "SMU": 
-                }
+                "$ref": "InstrumentRoles.json#/definitions/InstrumentRole",
+                "description": "Additional properties should all satisfy the definition of an instrument role."
             }
         }
     },
-    "additionalProperties": false,
-    }
+    "required": ["record_settings","first_sample_delay","off_duration","step_duration","instruments"]
 }

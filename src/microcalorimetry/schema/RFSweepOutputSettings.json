@@ -1,7 +1,7 @@
 {
     "definitions": {
         "RFSweepOutputSettings": {
-            "description": "Describes the settings for outputing data from an RF sweep.",
+            "description": "Describes the settings for saving data from an RF sweep.",
             "properties":{
                 "out_file_name":{
                     "type":"string",
@@ -21,7 +21,7 @@
                 },
                 "columns":{
                     "type":["string","array"],
-                    "description":"a list of every column for the datarecord.",
+                    "description":"a list of every column for the data record.",
                     "items":{
                         "type":"string"
                     }
