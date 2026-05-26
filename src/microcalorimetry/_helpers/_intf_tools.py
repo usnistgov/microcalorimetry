@@ -150,18 +150,20 @@ def save_saveable_objects(
         if not (is_groupsaveable or is_list):
             print(f'Not saving {type(o)}, not group saveable')
             continue
-        if is_list and isinstance(o[0], plt.Figure):
-            print(f'Not saving {type(o)}, list of figures')
-            continue
-        if o is None:
-            print(f'Not saving {None}, None')
-            continue
-        if is_list and all([oi is None for oi in o]):
-            print(f'Not saving {type(o)}, List of None')
-            continue
-        if is_list and len(o) == 0:
+        elif is_list and len(o) == 0:
             print(f'Not saving {type(o)}, empty list')
             continue
+        elif is_list and isinstance(o[0], plt.Figure):
+            print(f'Not saving {type(o)}, list of figures')
+            continue
+        elif is_list and all([oi is None for oi in o]):
+            print(f'Not saving {type(o)}, List of None')
+            continue
+        elif o is None:
+            print(f'Not saving {None}, None')
+            continue
+
+
 
         with h5py.File(path, 'a') as f:
             g = f
