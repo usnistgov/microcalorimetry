@@ -19,11 +19,12 @@ from rminstr.instruments.Anritsu_MG3696A import SignalGenerator as Anritsu_MG369
 from rminstr.instruments.RS_SMA100B import ArmedSignalGenerator as RS_SMA100B
 from rminstr.instruments.HP34420A import Voltmeter as HP34420A_Voltmeter
 from rminstr.instruments.HP3458A import Voltmeter as HP3458A_Voltmeter
-from rminstr.instruments.K2450 import DCSubPowerMeter
+from rminstr.instruments.K2450 import DCSubPowerMeter, SMUSourceSweep as K2450_SMUSourceSweep
 from rminstr.instruments.KS_E8257D import SignalGenerator as KS_E8257D
 from rminstr.instruments.DP8200 import VoltageGenerator as DP8200
 from rminstr.instruments.Fluke_5720A import VoltageGenerator as Fluke_5720A_VoltageGenerator
 from rminstr.instruments.RS_NRP75TWG import RFPowerMeter as RS_NRP75TWG_RFPowerMeter
+import rminstr.instruments.RS_NRPxxTn as RS_NRPxxTn
 from rminstr.instruments.communications import GPIBInterface
 from rminstr.data_structures import (
     ExptParameters,
@@ -74,10 +75,18 @@ INSTRUMENT_CLASSES = {
         'thermopile_monitor': HP3458A_Voltmeter,
         'voltage_monitor': HP3458A_Voltmeter,
     },
-    'K2450': {'SMU_power_meter': DCSubPowerMeter},
+    'K2450': {
+        'SMU_power_meter': DCSubPowerMeter,
+        'thermometer_monitor':K2450_SMUSourceSweep
+        },
     #   "RS_ZVA67": {"VNA_source": RS_ZVA67_VNA},
     'DP8200': {'RF_amplitude_adjuster': DP8200},
-    'RS_NRP75TWG': {'power_meter': RS_NRP75TWG_RFPowerMeter},
+    'RS_NRP75TWG': {
+        'power_meter': RS_NRP75TWG_RFPowerMeter,
+        },
+    'RS_NRPxxTn': {
+        'power_meter': RS_NRPxxTn.RFPowerMeter
+        },
 }
 
 # these are the keys use to identify the physical meaning
@@ -145,7 +154,7 @@ VOLTAGE_MONITOR_ROLES = ['voltage_monitor', 'bias_monitor', 'thermopile_monitor'
 SOURCE_ROLES = ['RF_source', 'VNA_source']
 RF_AMPLITUDE_ADJUSTER_ROLES = ['RF_amplitude_adjuster']
 SMU_POWER_METERS = ['PTC_SMU', 'NTC_SMU']
-
+THERMOMETER_ROLES = ['thermometer_monitor']
 THIN_FILM_DC_SOURCE_TYPES = ['PTC_SMU', 'PTC_TYPE_IV', 'DC_VOLTAGE']
 THERMISTOR_DC_SOURCE_TYPES = ['NTC_SMU', 'NTC_TYPE_IV', 'DC_CURRENT']
 
@@ -185,6 +194,7 @@ class MicrocalorimeterRunner:
         config_file_priority: list[int] = None,
         no_confirm: bool = False,
         dry_run: bool = False,
+        validate: bool = True
     ):
         """
         Initialize a microcalorimeter_runner object.
@@ -269,10 +279,11 @@ class MicrocalorimeterRunner:
         #  this is a little silly, but the presence of the run settings columns
         # in the config dictionary causes the validations to fail, and this is a
         # quick solution in the mean time.
-        self._parameters_no_runlist = ExptParameters(
-            config_files, config_file_priority=config_file_priority
-        )
-        configs.RFSweepConfiguration(self._parameters_no_runlist.config)
+        if validate:
+            self._parameters_no_runlist = ExptParameters(
+                config_files, config_file_priority=config_file_priority
+            )
+            configs.RFSweepConfiguration(self._parameters_no_runlist.config)
 
         # use the column model mapping to create metering status columns
         # for each sensor that's been mapped to an instrument column
@@ -294,7 +305,7 @@ class MicrocalorimeterRunner:
                 # SENSOR_PORTS.append(vslow_cname)
                 METERING_STATUS_COLUMNS.append(vslow_cname)
                 STATUS_COLUMNS.append(vslow_cname)
-        print(SENSOR_PORTS)
+        # print(SENSOR_PORTS)
         # add extra output columns
         extra_output_columns = None
         try:
@@ -376,6 +387,7 @@ class MicrocalorimeterRunner:
         self.voltage_monitor_names = None
         self.commercial_power_meter_names = None
         self.rf_amplitude_adjuster_name = None
+        self.thermometer_monitor_names = None
 
         self.source = None
         self.power_meter = None
@@ -383,6 +395,7 @@ class MicrocalorimeterRunner:
         self.bias_monitor = None
         self.voltage_monitors = None
         self.commercial_power_meters = None
+        self.thermometer_monitors = None
 
         # log variabel
         self.log_line_count = 0
@@ -710,6 +723,10 @@ class MicrocalorimeterRunner:
         if role in RF_AMPLITUDE_ADJUSTER_ROLES:
             self.rf_amplitude_adjuster_name = name
             self.rf_amplitude_adjuster = instrument
+    
+        if role in THERMOMETER_ROLES:
+            self.thermometer_monitor_names.append(name)
+            self.thermometer_monitors.append(instrument)
 
     def initialize_instruments(self):
         """
@@ -769,6 +786,8 @@ class MicrocalorimeterRunner:
         self.voltage_monitors = []
         self.commercial_power_meter_names = []
         self.commercial_power_meters = []
+        self.thermometer_monitors = []
+        self.thermometer_monitor_names = []
         for name in names:
             # role determines which constructor is called
             role = self.parameters['instruments'][name]['role']
@@ -912,7 +931,7 @@ class MicrocalorimeterRunner:
         if self.done:
             return
 
-        CONSOLE_MANAGER.wipe_to_origin()
+        # CONSOLE_MANAGER.wipe_to_origin()
         print('-' * 60)
         RJ = 30
 
@@ -1250,7 +1269,11 @@ class MicrocalorimeterRunner:
 
             state = instrument.query_state()
             if state in ['measuring', 'data_available']:
-                instrument.wait_until_data_available()
+                try:
+                    instrument.wait_until_data_available()
+                except Exception as e:
+                    msg = f'Caught waiting for {name} : {e}'
+                    raise type(e)(msg) from e
                 out_data = instrument.fetch_data()
                 timestamps = out_data['timestamp']
                 voltages = out_data['Voltage (V)']
@@ -1270,7 +1293,37 @@ class MicrocalorimeterRunner:
                 column = self.parameters['instruments'][name]['output_column']
                 self.record.stage_update(column, powers, timestamps)
                 # print(name, 'in _fetch_data', instrument.query_state())
+        
+        for name in self.thermometer_monitor_names:
+            instrument = self.instruments[name]
+            state = instrument.query_state()
+            if state in ['measuring', 'data_available']:
+                # print(name, 'in _fetch_data', instrument.query_state())
+                try:
+                    instrument.wait_until_data_available()
+                except Exception as e:
+                    msg = f'Caught waiting for {name} : {e}'
+                    raise type(e)(msg) from e
+                out_data = instrument.fetch_data()
+                
+                voltage = out_data['Voltage (V)']
+                current = out_data['Current (A)']
+                voltage_column = self.parameters['instruments'][name]['voltage_output_column']
+                current_column = self.parameters['instruments'][name]['current_output_column']
+                if all_power_data:
+                    timestamps = out_data['timestamp']
+                    timestamps = timestamps - timestamps[0] + self.record['timestamp']
+                    self.record.stage_update(voltage_column, voltage, timestamps)
+                    self.record.stage_update(current_column, current, timestamps)
 
+                else:
+                    timestamp = self.record['timestamp']
+                    self.record.stage_update(
+                        voltage_column, [voltage[-1]], [timestamps[-1]]
+                    )
+                    self.record.stage_update(
+                        current_column, [current[-1]], [timestamps[-1]]
+                    )
     def _end_of_iteration(self):
         """
         Called by iterate at the end of each iteration
@@ -1281,7 +1334,6 @@ class MicrocalorimeterRunner:
 
         """
         # determine if ready to advance
-
         self._batch_arm()
         self._batch_trigger()
         self.update_statistics()
@@ -1289,34 +1341,27 @@ class MicrocalorimeterRunner:
         self.index += 1
         self.record.stage_update('step_counter', [self.index], [self.record.get_time()])
 
-    def _batch_arm(self, sub_arm_instrmanagers: bool = True):
+    def _batch_arm(self):
         """
         Call arm() on voltage monitors and power meter.
-
-        Parameters
-        ----------
-        sub_arm_instrmanagers: bool,
-            If True, runs the sub arm/trigger for instrument
-            managers.
 
         Returns
         -------
         None.
 
         """
+   
         # arm Voltmeters
         for instrument in self.voltage_monitors:
             enable = True
-
             try:
                 enable = instrument.setup_settings['enable']
 
             except KeyError:
                 pass
-
             if enable:
                 instrument.arm()
-
+            
         if self.source_type == 'VNA':
             enable = True
             try:
@@ -1332,7 +1377,22 @@ class MicrocalorimeterRunner:
             self.power_meter.arm()
 
         for pm in self.commercial_power_meters:
+            enable = True
+            try:
+                enable = pm.setup_settings['enable']
+
+            except KeyError:
+                pass
             pm.arm()
+    
+        for thermometer in self.thermometer_monitors:
+            enable = True
+            try:
+                enable = thermometer.setup_settings['enable']
+            except KeyError:
+                pass
+            thermometer.arm()
+            
 
     def _batch_trigger(self):
         """
@@ -1387,9 +1447,12 @@ class MicrocalorimeterRunner:
         for pm in self.commercial_power_meters:
             pm.trigger()
 
+        for thermometer in self.thermometer_monitors:
+            thermometer.trigger()
+
     def iterate(self):
         """
-        Pole instruments, record data, advance to next measurement if ready.
+        Poll instruments, record data, advance to next measurement if ready.
 
         Returns
         -------
@@ -1452,6 +1515,14 @@ class MicrocalorimeterRunner:
             self.change_source_state(
                 source_on=True, dBm=rf_power_setting, f_GHz=Frequency_GHz
             )
+            # fast measurements (like for powertables) sometimes need
+            # to add a delay here so everything has time to respond 
+            # to the change in signal.
+            try:
+                time.sleep(self.parameters['levelling_settings']['on_trigger_delay'])
+            except KeyError:
+                print("Cant find 'on trigger delay' in 'levelling_settings'. Defaulting to 2 seconds.")
+                time.sleep(0)
             self._end_of_iteration()
             return
 
@@ -1649,6 +1720,7 @@ class MicrocalorimeterRunner:
         # first finish up any measurements that might still be ongoing
         self._fetch_data(all_power_data=False)
 
+
         if power_was_on:
             # Do a fast off measurement
             self._load_instrument_settings('fast_off_mode_settings')
@@ -1659,16 +1731,22 @@ class MicrocalorimeterRunner:
             try:
                 time.sleep(self.parameters['levelling_settings']['off_trigger_delay'])
             except KeyError:
-                print("Cant find 'off trigger delay' in levellin_settings. Defaulting to 2 seconds.")
+                print("Cant find 'off trigger delay' in 'levelling_settings'. Defaulting to 2 seconds.")
                 time.sleep(2)
             self.change_source_state(source_on=False)
             # sleep to ensure sensor catches the turn off
-            self._fetch_data(all_power_data=True)
+            try:
+                self._fetch_data(all_power_data=True)
+            except Exception as e:
+                msg = f'Caught on fast off :{e}'
+                raise type(e)(msg) from e
         else:
             # this means we are at the end of a no power on row in settings file
             # this is a good point to zero out the commercial power meters
             for name in self.commercial_power_meter_names:
-                self.instruments[name].setup(zero_once=True)
+                ...
+                # I think we don't need to do this
+                # self.instruments[name].setup(zero_once=True)
 
         # advance
         self.parameters.advance()

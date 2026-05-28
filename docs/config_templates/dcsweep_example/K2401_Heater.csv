@@ -1,0 +1,21 @@
+key_0,key_1,key_2,key_3,value,type,comment
+,,,,,,
+instruments,SMU,model,,K2401,str,make and model of instrument; used to determine which commands to use
+instruments,SMU,serial,,2660,str,Serial or internal tag
+instruments,SMU,*IDN?,,NA,str,last 4 digits of serial number
+instruments,SMU,GPIB_address,,address,str,GPIB address
+instruments,SMU,role,,heater,str,an instrument's role is its specific use in the context of this measurement
+instruments,SMU,initial_settings,wiring,4W,str,initial settings
+instruments,SMU,initial_settings,source_measure,SIMV,str,initial settings
+instruments,SMU,initial_settings,panel,front,str,initial settings
+instruments,SMU,initial_settings,measure_for_duration_or_count,count,str,initial settings
+instruments,SMU,initial_settings,source_level,0.0,float,initial_settings
+instruments,SMU,initial_settings,source,on,str,initial_settings
+instruments,SMU,initial_settings,source_range,auto,str,initial_settings
+instruments,SMU,initial_settings,measure_range,auto,str,initial_settings
+instruments,SMU,initial_settings,over_voltage_protection,2,float,initial_settings
+instruments,SMU,initial_settings,source_readback,TRUE,bool,initial_settings
+instruments,SMU,initial_settings,measure_autozero,TRUE,bool,initial_settings
+instruments,SMU,initial_settings,source_delay,auto,str,initial_settings
+instruments,SMU,initial_settings,count_per_level,1,int,initial_settings
+instruments,SMU,initial_settings,nplc,1,float,initial_settings

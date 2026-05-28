@@ -8,7 +8,7 @@
         },
         "output_settings": {
             "$ref": "RFSweepOutputSettings.json#/definitions/RFSweepOutputSettings",
-            "description": "Describes data ouput settings for the data-record."
+            "description": "Describes data output settings for the data-record."
         },
         "levelling_settings": {
             "$ref": "RFSweepLevellingSettings.json#/definitions/RFSweepLevellingSettings",
@@ -41,7 +41,7 @@
                 }
             },
             "additionalProperties": {
-                "$ref": "RFSweepInstrumentRoles.json#/definitions/RFSweepInstrumentRole",
+                "$ref": "InstrumentRoles.json#/definitions/InstrumentRole",
                 "description": "Additional properties are all instrument roles."
             }
         }

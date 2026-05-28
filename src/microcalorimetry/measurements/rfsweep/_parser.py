@@ -155,9 +155,8 @@ CROWLEY_DEFAULT_CONFIG = {
             'V_off_delay': 8,
             'V_off_function': 'single_sample',
             'V_off_fit_time_window': (-1, 10),
-            'RF_on_average_window': 300,
         },
-        'calorimeter_power': {'instr_timing_tolerance': 5, 'RF_on_average_window': 300},
+        'calorimeter_power': {'instr_timing_tolerance': 5},
     },
     'signal_config': {
         'DUT_power': {
@@ -789,7 +788,9 @@ class Run(abc.ABC):
                 raw_segment_data[i][column +
                                     '_timestamp'] = collections.deque()
 
-        def seg_append(index, column):
+        def seg_append(index, column, debug = False):
+            if debug:
+                print(column, '\n time: ', self.data['timestamp'],'\n  val: ', self.data[column])
             raw_segment_data[index][column].append(self.data[column])
 
             try:
@@ -806,6 +807,7 @@ class Run(abc.ABC):
 
         # now that segment numbers have been assigned, iterate through data.
         highest_segment_id = 0
+        line_count = 0
         while self.data.read_next_line():
             try:
                 current_index = int(self.data['point_counter'])
@@ -828,29 +830,30 @@ class Run(abc.ABC):
             #
             # except KeyError:
             #     pass
-
+            debug = False
             for column in self.data.columns:
                 if current_segment_id > highest_segment_id:
                     highest_segment_id = current_segment_id
 
                 if current_segment_id > 0:
-                    seg_append(current_segment_id - 1, column)
+                    seg_append(current_segment_id - 1, column, debug = debug)
 
                 # handle 0's correctly
                 if current_segment_id == 0 and highest_segment_id == 0:
-                    seg_append(0, column)
+                    seg_append(0, column, debug = debug)
 
                 # handle the ending correctly
                 if current_segment_id == 0 and highest_segment_id == segment_counter:
-                    seg_append(segment_counter - 1, column)
+                    seg_append(segment_counter - 1, column, debug = debug)
 
                 if (
                     current_segment_id == 0
                     and highest_segment_id < segment_counter
                     and highest_segment_id > 0
                 ):
-                    seg_append(highest_segment_id - 1, column)
-                    seg_append(highest_segment_id, column)
+                    seg_append(highest_segment_id - 1, column, debug = debug)
+                    seg_append(highest_segment_id, column, debug = debug)
+            line_count += 1
 
         # what was the status at the end of the run?
         segment_complete = []
@@ -886,12 +889,17 @@ class Run(abc.ABC):
         # initialize segment objects
         for i in range(segment_counter):
             if segment_complete[i]:
+                first_sample_is_none = False
                 for column in self.data.columns:
                     raw_segment_data[i][column] = np.array(
                         raw_segment_data[i][column])
                     raw_segment_data[i][column + '_timestamp'] = np.array(
                         raw_segment_data[i][column + '_timestamp']
                     )
+                
+                # Sometimes the first sample of a column will be read as None because
+                # of how the data record initiailizes things.
+                    # print(f'Segment index 0 {column}: ',raw_segment_data[i][column + '_timestamp'][0], raw_segment_data[i][column][0])
 
                 new_segment = Segment(
                     raw_segment_data[i], segment_complete[i], self)
@@ -1915,12 +1923,12 @@ class ThermoelectricAnalyzer(SignalAnalyzer):
         SignalAnalyzer.__init__(
             self, analysis_config, signal_config, input_signal_config, instruments
         )
-        try:
-            self.RF_on_average_window = self.analysis_config['RF_on_average_window']
-        except KeyError:
-            self.RF_on_average_window = None
+
         self.column = self.input_signal_config['e']['column']
-        self.instr_timing_tolerance = self.analysis_config['instr_timing_tolerance']
+        try:
+            self.instr_timing_tolerance = self.analysis_config['instr_timing_tolerance']
+        except KeyError:
+            self.instr_timing_tolerance = 5.0
 
         # incase you want to do fast off analysis
         try:
@@ -2182,10 +2190,6 @@ class BolometerAnalyzer(SignalAnalyzer):
         V_off_delay = self.analysis_config['V_off_delay']
         V_off_function = self.analysis_config['V_off_function']
         V_off_fit_time_window = self.analysis_config['V_off_fit_time_window']
-        try:
-            self.RF_on_average_window = self.analysis_config['RF_on_average_window']
-        except KeyError:
-            self.RF_on_average_window = None
 
         try:
             self.stats_window_override = self.analysis_config['stats_window_override']
@@ -2336,10 +2340,6 @@ class SMUPowerMeterAnalyzer(SignalAnalyzer):
         V_off_delay = self.analysis_config['V_off_delay']
         V_off_function = self.analysis_config['V_off_function']
         V_off_fit_time_window = self.analysis_config['V_off_fit_time_window']
-        try:
-            self.RF_on_average_window = self.analysis_config['RF_on_average_window']
-        except KeyError:
-            self.RF_on_average_window = None
 
         self.i_column = i_column
         self.v_column = v_column
@@ -2441,9 +2441,6 @@ class RFSourceAnalyzer(SignalAnalyzer):
         column : str
             Name of data column.
 
-        RF_on_average_window : float
-            Time to average power measurements, in seconds.
-
         Returns
         -------
         None.
@@ -2467,7 +2464,7 @@ class RFSourceAnalyzer(SignalAnalyzer):
             self.stats_window_override = self.analysis_config['stats_window_override']
         except KeyError:
             self.stats_window_override = None
-        self.RF_on_average_window = None
+
 
     def analyze_segment(self, segment: Segment) -> tuple:
         """
@@ -2646,12 +2643,11 @@ class CommercialPowerMeterAnalyzer(SignalAnalyzer):
             self, analysis_config, signal_config, input_signal_config, instruments
         )
         self.column = self.input_signal_config['power']['column']
-        self.instr_timing_tolerance = self.analysis_config['instr_timing_tolerance']
-        self.RF_off_time_offset_method = self.analysis_config['RF_off_time_offset_method']
         try:
-            self.RF_on_average_window = self.analysis_config['RF_on_average_window']
+            self.instr_timing_tolerance = self.analysis_config['instr_timing_tolerance']
         except KeyError:
-            self.RF_on_average_window = None
+            self.instr_timing_tolerance = 5.0
+
         try:
             self.stats_window_override = self.analysis_config['stats_window_override']
         except KeyError:
@@ -3098,9 +3094,18 @@ def _average_pre_fastoff(
         timestamps > last_stable_sample - stats_window,
         timestamps <= last_stable_sample
     )
-    use_vals = step.raw_data[column][logical_index]
+    # throw away first value if can, sometimes on a transition
+    # if moving fast and using every on value in the segment
+    # if its a slow segment then it won't matter if we throw
+    # away 1 sample of 100
+    avg_time = timestamps[logical_index]
+    start_offset = 0
+    if len(avg_time) > 1:
+        start_offset = 1
 
-    results[column + '_initial_stable'] = index[logical_index][0]
+    use_vals = step.raw_data[column][logical_index][start_offset:]
+
+    results[column + '_initial_stable'] = index[logical_index][start_offset]
     results[column + '_final_stable'] = index[logical_index][-1]
 
     if mean_func is None:
@@ -3109,7 +3114,10 @@ def _average_pre_fastoff(
         std_func = partial(np.std, ddof=1)
 
     results[column + '_on'] = mean_func(use_vals)
-    results[column + '_on_dev'] = std_func(use_vals)
+    if len(use_vals) <= 2:
+        results[column + '_on_dev'] = 0.0
+    else:
+        results[column + '_on_dev'] = std_func(use_vals)
     if VERBOSE:
         print(column, ' on', results[column + '_on'])
 
@@ -3204,17 +3212,29 @@ def _analyze_off_period(
             segment.raw_data['timestamp'][initial_off_stable][-1] -
             stats_window_seconds
         )
-
+  
         initial_off_start = index[
-            segment.raw_data['timestamp'] >= initial_off_start_time
+            segment.raw_data['timestamp'] >= initial_off_start_time 
         ][0]
 
         final_off_start_time = segment.raw_data['timestamp'][-1] - \
             stats_window_seconds
-        final_off_start = index[segment.raw_data['timestamp'] >= final_off_start_time][
+        final_off_start = index[
+            np.logical_and((segment.raw_data['timestamp'] >= final_off_start_time),
+            np.logical_not(segment.raw_data['power_on'])
+            )
+            ][
             0
         ]
 
+        # if the manual override stats window is too big, use the
+        # maximum value
+        print(final_off_start, last_on_point)
+        if final_off_start < last_on_point+1:
+            final_off_start = last_on_point+1
+            final_off_start_time = segment.raw_data['timestamp'][final_off_start]
+
+        print(final_off_start, last_on_point)
         initial_off_stop = index[initial_off][-1]
         final_off_stop = index[final_off][-1]
 
@@ -3259,6 +3279,20 @@ def _analyze_off_period(
         initial_off_stop = index[initial_off][-1]
         final_off_stop = index[final_off][-1]
 
+
+    # sometimes it pre-fills the first value with a 
+    # None. Why? only happens on the first segment I think?
+    # and only at the start of a segment? I think it has something
+    # to do with how the DatRecord tries to align time samples 
+    # but I spent an hour trying to find where that happens and I couldnt
+    # so I am doing a stupid check here. If I just move up 1 sample then it
+    # doesn't catch the None it seems. I can not for the life of me figure out
+    # what is happening.
+
+    check_none_val = segment.raw_data[column][initial_off_start:initial_off_stop]
+    if check_none_val[0] is None:
+        initial_off_start +=1
+
     results[f'{column}_initial_off_start'] = initial_off_start
     results[f'{column}_final_off_start'] = final_off_start
     results[f'{column}_initial_off_stop'] = initial_off_stop
@@ -3287,7 +3321,11 @@ def _analyze_off_period(
 
     # get values of column
     initial_off_vals = segment.raw_data[column][initial_off_start:initial_off_stop]
+
     final_off_vals = segment.raw_data[column][final_off_start:final_off_stop]
+
+
+  
 
     print(column, 'slow off initial fit time length',
           initial_off_times[-1] - initial_off_times[0])
@@ -3295,9 +3333,29 @@ def _analyze_off_period(
           final_off_times[-1] - final_off_times[0])
     vals = np.hstack((initial_off_vals, final_off_vals))
 
+
+
     # fit values of combined off regions
-    popt, pcov = scipy.optimize.curve_fit(_linear, off_times, vals)
-    results[column + '_off_a'], results[column + '_off_b'] = popt
+    try:
+        # print(off_times)
+        # print(vals)
+        popt, pcov = scipy.optimize.curve_fit(_linear, off_times, vals)
+        results[column + '_off_a'], results[column + '_off_b'] = popt
+    except Exception as e:
+        msg = f'Failed to fit  slow off period for {column} for "{e}".'
+        fig,ax = pl.subplots(1,1)
+        # ax.plot(segment.raw_data[column + '_timestamp'])
+        # print(segment.raw_data[column + '_timestamp'].shape)
+        # print(segment.raw_data[column].shape)
+        # ax.plot(segment.raw_data[column + '_timestamp'], segment.raw_data[column])
+        ax.plot(off_times, vals, 'o', label = 'All samples')
+        ax.legend(loc = 'best')
+        ax.set_xlabel('off times')
+        ax.set_ylabel(column)
+        fig.suptitle(f"Fitting Failure Report: \n {column} slow offs for segment")
+        raise type(e)(msg) from e
+
+
 
     # fit initial off period bias slope and average
     # try:
@@ -3310,19 +3368,27 @@ def _analyze_off_period(
     #     results[column + "_off_i_drift"] = 0
     #     results[column + "_off_i"] = initial_off_vals[0]
 
-    popt, pcov = scipy.optimize.curve_fit(
-        _linear,
-        initial_off_times - results['time_zero_' + column + '_i'],
-        initial_off_vals,
-    )
-    results[column + '_off_i_drift'], results[column + '_off_i'] = popt
+    try:
+        popt, pcov = scipy.optimize.curve_fit(
+            _linear,
+            initial_off_times - results['time_zero_' + column + '_i'],
+            initial_off_vals,
+        )
+        results[column + '_off_i_drift'], results[column + '_off_i'] = popt
+    except Exception as e:
+        msg = f"Failed to fit initial off period drift for {column}. Likely not enough samples in stable period."
+        raise type(e)(msg) from e
 
     # determine final slope and average of final off period
-    popt, pcov = scipy.optimize.curve_fit(
-        _linear, final_off_times -
-        results['time_zero_' + column + '_f'], final_off_vals
-    )
-    results[column + '_off_f_drift'], results[column + '_off_f'] = popt
+    try:
+        popt, pcov = scipy.optimize.curve_fit(
+            _linear, final_off_times -
+            results['time_zero_' + column + '_f'], final_off_vals
+        )
+        results[column + '_off_f_drift'], results[column + '_off_f'] = popt
+    except Exception as e:
+        msg = f"Failed to fit final off period drift for {column}. Likely not enough samples in stable period."
+        raise type(e)(msg) from e
 
     # determine residuals
     initial_off_residuals = initial_off_vals - _linear(
@@ -3458,7 +3524,7 @@ def _fit_fast_off_timeseries(
         print(f"{column} fit region index: ",
               initial_fit_region, final_fit_region)
 
-    except IndexError:
+    except IndexError as e:
 
         print('Caught IndexError Trying to fit. Error for :')
         print('fit window = ', V_off_fit_time_window)
@@ -3466,7 +3532,14 @@ def _fit_fast_off_timeseries(
             'relative times (min,max)',
             (min(timestamps - RF_off_time), max(timestamps - RF_off_time)),
         )
-        raise IndexError('See above message')
+        fig,ax = pl.subplots(1,1)
+        ax.plot(timestamps, vals,'-', label = 'Fast Off Data')
+        ax.axvline(RF_off_time)
+        ax.legend(loc = 'best')
+        ax.set_xlabel('Time Stamp')
+        ax.set_ylabel(column)
+        fig.suptitle(f'Fast Off Fitting Failure: {column}')
+        raise IndexError from e
 
     a = None
     b = None

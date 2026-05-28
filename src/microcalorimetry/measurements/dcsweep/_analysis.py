@@ -526,7 +526,9 @@ def parse_v0(
 
 def read_v1(
     runs: list[Path],
-    e_col: str = 'V_NVM (V)'
+    thermopile_monitor: str,
+    thermometer_monitor: str,
+    heater: str
     ) -> DCCalibrationData:
     """
     Reads version 1 of the DC sweep experiment in an XArrayDataSet.
@@ -538,9 +540,12 @@ def read_v1(
     runs : list[Path]
         List of folders containing or metadata files them selves from 
         dc sweep runs.
-    e_col : str, optional
-        Column associated with the thermoelectric sensor
-        The default is 'V_NVM (V)'.
+    thermopile_monitor : str, optional
+        Name of thermopile instrument.
+    thermometer_monitor : str, optiona
+        Name of thermometer instrument.
+    heater : str, optional
+        Name of heater instrument.
 
     Returns
     -------
@@ -553,7 +558,7 @@ def read_v1(
         If e_col isn't present.
     """
     all_data = {}
-    
+    e_col = f'V_{thermopile_monitor} (V)'
     
     def try_get(d, key, p: str):
         try:
@@ -564,8 +569,11 @@ def read_v1(
     for file in runs:
         print(file)
         file = Path(file)
+        if not file.exists():
+            raise FileNotFoundError(f'no such thing as {file}')
         if file.is_dir():
             file = [f for f in file.glob('*metadata*')][0]
+            print('found', file, 'in', file.parent)
         try:
             config = [f for f in file.parent.glob('*settings*')][0]
         except IndexError:
@@ -613,14 +621,10 @@ def read_v1(
     # put into a dataset
     data = xr.Dataset(
         data_vars = dict(
-            heater_v =  (['time'],all_data['V_SMU (V)']),
-            heater_i = (['time'],all_data['I_SMU (A)']),
-            heater_p = (['time'],all_data['I_SMU (A)']*all_data['V_SMU (V)']),
-            heater_r = (['time'],all_data['I_SMU (A)']/all_data['V_SMU (V)']),
-            therm_i = (['time'],all_data['I_Thermometer (A)']),
-            therm_v = (['time'],all_data['V_Thermometer (V)']),
-            therm_p = (['time'],all_data['V_Thermometer (V)']*all_data['I_Thermometer (A)']),
-            therm_r = (['time'],all_data['V_Thermometer (V)']/all_data['I_Thermometer (A)']),
+            heater_v =  (['time'],all_data[f'V_{heater} (V)']),
+            heater_i = (['time'],all_data[f'I_{heater} (A)']),
+            heater_p = (['time'],all_data[f'I_{heater} (A)']*all_data[f'V_{heater} (V)']),
+            heater_r = (['time'],all_data[f'I_{heater} (A)']/all_data[f'V_{heater} (V)']),
             e = e,
             pwr_setting =  (['time'],all_data['pwr_setting']),
             adjust_time = (['time'],all_data['time_since_source_adjust (s)']),
@@ -630,6 +634,14 @@ def read_v1(
             time = all_data['Timestamp (s)'],
         )
     )
+
+    if thermometer_monitor:
+        data = data.assign(
+            therm_i = (['time'],all_data[f'I_{thermometer_monitor} (A)']),
+            therm_v = (['time'],all_data[f'V_{thermometer_monitor} (V)']),
+            therm_p = (['time'],all_data[f'V_{thermometer_monitor} (V)']*all_data[f'I_{thermometer_monitor} (A)']),
+            therm_r = (['time'],all_data[f'V_{thermometer_monitor} (V)']/all_data[f'I_{thermometer_monitor} (A)'])
+            )
 
     # make something that tracks where the steps happened
     where_steps =  np.where(np.diff(data.pwr_setting, prepend = False) != 0)[0]
@@ -683,8 +695,11 @@ def review_plot_v1(
     return fig
 
 def parse_v1(
+    *args, 
     metadata: list[Path | str],
-    e_col: str,
+    thermometer_monitor: str,
+    thermopile_monitor: str,
+    heater: str,
     throw_away_min_time: float,
     on_min_wait_time:float,
     on_max_wait_time: float,
@@ -700,7 +715,12 @@ def parse_v1(
     on_max_wait_time = float(on_max_wait_time)
     min_pwr_setting = float(min_pwr_setting)
    
-    data = read_v1(metadata, e_col)
+    data = read_v1(
+        metadata, 
+        heater = heater,
+        thermopile_monitor = thermopile_monitor,
+        thermometer_monitor = thermometer_monitor,
+        )
 
     # throw away bad data
     data = data.where(data.adjust_time > throw_away_min_time, drop = True)
@@ -763,13 +783,14 @@ def parse_v1(
     )
     figs.append(fig)
 
-    fig = review_plot_v1(
-        'therm_r',
-        raw,
-        corr = data,
-        ylabel = r'$R_{thermometer}\:\left(\mathrm{k}\Omega\right)$',
-        yscale = 1e-3
-    )
+    if thermometer_monitor:
+        fig = review_plot_v1(
+            'therm_r',
+            raw,
+            corr = data,
+            ylabel = r'$R_{thermometer}\:\left(\mathrm{k}\Omega\right)$',
+            yscale = 1e-3
+        )
     figs.append(fig)
     fig = review_plot_v1(
         'heater_p',
@@ -807,16 +828,17 @@ def parse_v1(
     ax.set_ylabel(r'$e_{sensor}$ (mV)')
     figs.append(fig)
 
-    fig,ax = plt.subplots(1,1)
-    # color by approximate unique powers
-    colors = colorbar(fig,ax, unq_pwr*1e3, label = 'Power Setting (mW)')
-    for i, pi in enumerate(unq_pwr):
-        di = data.where(data.pwr_setting == pi)
-        # print(color)
-        ax.plot(di.therm_r/1000, mean_sub(di.e)*1e6,'o',color = colors(i))
-    ax.set_xlabel(r'$R_{thermometer}\:\left(\mathrm{k}\Omega\right)$')
-    ax.set_ylabel(r'$e_{sensor}- $ - $\mu_{e}\:\left(\mu\mathrm{V}\right)$ by Power Setting')
-    figs.append(fig)
+    if thermometer_monitor:
+        fig,ax = plt.subplots(1,1)
+        # color by approximate unique powers
+        colors = colorbar(fig,ax, unq_pwr*1e3, label = 'Power Setting (mW)')
+        for i, pi in enumerate(unq_pwr):
+            di = data.where(data.pwr_setting == pi)
+            # print(color)
+            ax.plot(di.therm_r/1000, mean_sub(di.e)*1e6,'o',color = colors(i))
+        ax.set_xlabel(r'$R_{thermometer}\:\left(\mathrm{k}\Omega\right)$')
+        ax.set_ylabel(r'$e_{sensor}- $ - $\mu_{e}\:\left(\mu\mathrm{V}\right)$ by Power Setting')
+        figs.append(fig)
 
     fig,ax = plt.subplots(1,1)
     # color by approximate unique powers
@@ -826,13 +848,14 @@ def parse_v1(
     ax.set_ylabel(r'$\frac{e}{P_{smu}}$')
     figs.append(fig)
 
-    fig,ax = plt.subplots(1,1)
-    # color by approximate unique powers
-    scatter = ax.scatter(data.e*1e3, data.therm_r, c= data.env_temp, cmap = plt.cm.jet)
-    fig.colorbar(scatter, label = 'Ambient Temperature')
-    ax.set_xlabel(r'e (mV)')
-    ax.set_ylabel(r'$R_{thermometer}\:\left(\Omega\right)$')
-    figs.append(fig)
+    if thermometer_monitor:
+        fig,ax = plt.subplots(1,1)
+        # color by approximate unique powers
+        scatter = ax.scatter(data.e*1e3, data.therm_r, c= data.env_temp, cmap = plt.cm.jet)
+        fig.colorbar(scatter, label = 'Ambient Temperature')
+        ax.set_xlabel(r'e (mV)')
+        ax.set_ylabel(r'$R_{thermometer}\:\left(\Omega\right)$')
+        figs.append(fig)
 
     fig,ax = plt.subplots(1,1)
     # color by approximate unique powers
@@ -850,14 +873,15 @@ def parse_v1(
     ax.set_ylabel(r'$\frac{e}{P_{smu}}$')
     figs.append(fig)
 
-    fig,ax = plt.subplots(1,1)
-    # color by approximate unique powers
-    scatter = ax.scatter(data.e*1e3, data.e/data.heater_p, c= data.therm_r, cmap = plt.cm.jet)
-    fig.colorbar(scatter, label = r'$R_{thermometer}\:\left(\Omega\right)$')
-    ax.set_xlabel(r'$e\:\left(\mathrm{mV}\right)$')
-    ax.set_ylabel(r'$\frac{e}{P_{smu}}$')
-    figs.append(fig)
-    
+    if thermometer_monitor:
+        fig,ax = plt.subplots(1,1)
+        # color by approximate unique powers
+        scatter = ax.scatter(data.e*1e3, data.e/data.heater_p, c= data.therm_r, cmap = plt.cm.jet)
+        fig.colorbar(scatter, label = r'$R_{thermometer}\:\left(\Omega\right)$')
+        ax.set_xlabel(r'$e\:\left(\mathrm{mV}\right)$')
+        ax.set_ylabel(r'$\frac{e}{P_{smu}}$')
+        figs.append(fig)
+        
     # spec sheets
     heater_i_specs = kspecs.DatasheetMeasureDCI('K2450',serial = 'xxx',suppress_warnings = True)
     heater_v_specs = kspecs.DatasheetMeasureDCV('K2450',serial = 'xxx',suppress_warnings = True)
@@ -906,13 +930,14 @@ def parse_v1(
             umech_prefix = 'DC Sweep'
             )
         measurements[var] = on - off
-    for var in ['therm_i','therm_v']:
-        measurements[var] = metered_to_linmeas(
-            var,
-            mean = on_means[var],
-            std = on_stds[var],
-            specs = spec_sheets[var],
-            umech_prefix = 'DC Sweep'
-            )
+    if thermometer_monitor:
+        for var in ['therm_i','therm_v']:
+            measurements[var] = metered_to_linmeas(
+                var,
+                mean = on_means[var],
+                std = on_stds[var],
+                specs = spec_sheets[var],
+                umech_prefix = 'DC Sweep'
+                )
     
     return measurements, figs

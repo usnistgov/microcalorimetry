@@ -25,6 +25,7 @@ def _gui(no_console_stdout: bool = False):
     import microcalorimetry.measurements as measurements
     import microcalorimetry.analysis as anl
     import microcalorimetry.export as export
+    from pathlib import Path
 
     app = GUI(
         'microcalorimetry',
@@ -32,6 +33,7 @@ def _gui(no_console_stdout: bool = False):
         stderr_gui=no_console_stdout,
         right_sidebar=HDF5viewer,
         right_sidebar_kwargs=dict(width=350),
+        icon_path=Path(__file__).parent / 'graphics/icon.ico',
     )
 
     app.add_function_tab(
@@ -46,27 +48,29 @@ def _gui(no_console_stdout: bool = False):
             'rfsweep.run': rfsweep._main.run_gui,
             'rfsweep.make_settled_runlist': rfsweep.generate_settled_runlist,
             'rfsweep.make_runlist_from_loss': rfsweep.runlist_from_loss,
+            'rfsweep.reduce_initial_power': rfsweep.reduce_initial_power,
         },
-        output_group_saveable=['dcsweep.parse','rfsweep.parse'],
+        output_group_saveable=['dcsweep.parse_v0', 'dcsweep.parse_v1', 'rfsweep.parse'],
     )
 
     app.add_function_tab(
         'analysis.',
         functions={
             'make_eta_repeatability_model': anl.make_eta_repeatability_model,
-            'make_k_coeffs': anl.fit_thermoelectric,
+            'fit_thermoelectric': anl.fit_thermoelectric,
+            'compression_check': anl.compression_check,
             'make_eta': anl.make_eta,
             'dc_lead_correction': anl.dc_lead_correction,
-            'apply_uncertainty_model':anl.apply_uncertainty_model,
+            'apply_uncertainty_model': anl.apply_uncertainty_model,
             'review_eta': anl.review_eta,
-
         },
         output_group_saveable=[
-            'make_k_coeffs',
+            'fit_thermoelectric',
             'make_eta',
             'make_eta_hist_model',
             'dc_lead_correction',
-            'apply_uncertainty_model'
+            'apply_uncertainty_model',
+            'compression_check',
         ],
     )
 
@@ -83,16 +87,17 @@ def _gui(no_console_stdout: bool = False):
 
 
 # %% Analysis subgroups
-@_main.group(
-    name='anl',
-    cls=LazyGroup,
-    lazy_subcommands={
-        'make-k-coeffs': 'microcalorimetry.analysis._sensitivity._cli_make_k_coeffs'
-    },
-    help='Commands for performing analysis.',
-)
-def _anl():
-    pass
+# leaving this out for now, might come back to it later.
+# @_main.group(
+#     name='anl',
+#     cls=LazyGroup,
+#     lazy_subcommands={
+#         'make-k-coeffs': 'microcalorimetry.analysis._sensitivity._cli_make_k_coeffs'
+#     },
+#     help='Commands for performing analysis.',
+# )
+# def _anl():
+#     pass
 
 
 # %% DCSweep subgroup
@@ -101,7 +106,7 @@ def _anl():
     cls=LazyGroup,
     lazy_subcommands={
         'run': 'microcalorimetry.measurements.dcsweep._main._run_cli',
-        'parse': 'microcalorimetry.measurements.dcsweep._main._parse_cli',
+        # 'parse': 'microcalorimetry.measurements.dcsweep._main._parse_cli',
     },
     help='Commands for interacting with DCSweep measurements.',
 )

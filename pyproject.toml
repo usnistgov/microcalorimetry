@@ -79,5 +79,5 @@ dev = [
     "sphinx-gallery==0.17.0",
     "sphinx-jsonschema>=1.19.1",
     "sphinx-multiversion>=0.2.4",
-    "spyder-kernels>=3.0.5",
+    "spyder-kernels==3.1.*",
 ]

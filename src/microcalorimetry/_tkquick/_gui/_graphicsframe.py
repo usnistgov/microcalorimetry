@@ -100,6 +100,15 @@ class GraphicsTabs(customtkinter.CTkTabview):
             if ol not in self.plots_dict:
                 print('Caught hidden tab, ', ol, ', closing it')
                 plt.close(ol)
+    
+    def add_hidden_tabs(self):
+        open_labels = plt.get_figlabels()
+        for ol in open_labels:
+            if ol not in self.plots_dict:
+                print('Caught hidden tab, ', ol, ',  it')
+                fig = plt.figure(ol)
+                name = str(plt.figure(ol).number)
+                self.add_plot(fig, name)
 
     def add_dummy_plot(self, name):
         fig = Figure(figsize=(5, 4), dpi=100)
@@ -238,12 +247,7 @@ class HDF5GroupRow:
 
         if '__class__.__name__' in group.attrs.keys():
             cname = group.attrs['__class__.__name__']
-            if cname == 'RMEMeas' or cname == 'MUFmeas':
-                try:
-                    dfm = group['cov'].attrs['dataformat']
-                except KeyError:
-                    pass
-                is_RMEMeas = True
+            is_RMEMeas = cname == 'RMEMeas' or cname == 'MUFmeas'
 
         self.name = group.name
         self.position = position
@@ -256,7 +260,7 @@ class HDF5GroupRow:
                 text=' ' * 7 + group.name.split('/')[-1],
                 fg_color='transparent',
                 anchor='w',
-                command=self.rebuild,
+                command=self.go_down,
             )
             self.plot = ctk.CTkLabel(master=master, text='')
             self.plot.grid(row=position, column=2)
@@ -278,12 +282,18 @@ class HDF5GroupRow:
             self.plot.grid(row=position, column=2)
             print(self.plot.get())
 
-        self.objbutt.grid(row=position, column=0, sticky='ew')
+        self.objbutt.grid(row=position, column=0, columnspan = 2, sticky='ew')
 
-        # try to identify the dataformat
-        # commented out, dont need it anymore
-        # self.dfm = ctk.CTkLabel(master=master, text=dfm)
-        # self.dfm.grid(row=position, column=1, sticky='ew')
+        # button to delete groups
+        self.edit_but = ctk.CTkOptionMenu(
+                master=master,
+                width=50,
+                height=20,
+                values=["delete","clip"],
+                command=self.edit,
+            )
+        self.edit_but.set('edit')
+        self.edit_but.grid(row=position, column=1, sticky='e')
 
         # make a metadata page
         color = self.master.cget('fg_color')[0]
@@ -299,11 +309,32 @@ class HDF5GroupRow:
 
         # print('HDF5 row ', position, ' for ', group.name, is_RMEMeas)
 
+    def edit(self, choice):
+        reset = True
+        match choice:
+            case 'delete':
+                print("deleting : ", self.name)
+                with h5py.File(self.hdf5_file, 'a') as f:
+                    del f[self.name]
+                self.master.refresh()
+                reset = False
+            case 'clip':
+                import subprocess
+                path = str(Path(self.hdf5_file))  + self.name
+                print('Copying', path, 'to clip')
+                subprocess.run("clip", input=path, check=True, encoding="utf-8")
+
+            case _:
+                print(choice, 'not defined')
+                return
+        if reset:
+            self.edit_but.set('edit')
+
     def destroy(self):
-        for item in [self.objbutt, self.plot, self.metabut]:
+        for item in [self.objbutt, self.plot, self.edit_but, self.metabut]:
             item.destroy()
 
-    def rebuild(self):
+    def go_down(self):
         # print('callback from ', self.name, ' row ', self.position)
         self.master.build(path=self.name)
 
@@ -355,19 +386,27 @@ class HDF5viewer(customtkinter.CTkScrollableFrame):
         self.grid_columnconfigure(0, weight=2)
         # self._scrollbar.configure(width = 0)
         # refresh button
-        self.refresh_button = ctk.CTkButton(
-            master=self, command=self.build, text='home', fg_color='transparent'
+        self.root_button = ctk.CTkButton(
+            master=self, command=self.build, text='root', fg_color='transparent'
         )
-        self.refresh_button.grid(row=0, column=0, columnspan=1, sticky='nesw')
+        self.root_button.grid(row=0, column=0, columnspan=1, sticky='nesw')
+        
+        self.refresh_button = ctk.CTkButton(
+            master=self, command=self.refresh, text='refresh', fg_color='transparent'
+        )
+        self.refresh_button.grid(row=0, column=1, columnspan=1, sticky='nesw')
+
+        
         self.file_button = ctk.CTkButton(
             master=self, command=self.set_file, text='open_file', fg_color='transparent'
         )
-        self.file_button.grid(row=0, column=1, columnspan=3, sticky='nesw')
+        self.file_button.grid(row=0, column=2, columnspan=2, sticky='nesw')
+        
 
         # make the column headers
         self.label = ctk.CTkLabel(master=self, text='Objects', justify='left')
         self.label.grid(row=1, column=0, padx=(0, 10), pady=10, sticky='ew')
-        self.label = ctk.CTkLabel(master=self, text='DFM', justify='left')
+        self.label = ctk.CTkLabel(master=self, text='Del', justify='left')
         self.label.grid(row=1, column=1, padx=(0, 10), pady=10, sticky='e')
         self.label = ctk.CTkLabel(master=self, text='Plot', justify='right')
         self.label.grid(row=1, column=2, padx=(0, 10), pady=10, sticky='e')
@@ -402,6 +441,9 @@ class HDF5viewer(customtkinter.CTkScrollableFrame):
                 new_root = f[self.root].parent.name
                 # print('new root: ', new_root, 'from ', self.root)
             self.build(path=new_root)
+
+    def refresh(self):
+        self.build(path = self.root)
 
     def build(self, path=None):
         for thing in self.h5rows:

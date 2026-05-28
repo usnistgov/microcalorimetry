@@ -1,7 +1,7 @@
 {
     "definitions": {
         "DCSweep": {
-            "description": "File, HDF5Group, or in memory reprsentation of a DCSweep dataset.",
+            "description": "File, HDF5Group, or in memory representation of a DCSweep dataset.",
             "$ref$":"DataModelContainer.json#/definitions/DataModelContainer",
             "examples":["path/to/data.hdf5/path/to/sweep"],
             "additionalProperties": false

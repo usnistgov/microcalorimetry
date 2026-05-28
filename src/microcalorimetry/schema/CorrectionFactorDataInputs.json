@@ -16,7 +16,7 @@
   },
   "definitions":{
     "correction-factor-measurements":{
-      "description":"Points to a DUT's S-parameters, parsed RF sweep, and calorimeter sensitivity cofficients for a particular measurement.",
+      "description":"Points to a DUT's S-parameters, parsed RF sweep, and calorimeter sensitivity coefficients for a particular measurement.",
       "properties":{
         "s11": {"$ref": "S11.json#/definitions/S11"},
         "parsed_calibration": {"$ref": "ParsedRFSweep.json#/definitions/ParsedRFSweep"},

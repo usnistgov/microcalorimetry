@@ -1,7 +1,7 @@
 {
     "definitions": {
         "S11": {
-            "description": "File, HDF5Group, or in memory reprsentation of an S11 dataset. Could be a DUT file or an HDF5 file.",
+            "description": "File, HDF5Group, or in memory representation of an S11 dataset. Could be a DUT file or an HDF5 file.",
             "$ref$":"DataModelContainer.json#/definitions/DataModelContainer",
             "examples":["s11_file.dut","data.h5/s11_group"],
             "additionalProperties": false

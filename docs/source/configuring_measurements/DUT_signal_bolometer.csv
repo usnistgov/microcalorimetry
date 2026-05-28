@@ -1,0 +1,9 @@
+key_0,key_1,key_2,key_3,value,type,comment
+signal_config,DUT_power,type,,bolometer,str,sensor type of the DUT
+signal_config,DUT_power,units,,W,str,units should be W
+signal_config,DUT_power,can_level,,TRUE,bool, whether or not sensor can level
+signal_config,DUT_power,resistance,,200,float,resistance of the DUT
+signal_config,DUT_power,input_signals,,vdc,str,data signals used to estimat power
+signal_config,DUT_power,vdc,units,V,str,units of input voltage
+signal_config,DUT_power,vdc,column,DVM_volts,str,column name corresponding to voltage
+signal_config,DUT_power,vdc,instrument,DVM1,str,instrument associated with this column

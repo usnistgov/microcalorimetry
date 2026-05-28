@@ -23,7 +23,13 @@ from decimal import Decimal
 from fnmatch import fnmatch
 from microcalorimetry.math.numbers import mean_unique_values
 
-__all__ = ['run', 'parse', 'generate_settled_runlist', 'runlist_from_loss']
+__all__ = [
+    'run',
+    'parse',
+    'generate_settled_runlist',
+    'runlist_from_loss',
+    'reduce_initial_power'
+]
 
 
 
@@ -123,6 +129,7 @@ def run(
     name: str = 'rf_sweep',
     no_confirm: bool = False,
     dry_run: bool = False,
+    validate: bool = True,
 ):
     """
     Run a microcalorimetry RF Sweep experiment.
@@ -150,6 +157,8 @@ def run(
         If true, will try to load the configurations without actually running
         anything to do a dry-check - can be used to validate some basic type validation
         of the configuration.
+    validate : bool, optional
+        If true, attempts to validate configuration files. The default is True.
     """
     priority = [0] * len(configs)
     if isinstance(settings, str) or isinstance(settings, Path):
@@ -166,6 +175,7 @@ def run(
                     sensor_master_list,
                     priority,
                     no_confirm=no_confirm,
+                    validate = validate
                 ) as runner:
                     # opens visa resources for every instrument
                     runner.initialize_instruments()
@@ -185,6 +195,7 @@ def run(
                     sensor_master_list,
                     priority,
                     dry_run=True,
+                    validate = validate
                 )
 
 
@@ -249,7 +260,6 @@ def _parse_cli(
 
 def parse(
     metadata: list[Path],
-    analysis_config: configs.RFSweepParserConfig = None,
     verbose: bool = False,
     make_plots: bool = False,
     plot_segments_analysis: list[int] = [0, -1],
@@ -257,6 +267,11 @@ def parse(
     dataframe_results: Path = None,
     format_matlab: Path = None,
     include_time_std: bool = True,
+    analysis_config: configs.RFSweepParserConfig = None,
+    DUT_power_analysis: dict = None,
+    monitor_power_analysis: dict = None,
+    calorimeter_power_analysis: dict = None,
+    RF_source_power_analysis: dict = None
 ) -> tuple[dict[RMEMeas], list[plt.Figure]]:
     """
     Parse a microccalorimeter run to produce data with uncertainties.
@@ -267,8 +282,6 @@ def parse(
     ----------
     metadata : list[Path]
         Path to metadata file for experient. Can be multiples.
-    analysis_config : RFSweepParserConfig, optional
-        Path to sensor configuration file, overrides any sensor configuration in the metadata if provided.
     verbose : bool, optional
         If True, prints info about the analysis. Default is True
     make_plots : bool, optional
@@ -285,13 +298,118 @@ def parse(
     include_time_std : bool, optional
         It True, includes STD of time series as an uncertainty mechanism.
         The default is True.
+    analysis_config : RFSweepParserConfig, optional
+        Path to sensor configuration file, overrides any sensor configuration in the metadata if provided.
+        Is itself overloaded by manually setting functions
+    DUT_power_analysis : dict, optional
+        Set the analysis settings for the DUT manually.
+        Format
+        ------
+        {
+        instr_timing_tolerance : int
+            Relative tolerance of instruments. Default is 5.
+        stats_window_override : float
+            Stats window override ot manually change the length of the stable period, defualt is None.
+        fast_off_analysis : bool
+            Whether or not to use fast analysis. Only matters for thermoelectric sensors that may or may not use fast off analysis routines.
+        coeffs : Path
+            Provided a path to thermoelectric fit coefficients you want to use.
+        V_off_delay : float
+            Relative time from RF being turned off to on to use for the V off measurement. Only if fast analysis is being used.
+        V_off_function : str
+            What V Off fit function to use, only required if doing a fast fit. Only if fast analysis is being used.
+            This is another line of description.
+            Options Format
+            --------------
+            {
+            lin_plus_exp
+                Fit fast off measurements to a line + an exponential.
+            linear
+                Fit fast off measurements to a line.
+            single_sample
+                Treat all fast off measurements in window  asrealizations of the same measurement and average over them.
+            }
+        V_off_fit_time_window : list[float]
+            Relative time window from RF being turned on to fit to.  
+        }
+    monitor_power_analysis : dict, optional
+        Set the analysis settings for the monitor.
+        Format
+        ------
+        {
+        instr_timing_tolerance : int
+            Relative tolerance of instruments. Default is 5.
+        stats_window_override : float
+            Stats window override ot manually change the length of the stable period, defualt is None.
+        fast_off_analysis : bool
+            Whether or not to use fast analysis. Only matters for thermoelectric sensors that may or may not use fast off analysis routines.
+        coeffs : Path
+            Provided a path to thermoelectric fit coefficients you want to use.
+        V_off_delay : float
+            Relative time from RF being turned off to on to use for the V off measurement. Only if fast analysis is being used.
+        V_off_function : str
+            What V Off fit function to use, only required if doing a fast fit. Only if fast analysis is being used.
+            This is another line of description.
+            Options Format
+            --------------
+            {
+            lin_plus_exp
+                Fit fast off measurements to a line + an exponential.
+            linear
+                Fit fast off measurements to a line.
+            single_sample
+                Treat all fast off measurements in window  asrealizations of the same measurement and average over them.
+            }
+        V_off_fit_time_window : list[float]
+            Relative time window from RF being turned on to fit to.  
+        }
+    calorimeter_power_analysis : dict, optional
+        Set the analysis settings for the calorimeter Source.
+        Format
+        ------
+        {
+        instr_timing_tolerance : int
+            Relative tolerance of instruments. Default is 5.
+        stats_window_override : float
+            Stats window override ot manually change the length of the stable period, defualt is None.
+        coeffs : Path
+            Provided a path to thermoelectric fit coefficients you want to use.
+        }
+    RF_source_power_analysis : dict, optional
+        Set the analysis settings for the RF Source.
+        Format
+        ------
+        {
+        instr_timing_tolerance : int
+            Relative tolerance of instruments. Default is 5.
+        stats_window_override : float
+            Stats window override ot manually change the length of the stable period, defualt is None.
+        V_off_delay : float
+            Relative time from RF being turned off to on to use for the V off measurement. Only if fast analysis is being used.
+        V_off_function : str
+            What V Off fit function to use, only required if doing a fast fit. Only if fast analysis is being used.
+            This is another line of description.
+            Options Format
+            --------------
+            {
+            lin_plus_exp
+                Fit fast off measurements to a line + an exponential.
+            linear
+                Fit fast off measurements to a line.
+            single_sample
+                Treat all fast off measurements in window  asrealizations of the same measurement and average over them.
+            }
+        V_off_fit_time_window : list[float]
+            Relative time window from RF being turned on to fit to.  
+        }
+
 
     Returns
     -------
     parsed_rf : dict[RMEMeas]
-        Dictionairy of RFSweep datasets in a parsed RF sweep configuration.
+        Dictionary of RFSweep datasets in a parsed RF sweep configuration.
     figures : list[plt.Figure]
-        Dictionairy of RFSweep datasets in a parsed RF sweep configuration.
+        Dictionary of RFSweep datasets in a parsed RF sweep configuration.
 
     """
     # wrap propagator around functions
@@ -304,10 +422,49 @@ def parse(
     zeta_general = basicprop.propagate(rfpower.zeta_general)
     dc_sub = basicprop.propagate(rfpower.dc_substituted_power)
     openloope_te_power = basicprop.propagate(rfpower.openloop_thermoelectric_power)
+
+    # if an analysis config fils is provided, load that
     if analysis_config is None:
         analysis_config = {}
     else:
         analysis_config = configs.load_config(analysis_config)
+
+    def overload_analysis_config_from_fvalues(signame,d):
+        # pre fill dictionairys that might be missing
+        if 'analysis_config' not in analysis_config:
+            analysis_config['analysis_config'] = {}
+
+        if signame not in analysis_config['analysis_config']:
+            analysis_config['analysis_config'][signame] = {}
+        
+        # over load values that aren't None
+        for ckey, value in d.items():
+            # there fit coeffs were specified, put those in the
+            # right place.
+            if ckey == 'coeffs' and value is not None:
+                if 'signal_config' not in analysis_config:
+                    analysis_config['signal_config'] = {}
+
+                if signame not in analysis_config['signal_config']:
+                    analysis_config['signal_config'][signame] = {}
+                
+                analysis_config['signal_config'][signame]['coeffs'] = value
+
+            # other rise pass it in
+            elif value is not None:
+                analysis_config['analysis_config'][signame][ckey] = value
+
+
+    # use any dictionaries passed in directly to modify the
+    # configuration file at run time. This provides the GUI an
+    # easier way to modify these config values.
+    overload_analysis_config_from_fvalues('DUT_power', DUT_power_analysis)
+    overload_analysis_config_from_fvalues('calorimeter_power', calorimeter_power_analysis)
+    overload_analysis_config_from_fvalues('monitor_power', monitor_power_analysis)
+    overload_analysis_config_from_fvalues('RF_source_power', RF_source_power_analysis)
+
+    import json
+    print(json.dumps(analysis_config, indent = True))
 
     # set up parser
     metadata_dict = {}
@@ -450,85 +607,7 @@ def parse(
                             f'Encountered error plotting  {signal}:{ins} segment off \n {type(e)}: {e}'
                         )
 
-        # Plot if the source think it is in
-        # compression
-
-        compression = {}
-        freq = np.array([])
-        try:
-            for run in c.run_list:
-                for segment in run.segments:
-                    if segment.results['complete']:
-                        for step in segment.steps:
-                            signals = [
-                                k
-                                for k in step.raw_data.keys()
-                                if fnmatch(k, '*power_signal*')
-                                and 'timestamp' not in k
-                                and 'calorimeter' not in k
-                            ]
-                            source = step.raw_data['RF_source_power_signal (W)']
-                            source = source[2:].astype(float)
-                            pow_signals = {
-                                s: step.raw_data[s]
-                                for s in signals
-                                if 'source' not in s
-                            }
-
-                            # calculate compression
-                            good_freq = False
-                            for k, sig in pow_signals.items():
-                                sig = sig[2:].astype(float)
-                                max_i = np.argmax(sig)
-                                sig_dB_change = 10 * np.log10(sig[max_i] / sig)
-
-                                # closest to 1dB of change
-                                sig_1dB_closest_i = np.argmin(abs(sig_dB_change - 1))
-                                sig_1dB_closest = sig_dB_change[sig_1dB_closest_i]
-
-                                # if the smalles changes was < 0.4, skip it
-                                # is that a good number? idk
-                                if sig_1dB_closest < 0.5:
-                                    continue
-
-                                # estimate the compression
-                                max_source = source[max_i]
-                                source_1dB_closest = source[sig_1dB_closest_i]
-                                compress_i = sig_1dB_closest - 10 * np.log10(
-                                    max_source / source_1dB_closest
-                                )
-                                # print(k.split('_power_signal')[0], sig_1dB_closest)
-                                try:
-                                    compression[k] = np.append(
-                                        compression[k], compress_i
-                                    )
-                                except KeyError:
-                                    compression[k] = np.array([compress_i])
-
-                                good_freq = True
-                            if good_freq:
-                                freq = np.append(freq, step.frequency)
-                            # print(k, step.frequency, compress_i)
-            fig, ax = plt.subplots(1, 1)
-            for k in compression:
-                ax.plot(
-                    freq,
-                    compression[k],
-                    'o',
-                    label=f'Measured By: {k.split("_power_signal")[0]} Est.',
-                )
-
-            ax.axhline(0.4, color='r', ls='--', lw=3, label='Limit')
-            ax.legend(loc='best')
-            ax.set_xlabel('Frequency (GHz)')
-            ax.set_ylabel('Compression (dB)')
-            ax.set_title('Source Compression Check')
-            # plt.show()
-            figures.append(fig)
-        except Exception as e:
-            print(f"Warning: Couldn't estimate compression for : {e}")
-
-        ...
+        
 
     # output a the dataframe results
     df = c.output_dataframe()
@@ -848,6 +927,39 @@ def mean_last_of_point_dBm(signal, points, i: int, n_samples: int):
     )
     return 10 * np.log10(avg) + 30
 
+def reduce_initial_power(
+    runlist: Path,
+    reduce_by_dB: float, 
+    output_path: Path = None,
+    decimals: int = 4
+    ):
+    """
+    Modify a runlists initial power setting.
+
+    Useful if trying to do a compression check.
+
+    Parameters
+    ----------
+    runlist : Path
+        Runlist to modify.
+    reduce_by_dB : float
+        How much to modify the initial power by. Negative
+        values will increas the initial power.
+    output_path : Path, optional
+        If None, uses the same name as input file with
+        '_min{num}dB.csv'
+    decimals : int, optional
+        Number of decimals to use. Default is 4.
+    """
+    runlist = Path(runlist)
+    data = pd.read_csv(runlist)
+    ind = data.Frequency_GHz > 0
+    new_init = data.Initial_source_power_dBm[ind] - reduce_by_dB
+    data.loc[ind, 'Initial_source_power_dBm'] = np.round(new_init, decimals)
+    if output_path is None:
+        output_path = runlist.parent / (runlist.stem + f'_min{reduce_by_dB}dB.csv')
+    data.to_csv(output_path, index = False)
+
 
 def runlist_from_loss(
     parsed_rf: configs.ParsedRFSweep,
@@ -926,16 +1038,17 @@ def runlist_from_loss(
     ax.set_ylabel('Power (dBm)')
     ax.set_title("Power Table Calculation Summary")
 
-    ax.stackplot(
-        loss.frequency, target_power, loss,
-        colors= ('b','orange'),
-        labels=('Target DUT Power',"Loss"),
-        alpha = 0.5
+    ax.plot(
+        loss.frequency, target_power,
+        'g',
+        label = 'Target Power',
+
     )
     ax.plot(
         loss.frequency, required_power,
+        'b--',
         label = 'Required Power',
-        ls = '--'
+
     )
     ax.plot(
         loss.frequency, starting_powers,

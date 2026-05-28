@@ -93,6 +93,6 @@ def view(
             axs_i.set_xlabel(f'{relative_or_not} Time ({time_units})')
             sensor_figs.append(fig_i)
         except Exception as e:
-            print(f'Failed to plot {k}')
+            print(f'Failed to plot {k} for - {e}')
 
     return tuple(sensor_figs)

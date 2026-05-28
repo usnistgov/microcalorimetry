@@ -751,7 +751,7 @@ class RFSweepOutputSettings(SerialDictionary):
 
 class RFSweepMeasurementMode(SerialDictionary):
     SCHEMA = _load_schema_from_definition(
-        'RFSweepInstrumentRoles', definition_name='RFSweepMeasurementMode'
+        'InstrumentRoles', definition_name='RFSweepMeasurementMode'
     )
 
     def __init__(self, obj: dict | Path):

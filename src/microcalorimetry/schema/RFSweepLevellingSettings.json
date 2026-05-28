@@ -1,7 +1,7 @@
 {
     "definitions": {
         "RFSweepLevellingSettings": {
-            "description": "Settings that define the levelling behaviour of the RF sweep.",
+            "description": "Settings that define the levelling behavior of the RF sweep.",
             "properties": {
                 "level_to": {
                     "type": "string",
@@ -13,7 +13,13 @@
                 },
                 "off_trigger_delay": {
                     "type": "number",
-                    "description": "How long to wait before turning OFF RF source after triggering meters for fast off measurement.",
+                    "description": "How long to wait after turning OFF RF source before triggering meters for fast off measurement.",
+                    "minimum": 0,
+                    "examples": [2.0]
+                },
+                "on_trigger_delay": {
+                    "type": "number",
+                    "description": "How long to wait after turning ON RF source before triggering meters for fast off measurement.",
                     "minimum": 0,
                     "examples": [2.0]
                 },
@@ -29,7 +35,7 @@
                 },
                 "GPIB_levelling_time": {
                     "type": "number",
-                    "description": "Duration of levelling via GPIB in seconds (starts immediatley, AM levelling starts after this finished).",
+                    "description": "Duration of levelling via GPIB in seconds (starts immediately, AM levelling starts after this finished).",
                     "minimum": 0
                 },
                 "use_AM_levelling": {
@@ -49,7 +55,7 @@
                 },
                 "max_source_power_change_dB": {
                     "type": "number",
-                    "description": "rf power will not change by more than this ammount in a levelling step",
+                    "description": "rf power will not change by more than this amount in a levelling step",
                     "minimum": 0,
                     "exclusiveMaximum": 1
                 },
@@ -87,7 +93,7 @@
                         },
                         "RF_source_power": {
                             "type": "number",
-                            "description": "Max allowed power for for the rfsource in dBm."
+                            "description": "Max allowed power for for the RF source in dBm."
                         }
                     },
                     "required": [

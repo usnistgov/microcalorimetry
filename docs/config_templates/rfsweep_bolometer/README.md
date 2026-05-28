@@ -1,0 +1,1 @@
+This folder contains an example of an RF sweep measurement configured for a bolometer.
