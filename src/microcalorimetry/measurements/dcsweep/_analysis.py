@@ -493,17 +493,17 @@ def parse_v0(
     
     # put in to RMEMEas objects with correlated uncertainties
     e_ons = metered_to_linmeas('e_on',e_ons,std = e_ons_std,specs = e_specs, umech_prefix= 'DC Sweep')
-    e_offs = metered_to_linmeas('e_off',e_offs,std = e_offs_std,specs = e_specs, umech_prefix= 'DC Sweep')
+    e_offs = metered_to_linmeas('e_off',e_offs,specs = e_specs, umech_prefix= 'DC Sweep')
     
     heater_v_ons = metered_to_linmeas(
         'heater_v_on',heater_v_ons,std = heater_v_ons_std,specs = heater_v_specs, umech_prefix= 'DC Sweep')
     heater_v_offs = metered_to_linmeas(
-        'heater_v_off',heater_v_offs,std = heater_v_offs_std,specs = heater_v_specs, umech_prefix= 'DC Sweep')
+        'heater_v_off',heater_v_offs,specs = heater_v_specs, umech_prefix= 'DC Sweep')
     
     heater_i_ons = metered_to_linmeas(
         'heater_i_on',heater_i_ons,std = heater_i_ons_std,specs = heater_i_specs, umech_prefix= 'DC Sweep')
     heater_i_offs = metered_to_linmeas(
-        'heater_i_off',heater_i_offs,std = heater_i_offs_std,specs = heater_i_specs, umech_prefix= 'DC Sweep')
+        'heater_i_off',heater_i_offs,specs = heater_i_specs, umech_prefix= 'DC Sweep')
     
     
     # correct for the offset
