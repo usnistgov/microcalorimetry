@@ -305,7 +305,7 @@ def parse_v0(
         Fails to parse.
     """
     print(metadata_path)
-    data, ep = read_experiment_v0(metadata_path, settings, meas_list)(metadata_path, settings, meas_list)
+    data, ep = read_experiment_v0(metadata_path, settings, meas_list)
     
     # get the source values from the config
     # tells us how many source settings and
@@ -370,8 +370,10 @@ def parse_v0(
     # of sync by 1 sample
     sensor_adjust_times = heater_adjust_times.interp(time = e.time, method= 'nearest') \
         .shift(time = -2)
+    sensor_adjust_times[-2:] = sensor_adjust_times[-3]
     sensor_step_numbers = heater_step_numbers.interp(time = e.time, method = 'nearest')\
         .shift(time = -2)
+    sensor_step_numbers[-2:] = sensor_step_numbers[-3]
 
 
     # timestamps in hours

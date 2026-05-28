@@ -475,11 +475,6 @@ def parse_v0(
         Generated figures.
 
     """
-
-    # distinguish between list of paths and single path
-    if isinstance(metadata, str) or isinstance(metadata, Path):
-        metadata = [metadata]
-
     # look at first meatadata file and check what's in it
 
     # do the analysis and save things
@@ -494,7 +489,7 @@ def parse_v0(
         
     # original draft of the measurement
     
-    e, heater_v,heater_i, fig = staircase_analysis.legacy_to_parsed_dc(
+    e, heater_v,heater_i, fig = staircase_analysis.parse_v0(
         metadata_path=str(Path(metadata)),
         settings=str(Path(settings)),
         meas_list=str(Path(measlist)),
