@@ -78,7 +78,25 @@ def gc_from_model(
 def review_correction_factor(
     gc: configs.GC,
     units: str = '',
+    budget: bool = True
     ) -> list[plt.Figure,...]:
+    """
+    Review a correction factor model.
+
+    Parameters
+    ----------
+    gc : configs.GC
+        Correction factor model.
+    units : str, optional
+        Units string for y-axis. The default is ''.
+    budget : bool, optional
+        Plot the uncertainty budget. The default is True.
+
+    Returns
+    -------
+    list[plt.Figure,...]
+        List of figures generated.
+    """
 
     w = configs.GC(gc).load()
     gred = rmemeas_extras.categorize_by(w,'Origin')
@@ -115,21 +133,22 @@ def review_correction_factor(
 
 
         # plot uncertainties for term
-        fig, ax = plt.subplots(1,1)
-        wi = gred.sel(gc = i)
-        for uid in wi.umech_id:
-            ax.plot(
-                wi.nom.frequency,
-                wi.usel(umech_id = uid).stdunc().cov,
-                label = uid,
-                )
-        ax.plot(wi.nom.frequency, wi.stdunc(k=1).cov, color = 'k', label = 'Total')
-        ax.set_xlabel('Frequency (GHz)')
-        ax.set_ylabel('Contribution to Uncertainty (k=1)' + units)
-        ax.set_title(f'Correction Term ${{{i}}}$')
-        ax.legend(loc='best')
-        out_figs.append(fig)
-        # plt.show()
+        if budget:
+            fig, ax = plt.subplots(1,1)
+            wi = gred.sel(gc = i)
+            for uid in wi.umech_id:
+                ax.plot(
+                    wi.nom.frequency,
+                    wi.usel(umech_id = uid).stdunc().cov,
+                    label = uid,
+                    )
+            ax.plot(wi.nom.frequency, wi.stdunc(k=1).cov, color = 'k', label = 'Total')
+            ax.set_xlabel('Frequency (GHz)')
+            ax.set_ylabel('Contribution to Uncertainty (k=1)' + units)
+            ax.set_title(f'Correction Term ${{{i}}}$')
+            ax.legend(loc='best')
+            out_figs.append(fig)
+
     return out_figs
 
 def make_correction_factor(
@@ -199,6 +218,7 @@ def make_correction_factor(
     # from notation i math,
     # fs = special sensor (flush short, but could be open)
     # std = normal sensor (standard sensor)
+    all_union_freqs = []
     for row_name, gcr in gc_regressor_rows.items():
         print('\n')
         print(f'Building Regressor Matrix Row : {row_name}')
@@ -218,6 +238,8 @@ def make_correction_factor(
         p3_fast_fs = mean_unq(
             configs.RFSweep(parsed_special['p3_fast']).load(), 'frequency'
         )
+        
+
         e_off_fs = mean_unq(
             configs.RFSweep(parsed_special['e_off']).load(), 'frequency'
         )
@@ -225,27 +247,26 @@ def make_correction_factor(
 
         # try to read the slow dc power from special reflect
         # assume zero if it's not present
+        
+        # get union of frequency grids
+        f1 = p3_fast_std.nom.frequency
+        f2 = p3_fast_fs.cov.frequency
+        union_f = np.intersect1d(f1,f2)
 
         if 'p2dc_on' in parsed_special:
             p2dc_on_fs = mean_unq(
                 configs.RFSweep(parsed_special['p2dc_on']).load(), 'frequency'
-            )
+            ).sel(frequency = union_f)
         else:
             p2dc_on_fs = 0
         if 'p2dc_on' in parsed_special:
             p2dc_off_slow_fs = mean_unq(
                 configs.RFSweep(parsed_special['p2dc_off_slow'].load(), 'frequency')
-            )
+            ).sel(frequency = union_f)
         else:
             p2dc_off_slow_fs = 0
 
-        # check that we have matching frequency grids
-        frq_std = np.unique(p3_fast_std.nom.frequency)
-        frq_fs = np.unique(p3_fast_fs.nom.frequency)
 
-        # they need to have at least the same frequency grid
-        if not np.array_equal(frq_std, frq_fs):
-            print(f'Skipping row, mismatched Frequency Grid :  {row_name}')
 
         # calorimeter coefficients when
         # sensor fs (special) was measured
@@ -255,8 +276,8 @@ def make_correction_factor(
 
         # rf power absorved by mount assuming gx = 1
         delta_x = calc_delta_power(
-            e_on_fs,
-            e_off_fs,
+            e_on_fs.sel(frequency = union_f),
+            e_off_fs.sel(frequency = union_f),
             fs_clrm_coeffs,
             fs_clrm_coeffs.attrs['p_of_e'],
             P_dc_on_slow=p2dc_on_fs,
@@ -275,16 +296,21 @@ def make_correction_factor(
         Gamma_fs = configs.S11(gcr['special']['s11']).load()
 
         # use the paths a
-        Gamma_G = try_sel(Gamma_G, f'{row_name}-gamma_g', frq_std)
-        Gamma_std = try_sel(Gamma_std, f'{row_name}-standard s11', frq_std)
-        Gamma_fs = try_sel(Gamma_fs, f'{row_name}-special s11', frq_std)
+        Gamma_G = try_sel(Gamma_G, f'{row_name}-gamma_g', union_f)
+        Gamma_std = try_sel(Gamma_std, f'{row_name}-standard s11', union_f)
+        Gamma_fs = try_sel(Gamma_fs, f'{row_name}-special s11', union_f)
 
         alpha_xs = calc_alpha(
-            p2_fast_std, p3_fast_fs, p3_fast_std, Gamma_std, Gamma_fs, Gamma_G
+            p2_fast_std.sel(frequency = union_f),
+            p3_fast_fs.sel(frequency = union_f),
+            p3_fast_std.sel(frequency = union_f),
+            Gamma_std,
+            Gamma_fs,
+            Gamma_G
         )
 
         if correction_terms == 2:
-            raise Exception('not yet implemented')
+            raise NotImplementedError('Not implemented.')
             # if basis_id is None:
             #     raise ValueError('Must provide a basis_id for a 2 term model.')
             # print('2 term model, rotating to basis')
@@ -296,7 +322,12 @@ def make_correction_factor(
             # Gamma_s = rotate_s1p(Gamma_s, basis)
             # Gamma_x = rotate_s1p(Gamma_x, basis)
         row, solution = calc_row(
-            alpha_xs, delta_x, zeta_std, Gamma_std, Gamma_fs, correction_terms
+            alpha_xs,
+            delta_x,
+            zeta_std.sel(frequency = union_f),
+            Gamma_std,
+            Gamma_fs,
+            correction_terms
         )
 
         # thermal correction factors are calculated the same weigh
@@ -323,10 +354,11 @@ def make_correction_factor(
             #     k = fs_clrm_coeffs.sel(deg=1, drop=True)
             # k = np.abs(k)
             # divide by row
-            row = row / k
+            row = row / k.sel(frequency = union_f)
 
         rows.append(row)
         solutions.append(solution)
+        all_union_freqs.append(union_f)
 
     regressor = concat_along(*rows, dim='row', new_coords=np.arange(0, len(rows)))
     regressor_sol = concat_along(
@@ -335,45 +367,16 @@ def make_correction_factor(
     gc = calc_gc(regressor, regressor_sol, n_correction_terms=correction_terms)
     gc.name = f'gc{correction_terms}'
     gc.attrs.update(inputs)
+    # frequencies that don't line up will show up as NA, so only keep
+    # union of frequency lists
+    super_union = all_union_freqs[0]
+    if len(all_union_freqs[0]) > 1:
+        for fl in all_union_freqs[1:]:
+            super_union = np.intersect1d(super_union, fl)
+    
+    gc = gc.sel(frequency = super_union)
 
     if make_plots:
-        for i in range(correction_terms):
-            fig, ax = plt.subplots(1, 1)
-            ax.plot(gc.sel(gc=i).nom.frequency, gc.nom.sel(gc=i), 'ko-')
-            lb = gc.sel(gc=i).uncbounds(k=-1)[0]
-            ub = gc.sel(gc=i).uncbounds(k=1)[0]
-            lcint, ucint = gc.sel(gc=i).confint(0.95)
-            ax.plot(lb.frequency, lb, 'b--', label='k = 1 std unc')
-            ax.plot(ub.frequency, ub, 'b--')
-            ax.plot(lcint.frequency, lcint, 'r--', label='0.95 conf int')
-            ax.plot(ucint.frequency, ucint, 'r--')
-            ax.set_ylabel(f'gc{i}')
-            ax.set_xlabel('Frequency (GHz)')
-            ax.legend(loc='best')
-            fig.suptitle('')
-            # fig.savefig(plot_dir / 'gc1.png')
-            figures.append(fig)
-
-            fig, ax = plt.subplots(1, 1)
-            ax.plot(
-                gc.sel(gc=i).nom.frequency,
-                gc.sel(gc=i).stdunc()[0],
-                'ko-',
-                label='Total',
-            )
-            if not nominals:
-                gred = rmemeas_extras.categorize_by(gc, 'Origin')
-            else:
-                gred = gc
-            for pl in gred.umech_id:
-                pert = gred.cov.loc[pl, ...]
-                ax.plot(gc.nom.frequency, pert - gc.sel(gc=i).nom, label=pl)
-            ax.set_ylabel(f'gc{i} (k = 1)')
-            ax.set_xlabel('Frequency (GHz)')
-            ax.legend(loc='best')
-            fig.suptitle('')
-            # fig.savefig(plot_dir / 'gc1_uncbudget.png')
-
-            figures.append(fig)
+        figures = review_correction_factor(gc, budget = True)
 
     return gc, figures

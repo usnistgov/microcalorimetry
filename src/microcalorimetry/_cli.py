@@ -63,6 +63,7 @@ def _gui(no_console_stdout: bool = False):
             'dc_lead_correction': anl.dc_lead_correction,
             'apply_uncertainty_model': anl.apply_uncertainty_model,
             'review_eta': anl.review_eta,
+            'review_correction': anl.review_correction_factor,
         },
         output_group_saveable=[
             'fit_thermoelectric',

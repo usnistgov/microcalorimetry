@@ -590,7 +590,7 @@ def plot_RMEMeas(file, hdf5_path, fig=None):
                 figs.append(fig)
             else:
                 ax = fig.axes[0]
-            stdunc = data.stdunc(k=k).cov[:,1]
+            stdunc = data.stdunc(k=k).cov
             xlabel = data.nom.dims[0]
             ylabel = hdf5_path.split('/')[-1]
             xvals = data.nom.coords[xlabel]

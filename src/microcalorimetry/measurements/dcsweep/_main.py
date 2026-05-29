@@ -498,6 +498,7 @@ def parse_v1(
     throw_away_min_time: float = 0.,
     heater: str = 'SMU',
     thermometer_monitor: str = None,
+    make_plots: bool = True
 ) -> tuple[configs.ParsedDCSweep, list[plt.Figure]]:
     """
     Parse version 1 of a DC sweep calibration measurement.
@@ -528,7 +529,8 @@ def parse_v1(
         Name of heater. Default is 'SMU'.
     thermometer_monitor : str, optional
         Name of thermomter_monitor. Default is None.
-
+    make_plots : bool, optional
+        Generates plots if asked. Default is True.
 
     Returns
     -------

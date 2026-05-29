@@ -430,6 +430,8 @@ def parse(
         analysis_config = configs.load_config(analysis_config)
 
     def overload_analysis_config_from_fvalues(signame,d):
+        if d is None:
+            return
         # pre fill dictionairys that might be missing
         if 'analysis_config' not in analysis_config:
             analysis_config['analysis_config'] = {}
@@ -463,8 +465,8 @@ def parse(
     overload_analysis_config_from_fvalues('monitor_power', monitor_power_analysis)
     overload_analysis_config_from_fvalues('RF_source_power', RF_source_power_analysis)
 
-    import json
-    print(json.dumps(analysis_config, indent = True))
+    # import json
+    # print(json.dumps(analysis_config, indent = True))
 
     # set up parser
     metadata_dict = {}
@@ -523,6 +525,7 @@ def parse(
                     if called_out or is_end or plot_all_segments_analysis:
                         # plot the analysis for a single step
                         # may get multiple plots for step
+                        print(f"Making review figure segment: {si} : {signal} : {type(analyzer)}")
                         new_figures = analyzer.plot_analysis(segment)
                         if not isinstance(new_figures, list):
                             new_figures = [new_figures]
@@ -615,6 +618,7 @@ def parse(
         df.to_csv(dataframe_results)
 
     # format fata for rmellipse calculataions
+    print("generating RMEMeas of raw data...")
     data = c.output_segments(
         fmt_for='rmellipse', 
         include_specs=True, 
@@ -630,6 +634,7 @@ def parse(
 
     # do a little bit of post processing to calculate power
     # This calculates the inferred power flowing through the thermopile
+    print("calculating sensor powers...")
     outputs = {}
 
     cal_coeffs = configs.ThermoelectricFitCoefficients(
@@ -709,7 +714,7 @@ def parse(
 
         zeta = zeta_dcsub(
             data.sel(col=e_col + '_on'),
-            data.sel(col=e_col + '_off'),
+            data.sel(col=e_col + '_off_slow'),
             data.sel(col=s_v_col + '_on'),
             data.sel(col=s_v_col + '_off_fast'),
             data.sel(col=s_v_col + '_off_slow'),
@@ -740,7 +745,7 @@ def parse(
         s_e_col = dut_signals['e']['column']
         
         # thermometer model do a temperature correction
-        if 'therm_v' in dut_signals:
+        if 'therm_v' in dut_signals and 'col' in s_coeffs.dims:
             s_e_const = 1.0
             therm_v_col = dut_signals['therm_v']['column']
             therm_i_col = dut_signals['therm_i']['column']
@@ -792,7 +797,7 @@ def parse(
         except KeyError:
             print("No fast off analysis for {DUT_power}")
             p2_fast = p2_slow
-    
+            outputs.update({'e_p2_off_fast':data.sel(col=s_e_col + '_off_slow')})
             zeta = zeta_general(
                 data.sel(col=e_col + '_on'),
                 data.sel(col=e_col + '_off_slow'),
