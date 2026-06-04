@@ -651,7 +651,11 @@ class Run(abc.ABC):
         self.analyzers = {}
         signals = self.parsed_config['signal_config']
         for signal in self.parsed_config['analysis_config']:
-            signal_config = self.parsed_config['signal_config'][signal]
+            try:
+                signal_config = self.parsed_config['signal_config'][signal]
+            except KeyError:
+                print(f"Analysis config for {signal} found, {signal} not a part of measurment. Skipping.")
+                continue
             analysis_config = self.parsed_config['analysis_config'][signal]
             analysis_config['time_zero'] = self.results['time_zero']
 
@@ -2186,7 +2190,11 @@ class BolometerAnalyzer(SignalAnalyzer):
 
         # TODO: fix
         column = self.signal_config['vdc']['column']
-        instr_timing_tolerance = self.analysis_config['instr_timing_tolerance']
+        try:
+            self.instr_timing_tolerance = self.analysis_config['instr_timing_tolerance']
+        except KeyError:
+            self.instr_timing_tolerance = 5.0
+        
         V_off_delay = self.analysis_config['V_off_delay']
         V_off_function = self.analysis_config['V_off_function']
         V_off_fit_time_window = self.analysis_config['V_off_fit_time_window']
@@ -2197,7 +2205,6 @@ class BolometerAnalyzer(SignalAnalyzer):
             self.stats_window_override = None
 
         self.column = column
-        self.instr_timing_tolerance = instr_timing_tolerance
         self.V_off_function = V_off_function
         self.V_off_delay = V_off_delay
         self.V_off_fit_time_window = V_off_fit_time_window

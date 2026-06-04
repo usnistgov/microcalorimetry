@@ -49,6 +49,8 @@ def _gui(no_console_stdout: bool = False):
             'rfsweep.make_settled_runlist': rfsweep.generate_settled_runlist,
             'rfsweep.make_runlist_from_loss': rfsweep.runlist_from_loss,
             'rfsweep.reduce_initial_power': rfsweep.reduce_initial_power,
+            'rfsweep.reorder_runlist': rfsweep.reorder_runlist,
+            'rfsweep.review_runlist': rfsweep.review_runlist,
         },
         output_group_saveable=['dcsweep.parse_v0', 'dcsweep.parse_v1', 'rfsweep.parse'],
     )

@@ -154,18 +154,20 @@ def review_eta(
 
 def make_classical_eta_unc_model(
     frequency: np.array,
-    uA_model: configs.PythonFunction,
-    uB_model: configs.PythonFunction,
-) -> tuple[configs.Eta, plt.Figure]:
+    model: configs.PythonFunction,
+    u_type: str,
+    correlate_frequencies: bool = True,
+    make_plots: bool = True,
+    ) -> tuple[configs.Eta, plt.Figure]:
     """
     Generate a classical uncertainty model for an eta measurement.
 
     uA_model and uB_model are python functions that take in a frequency
-    list and output a standard uncertainty (Type A and B respectivley).
+    list and output a standard uncertainty (Type A and B respectively).
 
     This model can be used to apply uncertainties to an eta calculate
     after it has been calculated. Is is zero nominal, so uncertainties are
-    added to an eta measurmeent by simply adding it to to an effective
+    added to an eta measurement by simply adding it to to an effective
     efficiency measurement.
 
     Uncertainties are assumed to be independent across frequency.
@@ -174,58 +176,71 @@ def make_classical_eta_unc_model(
     ----------
     frequency : np.array
         Frequency in GHz.
-    uA_model : configs.PythonFunction
-        Python function that outputs type A uncertainty.
-    uB_model : configs.PythonFunction
+    model : configs.PythonFunction
         Python function that outputs type B uncertainty.
+    u_type : str
+        Type of uncertainty (A or B)
+    correlate_frequencies : bool, optional
+        Treat uncertainties as correlated if True. The default is True.
+    make_plots : bool, optional
+        If True, make plots.
 
     Returns
     -------
     eta_unc : configs.Eta
         Eta configuration object with zero nominal and uncertainties
         derived from uA_model and uB_model.
-    fig : plt.Figure
+    fig : plt.Figure | None
         Matplotlib figure object generated.
 
     """
-    uA = uA_model(frequency)
-    uB = uB_model(frequency)
+    model = configs.PythonFunction(model)
+    u = model(frequency)
 
+    # make an array of zeros to be the nominal
     data = xr.DataArray(
-        np.zeros(uA.shape), dims=('frequency',), coords={'frequency': frequency}
+        np.zeros(u.shape), dims=('frequency',), coords={'frequency': frequency}
     ).expand_dims({'eta': [0]}, axis=-1)
 
     data = _gwex.as_format(data, _gwex.eff)
 
+    # turn into an RMEMeas object with a nominal zero
     data = RMEMeas.from_nom(f'eta_uncertainty', data)
 
-    def origin_str(model_fun):
-        return f'{model_fun.__name__}'
 
-    for i, f in enumerate(frequency):
-        ub_pert = data.nom.copy()
-        ua_pert = data.nom.copy()
-        ub_pert.loc[{'frequency': f}] += uB[i]
-        ua_pert.loc[{'frequency': f}] += uA[i]
+    if correlate_frequencies:
+        pert = data.nom.copy() 
+        pert[:,0] += u
         data.add_umech(
-            f'uA_{f}', ua_pert, category={'Type': 'A', 'Origin': origin_str(uA_model)}
+            model.name,
+            pert,
+            category={'Type': u_type, 'Origin': model.name},
+            add_uid = True
         )
 
-        data.add_umech(
-            f'uB_{f}', ub_pert, category={'Type': 'B', 'Origin': origin_str(uB_model)}
-        )
+    else:
+        for i, f in enumerate(frequency):
+            u_pert = data.nom.copy()
+            u_pert.loc[{'frequency': f}] += u[i]
+            data.add_umech(
+                f'u{u_type}_{f}', u_pert, category={'Type': u_type, 'Origin': model.name},add_uid = True
+            )
+
+
 
     # add uncertainties
-    fig, ax = plt.subplots(1, 1)
-    grouped = rmemeas_extras.categorize_by(data, 'Type')
-    for u in grouped.umech_id:
-        unc = grouped.usel(umech_id=[u]).stdunc().cov
-        ax.plot(frequency, unc, label=f'u{u}')
-    ax.plot(frequency, data.stdunc().cov, label='UTot', color='k')
-    ax.set_xlabel('Frequency (GHz)')
-    ax.set_ylabel(r'Uncertainty in $\eta$ (k=1)')
-    ax.legend(loc='best')
-    fig.tight_layout()
+    fig = None
+    if make_plots:
+        fig, ax = plt.subplots(1, 1)
+        grouped = rmemeas_extras.categorize_by(data, 'Type')
+        for u in grouped.umech_id:
+            unc = grouped.usel(umech_id=[u]).stdunc().cov
+            ax.plot(frequency, unc, label=f'u{u}')
+        ax.plot(frequency, data.stdunc().cov, label='UTot', color='k')
+        ax.set_xlabel('Frequency (GHz)')
+        ax.set_ylabel(r'Uncertainty in $\eta$ (k=1)')
+        ax.legend(loc='best')
+        fig.tight_layout()
 
     return data, fig
 
@@ -536,6 +551,7 @@ def apply_uncertainty_model(eta: configs.Eta, model: configs.Eta) -> configs.Eta
 
     """
     basic = RMEProp(sensitivity=True)
+    eta  = configs.Eta(eta).load()
     model = configs.Eta(model).load()
     model = model.interp(
         frequency=eta.nom.frequency,

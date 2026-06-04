@@ -33,7 +33,7 @@ def try_sel(thing: RMEMeas, name: str, fs: np.ndarray):
         return thing.sel(frequency=fs)
     except KeyError:
         missing = fs[np.logical_not(np.isin(fs, thing.nom.frequency.values))]
-        print(name, ' s1p interpolating missing frequencies : ', missing)
+        print(name, 'interpolating these frequencies : ', missing)
         out = thing.interp(frequency=fs, kwargs=dict(fill_value='extrapolate'))
         return out
 
