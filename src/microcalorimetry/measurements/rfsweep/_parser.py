@@ -1654,7 +1654,12 @@ class Segment:
                 # so the stable samples can still be use to check the fast offs
                 rf_on_actually = np.diff(
                     self.raw_data['stable_samples'][use_start:use_end], append=0) < 0
-                use_end = np.arange(use_start, use_end)[rf_on_actually][1]-1
+                try:
+                    use_end = np.arange(use_start, use_end)[rf_on_actually][1]-1
+                # if that fails just include the slow final off as part of the last step
+                # it will make the plotting uglier but still work
+                except IndexError:
+                    use_end = use_end
 
             raw_data = {}
             for column in self.raw_data.keys():
@@ -1665,6 +1670,8 @@ class Segment:
                     int(use_start):int(use_end)]
 
             new_step = Step(self, raw_data, step_frequencies[i])
+            if new_step.frequency == 8.0:
+                pass
             self.steps.append(new_step)
             print('step index', i)
             new_step.analyze()
@@ -1803,7 +1810,10 @@ class Step:
 
         switch = switch[-1]
         self.results['step_RF_off'] = step_index[switch]
-        self.results['RF_off_time'] = mid_t[switch]
+        try:
+            self.results['RF_off_time'] = mid_t[switch]
+        except Exception as e:
+            raise e from e
 
         for item in self.segment.run.analyzers.items():
             key, analyzer = item
