@@ -497,6 +497,7 @@ def parse(
     metadata = adjusted_metadata
 
     runs = []
+    print(metadata)
     for metadata_path in metadata:
         run_dir = Path(metadata_path).parent
         run_file = Path(metadata_path).name
