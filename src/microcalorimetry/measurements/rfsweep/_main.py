@@ -28,7 +28,9 @@ __all__ = [
     'parse',
     'generate_settled_runlist',
     'runlist_from_loss',
-    'reduce_initial_power'
+    'reduce_initial_power',
+    'reorder_runlist',
+    'review_runlist'
 ]
 
 
@@ -965,6 +967,133 @@ def reduce_initial_power(
         output_path = runlist.parent / (runlist.stem + f'_min{reduce_by_dB}dB.csv')
     data.to_csv(output_path, index = False)
 
+def reorder_runlist(
+    runlist: Path,
+    output_path: Path = Path('.') / 'runlist.csv',
+    segment_size: int = 10,
+    off_step_length: int = 2,
+    interleave: bool = True,
+    make_plots: bool = True
+    ):
+    """
+    Reorder a runlist.
+
+    Parameters
+    ----------
+    runlist : Path
+        Frequency list to reorder.
+    output_path : Path, optional
+        Directory to output runfiles. The default is Path('.').
+    segment_size : int, optional
+        Number of steps per segment (maximum). The default is 10.
+    off_step_length : int, optional
+        How many steps each off period should be. Typically 2, the default
+        is 2.
+    interleave : bool, optional
+        Interleave frequency points. The default is True.
+    make_plots : bool, optional
+        Generate review plots of runlist. The default is True.
+
+    """
+    
+    # get runlist,  remove off points, sort by
+    # frequency
+    runlist = Path(runlist)
+    data = pd.read_csv(runlist)
+    ind = data.Frequency_GHz > 0
+    new = data[ind].sort_values('Frequency_GHz')
+
+    
+    # seperate out columns
+    frequency = new['Frequency_GHz']
+    starting_powers = new['Initial_source_power_dBm']
+    target_power = new['Target_source_power_dBm']
+    limit_powers = new['Source_power_limit_dBm']
+
+    # interleave if asked to
+    if interleave:
+        initial_source = _interleave(starting_powers.values)
+        frequencies = _interleave(frequency.values)
+        targets = _interleave(target_power.values)
+        limits = _interleave(limit_powers.values)
+    else:
+        initial_source = starting_powers.values.copy()
+        frequencies = frequency.values.copy()
+        targets = target_power.values.copy()
+        limits = limit_powers.values.copy()
+
+
+    output_df = {
+        'Frequency_GHz': [],
+        'Initial_source_power_dBm': [],
+        'Target_source_power_dBm': [],
+        'Source_power_limit_dBm': [],
+    }
+
+    for i, fi in enumerate(frequencies):
+        # insert zero rows
+        if i % segment_size == 0:
+            for n in output_df:
+                output_df[n] += [0] * off_step_length
+        output_df['Frequency_GHz'].append(fi)
+        output_df['Initial_source_power_dBm'].append(initial_source[i])
+        output_df['Target_source_power_dBm'].append(targets[i])
+        output_df['Source_power_limit_dBm'].append(limits[i])
+
+    # append with a zero row
+    for n in output_df:
+        output_df[n] += [0] * off_step_length
+    output_df = pd.DataFrame(output_df)
+    output_df.to_csv(output_path, index=False)
+    figures = []
+    if make_plots:
+        figures = review_runlist(output_path)
+    return figures
+        
+
+
+def review_runlist(
+    runlist: Path    
+    ) -> list[plt.Figure]:
+    """
+    Review a runlist for an rf sweep measurement.
+
+    Parameters
+    ----------
+    runlist : Path
+        Path to runlist.
+
+    Returns
+    -------
+    plots : list[plt.Figures]
+        List of review charts.
+
+    """
+    runlist = Path(runlist)
+    data = pd.read_csv(runlist)
+    # srtd with 0 rows removed
+    ind_on = data.Frequency_GHz > 0
+    ind_off = data.Frequency_GHz == 0
+    srtd = data[ind_on].sort_values('Frequency_GHz')
+
+    
+    fig1,ax = plt.subplots(1,1)
+    ax.plot(srtd.Frequency_GHz,srtd.Initial_source_power_dBm, label = 'Initial')
+    ax.plot(srtd.Frequency_GHz,srtd.Target_source_power_dBm, label = 'Target')
+    ax.plot(srtd.Frequency_GHz,srtd.Source_power_limit_dBm, label = 'Limit')
+    ax.set_xlabel("Frequency GHz")
+    ax.set_ylabel("Power (dBm)")
+    ax.set_title(f"Runlist Review: \n {str(runlist)}")
+    ax.legend(loc = 'best')
+    
+    fig2,ax = plt.subplots(1,1)
+    ax.plot(data.Frequency_GHz[ind_on],'o', label = 'Power On')
+    ax.plot(data.Frequency_GHz[ind_off],'o', label = 'Power Off')
+    ax.set_xlabel('Step Number')
+    ax.set_ylabel('Frequency (GHz)')
+    ax.set_title(f"Runlist Review: \n {str(runlist)}")
+    return [fig1, fig2]
+
 
 def runlist_from_loss(
     parsed_rf: configs.ParsedRFSweep,
@@ -973,7 +1102,8 @@ def runlist_from_loss(
     segment_size: int = 10,
     off_step_length: int = 2,
     safety_backoff_dBm: float = 3,
-    source_hard_limit_buffer_dBm: float = 1
+    source_hard_limit_buffer_dBm: float = 1,
+    interleave: bool = True
 ) -> list[plt.Figure]:
     """
     Generate a runlist from the approximate RF Loss of measurement signals.
@@ -998,6 +1128,8 @@ def runlist_from_loss(
         If a frequency dependent limit isn't provided,
         then this buffer wil be used to set the limit by adding
         it to the estimated required power.
+    interleave : bool, optional
+        Interleave frequency points. The default is True.
 
     Returns
     -------
@@ -1072,10 +1204,16 @@ def runlist_from_loss(
 
     # # if no maximums hit, build a run list
     # # interleave the frequency points
-    initial_source = _interleave(starting_powers.values)
-    frequencies = _interleave(loss.frequency.values)
-    targets = _interleave(target_power.values)
-    limits = _interleave(limit_powers.values)
+    if interleave:
+        initial_source = _interleave(starting_powers.values)
+        frequencies = _interleave(loss.frequency.values)
+        targets = _interleave(target_power.values)
+        limits = _interleave(limit_powers.values)
+    else:
+        initial_source = starting_powers.values.copy()
+        frequencies = loss.frequency.values.copy()
+        targets = target_power.values.copy()
+        limits = limit_powers.values.copy()
 
 
     output_df = {
