@@ -2,16 +2,15 @@ from rmellipse.propagators import RMEProp
 from rmellipse.uobjects import RMEMeas
 
 # local packages
-from microcalorimetry.math import rfpower, vna, numbers, fitting, rmemeas_extras
+from microcalorimetry.math import rfpower, numbers, fitting, rmemeas_extras
 from microcalorimetry._helpers._collections import try_sel
+from pathlib import Path
 import microcalorimetry.configs as configs
 import microcalorimetry._gwex as _gwex
-import warnings
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
 import itertools
-from typing import Callable
 
 __all__ = [
     'make_eta',
@@ -438,9 +437,12 @@ def make_eta(
     gc: configs.GC,
     s11: configs.S11,
     parsed_rfsweep: configs.ParsedRFSweep,
+    repeatability_model: configs.Eta = None,
+    extra_eta_uncertainties: list[Path] = None,
+    lead_correction: tuple[float] = None,
     historical_data: configs.EtaHistorical = None,
     thermal_weights: configs.ThermoelectricFitCoefficients = None,
-    uncertainties: bool = True,
+    propagate_uncertainties: bool = True,
     make_plots: bool = True,
 ) -> tuple[list[plt.Figure] | None, configs.Eta]:
     """
@@ -455,6 +457,16 @@ def make_eta(
         Reflection coefficient of the sensor.
     parsed_rfsweep : configs.ParsedRFSweep
         Parsed RF sweep output.
+    repeatability_model : configs.Eta, optional
+        Supply a repeatability model of the microcalorimeter to apply
+        uncertainties and use in review charts. The default is None.
+    extra_eta_uncertainties : list[Path], optional
+        Supply additional uncertainty models of eta that should be applied
+        after calculations. The default is None.
+    lead_correction : float, optional
+        Applies a dc lead correction if provided (and lead resistance is
+        larger than zero. First value is the lead resistance, second value
+        is the bolometer resistance (typically 200 ohms).
     historical_data : configs.EtaHistorical, optional
         Dictionary of key value pairs where values are
         configs.Eta. The default is None.
@@ -464,9 +476,11 @@ def make_eta(
         effective efficiency. These should be thermopile sensitivity
         coefficients of the calorimeter calculated with the same model of
         sensor. The default is None.
-    uncertainties : bool, optional
-        Propagate uncertainties during calculation, is faster to turn
-        off during debugging or exploratory analysis. The default is True.
+    propagate_uncertainties : bool, optional
+        Propagate uncertainties during calculation from S11 ang gc,
+        is faster to turn. Some microcalorimeter uncertainty models do
+        not want to have correction factor uncertainties propagated forward.
+        The default is True.
     make_plots : bool, optional
         Make plots during the analsysis,otherwise figs will
         be an empty list. The default is True. Plots are made by passing
@@ -489,7 +503,7 @@ def make_eta(
     historical_data = configs.EtaHistorical(historical_data)
 
     # set up the propagator
-    basic = RMEProp(sensitivity=uncertainties)
+    basic = RMEProp(sensitivity=propagate_uncertainties)
 
     effective_efficiency = basic.propagate(rfpower.effective_efficiency)
     mean_unique = basic.propagate(numbers.mean_unique_values)
@@ -542,12 +556,25 @@ def make_eta(
         gc = gc / k
 
     eta_new = effective_efficiency(zeta, s11, gc)
+    
+    if repeatability_model:
+        eta_new = apply_uncertainty_model(eta_new, repeatability_model)
+    if extra_eta_uncertainties:
+        for eu in extra_eta_uncertainties:
+            eta_new = apply_uncertainty_model(eta_new, eu)
+    
+    if lead_correction:
+        eta_new = dc_lead_correction(eta_new, lead_correction[0], lead_correction[1])
 
     # cast as a DataModelContainer and maybe
     # generate review plots
     fig = None
     if make_plots:
-        fig = review_eta(eta_new, historical_data)
+        fig = review_eta(
+            eta_new, 
+            historical_data,
+            repeatability_model=repeatability_model
+            )
         fig = list(fig)
 
     return fig, eta_new
