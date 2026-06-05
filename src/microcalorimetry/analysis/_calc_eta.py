@@ -43,16 +43,6 @@ def review_eta(
         Expansion factor, by default 2
 
     """
-    eta = configs.Eta(eta).load()
-    nom = eta.nom
-    new_fgrid = nom.frequency
-    lb = eta.uncbounds(k=-2).cov
-    ub = eta.uncbounds(k=2).cov
-
-    fig, ax = plt.subplots(2, 1)
-
-    cmap = plt.cm.winter
-
     # get historical data
     if historical_data is None:
         historical_data = {}
@@ -62,11 +52,23 @@ def review_eta(
     # i don't want to deal with this one anymore
     # so throw it awway
     del historical_data
+    
+    
+    eta = configs.Eta(eta).load()
+    nom = eta.nom
+    new_fgrid = nom.frequency
+    lb = eta.uncbounds(k=-k).cov
+    ub = eta.uncbounds(k=k).cov
 
-    if len(nominals) > 0:
-        ref = numbers.greedy_average(*(list(nominals.values()) + [nom]))
-    else:
-        ref = nom.copy()
+   
+
+    cmap = plt.cm.winter
+
+
+
+    fig, ax = plt.subplots(2, 1)
+
+    ref = nom.copy()
 
     # plot the new data uncertainties behind everything
     ax[0].fill_between(
@@ -74,8 +76,8 @@ def review_eta(
     )
     ax[1].fill_between(
         new_fgrid,
-        lb[..., 0] - ref.loc[new_fgrid, 0],
-        ub[..., 0] - ref.loc[new_fgrid, 0],
+        lb[..., 0]-nom[:,0],
+        ub[..., 0]-nom[:,0],
         color='k',
         alpha=0.2,
         label=f'Utot k = {k}',
@@ -90,17 +92,27 @@ def review_eta(
         marker='o',
         lw=3,
         label='New Nominal',
-        zorder=1000,
+        zorder=-900,
+    )
+    # plot average of reference data with std
+    average_hist = numbers.greedy_average(*list(nominals.values()))
+    use_freqs = np.intersect1d(average_hist.frequency,ref.frequency)
+    ax[1].plot(
+        use_freqs, 
+        average_hist.sel(frequency = use_freqs) - ref.sel(frequency=use_freqs),
+        'r-',
+        label='Average of History',
+        zorder = 1000
     )
     # plot repeatability model centered around
     # the new measurement
     if repeatability_model is not None:
         center = nom - ref.sel(frequency=nom.frequency)
         repmodel = configs.Eta(repeatability_model).load()
-        ub = center + repmodel.stdunc(k=k).cov[:, 0].interp(frequency=nom.frequency)
-        lb = center + repmodel.stdunc(k=-k).cov[:, 0].interp(frequency=nom.frequency)
-        ax[1].plot(ub.frequency, ub, 'k-.', label='Repeatability Model', zorder=1000)
-        ax[1].plot(lb.frequency, lb, 'k-.', zorder=1000)
+        ub_rep = center + repmodel.stdunc(k=k).cov[:, 0].interp(frequency=nom.frequency)
+        lb_rep = center + repmodel.stdunc(k=-k).cov[:, 0].interp(frequency=nom.frequency)
+        ax[1].plot(ub_rep.frequency, ub_rep, 'k-.', label='Repeatability Model', zorder=1000)
+        ax[1].plot(lb_rep.frequency, lb_rep, 'k-.', zorder=900)
 
     for a in ax:
         a.set_prop_cycle(plt.cycler('color', cmap(np.linspace(0, 1, len(nominals)))))
@@ -110,12 +122,23 @@ def review_eta(
     rev_nominals = [(name, datamodel) for name, datamodel in nominals.items()][::-1]
     for name, datamodel in rev_nominals:
         hdat = nominals[name]
+        # plot differences
+        
         m = next(marker)
         ax[0].plot(hdat.frequency, hdat, m, label=name)
+        
+        use_freqs = np.intersect1d(hdat.frequency, ref.frequency)
+        
         ax[1].plot(
-            hdat.frequency, hdat - ref.sel(frequency=hdat.frequency), m, label=name
+            use_freqs, 
+            hdat.sel(frequency = use_freqs) - ref.sel(frequency=use_freqs),
+            m,
+            label=name
         )
 
+
+    pass
+    
     ax[0].set_ylabel(r'$\eta$')
     ax[1].set_ylabel(r'$\eta$ - New Nominal')
     ax[1].set_xlabel('Frequency (GHz)')
