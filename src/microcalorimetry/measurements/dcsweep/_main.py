@@ -216,8 +216,13 @@ def run(
     models = {}
     addresses = {}
     setup = {}
-
+    print(ep.config['instruments'])
     for name, instrument in ep.config['instruments'].items():
+        # somtimes there is a field called names that lists
+        # the keys, just skip that.
+        if name == 'names':
+            continue
+        print('Defining Instrument')
         print(name, json.dumps(instrument, indent = True))
         models[name] = instrument['model']
         addresses[name] = instrument['GPIB_address']
@@ -234,6 +239,7 @@ def run(
             case _:
                 raise ValueError(f'Instrument role {instrument['role']} of {name}:{models[name]} not supported')
 
+    print(json.dumps(setup, indent = True))
     if len(smu_names) > 1:
         raise ValueError("Only 1 heater allowed.")
     elif len(smu_names) == 0:
@@ -304,6 +310,7 @@ def run(
                 )
                 nvms.append(NVM(addresses[nvm_name]))
                 nvms[-1].initial_setup(**setup[nvm_name])
+                nvms[-1].setup(**setup[nvm_name])
         if monitor_thermometer:
             for thermometer_name in thermometer_names:
                 _thermometer = importer.import_instrument(
@@ -331,9 +338,13 @@ def run(
         ) as mm:
             # i'm initializing the SMU inside the context manager
             # so if something goes wrong the context manager can shut it off
+            # print('heater settings defined')
+            # print(json.dumps(setup['SMU'], indent = True))
             smu.initial_setup(**setup['SMU'])
+            smu.setup(**setup['SMU'])
             smu.setup(source='on')
-
+            # print('heater settings actual')
+            # print(json.dumps(smu.setup_settings, indent = True))
             # initialize measurement loop
             ep.advance()
 
