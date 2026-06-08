@@ -3,6 +3,7 @@
 import customtkinter as ctk
 import sys
 import os.path as path
+from pathlib import Path
 import matplotlib as mpl
 import microcalorimetry._tkquick._gui._filebar as _filebar
 import microcalorimetry._tkquick._gui._graphicsframe as _graphicsframe
@@ -55,11 +56,13 @@ class GUI(ctk.CTk):
         """
         super().__init__()
         version_num = version(package_name)
+        self.package_name = package_name
+        self.version_num = version_num
         # Set backend so plots can be embedded in GUI manually
         mpl.use('Agg')
         # set default faunts
-        self.title_name = package_name + version_num
-        self.title(self.title_name)
+        self.title_name = None
+        self.update_header()
         # sets the minimum and starting window geometry
         self.minsize(1000, 500)
         self.geometry('1000x500')
@@ -116,6 +119,10 @@ class GUI(ctk.CTk):
             sys.stdout = self.graphicstabs.console
         if stderr_gui:
             sys.stderr = self.graphicstabs.console
+
+    def update_header(self):
+        self.title_name = self.package_name + self.version_num
+        self.title(self.title_name)
 
     def add_function_tab(
         self, name: str, functions: dict[callable], output_group_saveable: list[str]

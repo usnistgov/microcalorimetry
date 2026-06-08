@@ -35,6 +35,13 @@ def _gui(no_console_stdout: bool = False):
         right_sidebar_kwargs=dict(width=350),
         icon_path=Path(__file__).parent / 'graphics/icon.ico',
     )
+    # find installed python packages matching aname pattern lik ('-microcalorimetry')
+
+    # OR look for python scripts you defines some how
+
+    # look for {package_name}.GUI_PLUGIN
+
+    # append as function tab
 
     app.add_function_tab(
         'measurements.',

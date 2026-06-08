@@ -221,6 +221,7 @@ class ClassMethodToolBar(ctk.CTkFrame):
                 filetypes=[('HDF5', '.hdf5'), ('HDF5', '.h5')],
                 title='Output File',
                 defaultextension='.h5',
+                initialdir=str(Path.cwd())
             )
         )
         if filename != '':
