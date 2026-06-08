@@ -163,6 +163,7 @@ class PathBox:
         print(self.dtype)
         if 'Path' == self.dtype:
             filename = ctk.filedialog.askopenfilename(
+                initialdir=str(Path.cwd()),
                 title='Pick File(s)', multiple=False
             )
             if filename != '':
@@ -173,7 +174,8 @@ class PathBox:
 
         elif 'list[Path]' == self.dtype:
             filename = ctk.filedialog.askopenfilename(
-                title='Pick File(s)', multiple=True
+                title='Pick File(s)', multiple=True,
+                initialdir=str(Path.cwd()),
             )
             if filename != '':
                 filename = str(filename).replace("'", '')[1:-1]
@@ -185,7 +187,7 @@ class PathBox:
                 print('no file selected.')
 
         elif 'Folder' in self.dtype:
-            filename = ctk.filedialog.askdirectory(title='Pick Folder')
+            filename = ctk.filedialog.askdirectory(title='Pick Folder', initialdir=str(Path.cwd()),)
             if filename != '':
                 self.setfield(filename)
                 # print(filename)
@@ -195,7 +197,7 @@ class PathBox:
         # treat it as a list if list is present
         elif 'list' in self.dtype:
             filename = ctk.filedialog.askopenfilename(
-                title='Pick File(s)', multiple=True
+                title='Pick File(s)', multiple=True, initialdir=str(Path.cwd()),
             )
             if filename != '':
                 filename = str(filename).replace("'", '')[1:-1]
@@ -206,7 +208,7 @@ class PathBox:
             else:
                 print('no file selected.')
         else:
-            filename = ctk.filedialog.askopenfilename(title='Pick File', multiple=False)
+            filename = ctk.filedialog.askopenfilename(title='Pick File', multiple=False, initialdir=str(Path.cwd()))
             print(filename)
             if filename != '':
                 self.setfield(filename)
@@ -561,7 +563,7 @@ class NumpyArrayEntry:
 
     def fetch_paths(self):
         filename = ctk.filedialog.askopenfilename(
-            title='Pick Array csv (no header, first column)', multiple=False
+            title='Pick Array csv (no header, first column)', multiple=False, initialdir=str(Path.cwd())
         )
         if filename != '':
             self.setfield(filename)

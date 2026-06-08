@@ -421,7 +421,8 @@ class HDF5viewer(customtkinter.CTkScrollableFrame):
 
     def set_file(self):
         filename = ctk.filedialog.askopenfilename(
-            title='Open File', filetypes=[('HDF5', '.h5'), ('HDF5', '.hdf5')]
+            title='Open File', filetypes=[('HDF5', '.h5'), ('HDF5', '.hdf5')],
+            initialdir=str(Path.cwd())
         )
         if filename != '':
             self.hdf5_file = filename
