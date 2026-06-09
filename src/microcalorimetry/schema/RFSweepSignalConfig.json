@@ -138,7 +138,8 @@
         },
         "can_level": {
           "enum": [
-            true
+            true,
+            false
           ]
         },
         "power": {
