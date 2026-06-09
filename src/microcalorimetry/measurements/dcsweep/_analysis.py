@@ -919,7 +919,8 @@ def parse_v1(
             mean = on_means[var],
             std = on_stds[var],
             specs = spec_sheets[var],
-            umech_prefix = 'DC Sweep'
+            umech_prefix = 'DC Sweep',
+            origin = 'DC Sweep'
             )
         # print(var,'off')
         off = metered_to_linmeas(
@@ -927,7 +928,8 @@ def parse_v1(
             mean = off_means[var],
             std = off_stds[var],
             specs = spec_sheets[var],
-            umech_prefix = 'DC Sweep'
+            umech_prefix = 'DC Sweep',
+            origin = 'DC Sweep'
             )
         measurements[var] = on - off
     if thermometer_monitor:
@@ -937,7 +939,8 @@ def parse_v1(
                 mean = on_means[var],
                 std = on_stds[var],
                 specs = spec_sheets[var],
-                umech_prefix = 'DC Sweep'
+                umech_prefix = 'DC Sweep',
+                origin = 'DC Sweep'
                 )
     
     return measurements, figs

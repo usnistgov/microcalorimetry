@@ -118,7 +118,6 @@ def _run_cli(*args, **kwargs):
 
 def run(
     output_dir: str,
-    repeats: int,
     configs: list[Path],
     settings: list[Path],
     sensor_master_list: configs.RFSensorMasterList,
@@ -134,8 +133,6 @@ def run(
     ----------
     output_directory : Path
         Directory to output from. The default is None.
-    repeats : int, optional
-        Number of repeats to perform on all settings files. The default is None.
     configs : list[Path], optional
         Config files for experiment settings / instruments. The default is None.
     settings : list[Path], optional
@@ -160,39 +157,40 @@ def run(
     if isinstance(settings, str) or isinstance(settings, Path):
         settings = [settings]
 
-    for i in range(repeats):
-        for setting in settings:
-            if not dry_run:
-                output_dir = new_dir(output_dir, name) + r'//'
-                with microrunner.MicrocalorimeterRunner(
-                    configs,
-                    setting,
-                    output_dir,
-                    sensor_master_list,
-                    priority,
-                    no_confirm=no_confirm,
-                    validate=validate,
-                ) as runner:
-                    # opens visa resources for every instrument
-                    runner.initialize_instruments()
-                    runner.start_monitor_mode()
-                    while not runner.done:
-                        runner.iterate()
-                        # print(time.time() - time_0)
-                        runner.output()
-            # for dry run, just try to initialize all the config files.
-            # and don't do anythin with them.
-            else:
-                output_dir = new_dir(output_dir, name) + r'//'
-                microrunner.MicrocalorimeterRunner(
-                    configs,
-                    setting,
-                    output_dir,
-                    sensor_master_list,
-                    priority,
-                    dry_run=True,
-                    validate=validate,
-                )
+    if len(settings) > 1:
+        raise NotImplementedError('Only on runlist can be supplied at a time.')
+    for setting in settings:
+        if not dry_run:
+            output_dir = new_dir(output_dir, name) + r'//'
+            with microrunner.MicrocalorimeterRunner(
+                configs,
+                setting,
+                output_dir,
+                sensor_master_list,
+                priority,
+                no_confirm=no_confirm,
+                validate=validate,
+            ) as runner:
+                # opens visa resources for every instrument
+                runner.initialize_instruments()
+                runner.start_monitor_mode()
+                while not runner.done:
+                    runner.iterate()
+                    # print(time.time() - time_0)
+                    runner.output()
+        # for dry run, just try to initialize all the config files.
+        # and don't do anythin with them.
+        else:
+            output_dir = new_dir(output_dir, name) + r'//'
+            microrunner.MicrocalorimeterRunner(
+                configs,
+                setting,
+                output_dir,
+                sensor_master_list,
+                priority,
+                dry_run=True,
+                validate=validate,
+            )
 
 
 _run_cli = clitools.format_from_npdoc(run)(_run_cli)
@@ -1066,7 +1064,6 @@ def reorder_runlist(
     off_step_length : int, optional
         How many steps each off period should be. Typically 2, the default
         is 2.
-    order_mode : str, optional
     freq_ordering : str, optional
         Determines how frequencies are sorted before being split into segments.
         Options Format
