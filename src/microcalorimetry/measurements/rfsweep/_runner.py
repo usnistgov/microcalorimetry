@@ -19,10 +19,15 @@ from rminstr.instruments.Anritsu_MG3696A import SignalGenerator as Anritsu_MG369
 from rminstr.instruments.RS_SMA100B import ArmedSignalGenerator as RS_SMA100B
 from rminstr.instruments.HP34420A import Voltmeter as HP34420A_Voltmeter
 from rminstr.instruments.HP3458A import Voltmeter as HP3458A_Voltmeter
-from rminstr.instruments.K2450 import DCSubPowerMeter, SMUSourceSweep as K2450_SMUSourceSweep
+from rminstr.instruments.K2450 import (
+    DCSubPowerMeter,
+    SMUSourceSweep as K2450_SMUSourceSweep,
+)
 from rminstr.instruments.KS_E8257D import SignalGenerator as KS_E8257D
 from rminstr.instruments.DP8200 import VoltageGenerator as DP8200
-from rminstr.instruments.Fluke_5720A import VoltageGenerator as Fluke_5720A_VoltageGenerator
+from rminstr.instruments.Fluke_5720A import (
+    VoltageGenerator as Fluke_5720A_VoltageGenerator,
+)
 from rminstr.instruments.RS_NRP75TWG import RFPowerMeter as RS_NRP75TWG_RFPowerMeter
 import rminstr.instruments.RS_NRPxxTn as RS_NRPxxTn
 from rminstr.instruments.communications import GPIBInterface
@@ -60,11 +65,11 @@ HARD_AM_MAX = 0.5  # 0.99999 # hard coded so you won't change it by accident
 
 # indexed by model, role
 INSTRUMENT_CLASSES = {
-    'Anritsu_MG362x1A':{'RF_source': Anritsu_MG362x1A},
+    'Anritsu_MG362x1A': {'RF_source': Anritsu_MG362x1A},
     'Anritsu_MG3696A': {'RF_source': Anritsu_MG3696A},
     'RS_SMA100B': {'RF_source': RS_SMA100B},
     'KS_E8257D': {'RF_source': KS_E8257D},
-    'Fluke_5720A': {'RF_amplitude_adjuster':Fluke_5720A_VoltageGenerator},
+    'Fluke_5720A': {'RF_amplitude_adjuster': Fluke_5720A_VoltageGenerator},
     'HP34420A': {
         'bias_monitor': HP34420A_Voltmeter,
         'thermopile_monitor': HP34420A_Voltmeter,
@@ -77,16 +82,14 @@ INSTRUMENT_CLASSES = {
     },
     'K2450': {
         'SMU_power_meter': DCSubPowerMeter,
-        'thermometer_monitor':K2450_SMUSourceSweep
-        },
+        'thermometer_monitor': K2450_SMUSourceSweep,
+    },
     #   "RS_ZVA67": {"VNA_source": RS_ZVA67_VNA},
     'DP8200': {'RF_amplitude_adjuster': DP8200},
     'RS_NRP75TWG': {
         'power_meter': RS_NRP75TWG_RFPowerMeter,
-        },
-    'RS_NRPxxTn': {
-        'power_meter': RS_NRPxxTn.RFPowerMeter
-        },
+    },
+    'RS_NRPxxTn': {'power_meter': RS_NRPxxTn.RFPowerMeter},
 }
 
 # these are the keys use to identify the physical meaning
@@ -194,7 +197,7 @@ class MicrocalorimeterRunner:
         config_file_priority: list[int] = None,
         no_confirm: bool = False,
         dry_run: bool = False,
-        validate: bool = True
+        validate: bool = True,
     ):
         """
         Initialize a microcalorimeter_runner object.
@@ -519,8 +522,8 @@ class MicrocalorimeterRunner:
 
         if (
             device_name in KEYSIGHT_THERMOPILE_BALANCE_MOUNTS
-            or device_name in EXPECTED_LINEAR_TERM_BOUNDS or
-            device_name in CALORIMETERS
+            or device_name in EXPECTED_LINEAR_TERM_BOUNDS
+            or device_name in CALORIMETERS
         ):
             if sensor_type != 'thermoelectric':
                 raise ValueError(
@@ -530,7 +533,9 @@ class MicrocalorimeterRunner:
             try:
                 expected_range = EXPECTED_LINEAR_TERM_BOUNDS[device_name]
             except KeyError as e:
-                raise KeyError(f"No expected linear coefficient bounds defined for {device_name} in master list.")
+                raise KeyError(
+                    f'No expected linear coefficient bounds defined for {device_name} in master list.'
+                )
 
             # i could infer the min/max, but I want the
             # person writing the ranges to be explicit
@@ -723,7 +728,7 @@ class MicrocalorimeterRunner:
         if role in RF_AMPLITUDE_ADJUSTER_ROLES:
             self.rf_amplitude_adjuster_name = name
             self.rf_amplitude_adjuster = instrument
-    
+
         if role in THERMOMETER_ROLES:
             self.thermometer_monitor_names.append(name)
             self.thermometer_monitors.append(instrument)
@@ -1293,7 +1298,7 @@ class MicrocalorimeterRunner:
                 column = self.parameters['instruments'][name]['output_column']
                 self.record.stage_update(column, powers, timestamps)
                 # print(name, 'in _fetch_data', instrument.query_state())
-        
+
         for name in self.thermometer_monitor_names:
             instrument = self.instruments[name]
             state = instrument.query_state()
@@ -1305,11 +1310,15 @@ class MicrocalorimeterRunner:
                     msg = f'Caught waiting for {name} : {e}'
                     raise type(e)(msg) from e
                 out_data = instrument.fetch_data()
-                
+
                 voltage = out_data['Voltage (V)']
                 current = out_data['Current (A)']
-                voltage_column = self.parameters['instruments'][name]['voltage_output_column']
-                current_column = self.parameters['instruments'][name]['current_output_column']
+                voltage_column = self.parameters['instruments'][name][
+                    'voltage_output_column'
+                ]
+                current_column = self.parameters['instruments'][name][
+                    'current_output_column'
+                ]
                 if all_power_data:
                     timestamps = out_data['timestamp']
                     timestamps = timestamps - timestamps[0] + self.record['timestamp']
@@ -1324,6 +1333,7 @@ class MicrocalorimeterRunner:
                     self.record.stage_update(
                         current_column, [current[-1]], [timestamps[-1]]
                     )
+
     def _end_of_iteration(self):
         """
         Called by iterate at the end of each iteration
@@ -1350,7 +1360,7 @@ class MicrocalorimeterRunner:
         None.
 
         """
-   
+
         # arm Voltmeters
         for instrument in self.voltage_monitors:
             enable = True
@@ -1361,7 +1371,7 @@ class MicrocalorimeterRunner:
                 pass
             if enable:
                 instrument.arm()
-            
+
         if self.source_type == 'VNA':
             enable = True
             try:
@@ -1384,7 +1394,7 @@ class MicrocalorimeterRunner:
             except KeyError:
                 pass
             pm.arm()
-    
+
         for thermometer in self.thermometer_monitors:
             enable = True
             try:
@@ -1392,7 +1402,6 @@ class MicrocalorimeterRunner:
             except KeyError:
                 pass
             thermometer.arm()
-            
 
     def _batch_trigger(self):
         """
@@ -1516,17 +1525,18 @@ class MicrocalorimeterRunner:
                 source_on=True, dBm=rf_power_setting, f_GHz=Frequency_GHz
             )
             # fast measurements (like for powertables) sometimes need
-            # to add a delay here so everything has time to respond 
+            # to add a delay here so everything has time to respond
             # to the change in signal.
             try:
                 time.sleep(self.parameters['levelling_settings']['on_trigger_delay'])
             except KeyError:
-                print("Cant find 'on trigger delay' in 'levelling_settings'. Defaulting to 2 seconds.")
+                print(
+                    "Cant find 'on trigger delay' in 'levelling_settings'. Defaulting to 2 seconds."
+                )
                 time.sleep(0)
             self._end_of_iteration()
             return
 
-    
         # Update power levelling.
         use_GPIB_levelling = self.parameters['levelling_settings']['use_GPIB_levelling']
         GPIB_levelling_time = self.parameters['levelling_settings'][
@@ -1535,7 +1545,6 @@ class MicrocalorimeterRunner:
 
         use_AM_levelling = self.parameters['levelling_settings']['use_AM_levelling']
         AM_levelling_time = self.parameters['levelling_settings']['AM_levelling_time']
-
 
         # at this point the power is on, and has just been turned on
         # At this point, we have established that power should be on and power
@@ -1607,7 +1616,6 @@ class MicrocalorimeterRunner:
         current_time = self.record['timestamp']
         elapsed_time = current_time - point_start_time
 
-
         if elapsed_time <= GPIB_levelling_time and use_GPIB_levelling:
             GPIB_levelling_C = self.parameters['levelling_settings']['GPIB_levelling_C']
             max_source_power_change_dB = self.parameters['levelling_settings'][
@@ -1664,7 +1672,7 @@ class MicrocalorimeterRunner:
         return
 
     def output_AM_voltage(self, new_AM_voltage):
-        print(new_AM_voltage)
+        # print(new_AM_voltage)
         self.rf_amplitude_adjuster.setup(source_level=new_AM_voltage)
         pass
 
@@ -1720,7 +1728,6 @@ class MicrocalorimeterRunner:
         # first finish up any measurements that might still be ongoing
         self._fetch_data(all_power_data=False)
 
-
         if power_was_on:
             # Do a fast off measurement
             self._load_instrument_settings('fast_off_mode_settings')
@@ -1731,7 +1738,9 @@ class MicrocalorimeterRunner:
             try:
                 time.sleep(self.parameters['levelling_settings']['off_trigger_delay'])
             except KeyError:
-                print("Cant find 'off trigger delay' in 'levelling_settings'. Defaulting to 2 seconds.")
+                print(
+                    "Cant find 'off trigger delay' in 'levelling_settings'. Defaulting to 2 seconds."
+                )
                 time.sleep(2)
             self.change_source_state(source_on=False)
             # sleep to ensure sensor catches the turn off
@@ -1876,7 +1885,7 @@ class MicrocalorimeterRunner:
             try:
                 self.change_source_state(source_on=False)
             except KeyError as e:
-                print(f"KeyError on source shutdown, likely not initialized : {e}.")
+                print(f'KeyError on source shutdown, likely not initialized : {e}.')
 
             # turn off anything else.
             for k, v in self.instruments.items():
@@ -1884,5 +1893,5 @@ class MicrocalorimeterRunner:
                 try:
                     v.close()
                 except Exception as e:
-                    print(f"Failed to shudown {k} - caught : {e}")
+                    print(f'Failed to shudown {k} - caught : {e}')
             self.closed = True

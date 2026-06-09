@@ -36,6 +36,7 @@ def time_delta(t, t0, unit: str):
     if unit == 's':
         return tdel
 
+
 class MeasurementManager:
     def __init__(
         self,
@@ -223,7 +224,7 @@ def run(
         if name == 'names':
             continue
         print('Defining Instrument')
-        print(name, json.dumps(instrument, indent = True))
+        print(name, json.dumps(instrument, indent=True))
         models[name] = instrument['model']
         addresses[name] = instrument['GPIB_address']
         setup[name] = instrument['initial_settings']
@@ -237,13 +238,15 @@ def run(
             case 'thermometer_monitor':
                 thermometer_names.append(name)
             case _:
-                raise ValueError(f'Instrument role {instrument['role']} of {name}:{models[name]} not supported')
+                raise ValueError(
+                    f'Instrument role {instrument["role"]} of {name}:{models[name]} not supported'
+                )
 
-    print(json.dumps(setup, indent = True))
+    print(json.dumps(setup, indent=True))
     if len(smu_names) > 1:
-        raise ValueError("Only 1 heater allowed.")
+        raise ValueError('Only 1 heater allowed.')
     elif len(smu_names) == 0:
-        raise ValueError("No heater supplied.")
+        raise ValueError('No heater supplied.')
 
     monitor_thermometer = bool(len(thermometer_names))
     monitor_thermopile = bool(len(nvm_names))
@@ -254,9 +257,13 @@ def run(
         ep2 = configs.DCSweepConfiguration(ep2.config)
 
     # set up an interface
-    gpib_interface_numbers = [i.split(':')[0][-1] for i in addresses.values() if 'GPIB' in i]
+    gpib_interface_numbers = [
+        i.split(':')[0][-1] for i in addresses.values() if 'GPIB' in i
+    ]
     if not all([gpib_interface_numbers[0] == gi for gi in gpib_interface_numbers]):
-        raise ValueError(f'All gpib interface numbers should be the same got {gpib_interface_numbers} ')
+        raise ValueError(
+            f'All gpib interface numbers should be the same got {gpib_interface_numbers} '
+        )
     interface_number = gpib_interface_numbers[0]
     print(f'Using GPIB{interface_number} interface')
 
@@ -269,8 +276,6 @@ def run(
         'SOURCE_SETTING (A)',
         'time_since_source_adjust (s)',
     ]
-
-
 
     # add extra column for thermometers and such
     columns += [f'V_{name} (V)' for name in nvm_names]
@@ -305,9 +310,7 @@ def run(
         nvms = []
         if monitor_thermopile:
             for nvm_name in nvm_names:
-                NVM = importer.import_instrument(
-                    models[nvm_name], 'Voltmeter'
-                )
+                NVM = importer.import_instrument(models[nvm_name], 'Voltmeter')
                 nvms.append(NVM(addresses[nvm_name]))
                 nvms[-1].initial_setup(**setup[nvm_name])
                 nvms[-1].setup(**setup[nvm_name])
@@ -316,11 +319,8 @@ def run(
                 _thermometer = importer.import_instrument(
                     models[thermometer_name], 'SMUSourceSweep'
                 )
-                thermometers.append(
-                    _thermometer(addresses[thermometer_name])
-                )
-                thermometers[-1].initial_setup(**setup[thermometer_name]
-                )
+                thermometers.append(_thermometer(addresses[thermometer_name]))
+                thermometers[-1].initial_setup(**setup[thermometer_name])
                 thermometers[-1].setup(**setup[thermometer_name])
 
         # Here is the measurement loop
@@ -374,7 +374,6 @@ def run(
     return join(output_dir, dr.session_str + '_metadata.csv')
 
 
-
 def _get_metadata(path: Path):
     """
     If a folder, get the metadata file. Otherwise assume metadata file.
@@ -416,16 +415,20 @@ def parse_v0(
 
     Parameters
     ----------
-    metadata : list[Path]
-        Path to datarecord metadata
+    metadata : Path
+        Path to datarecord metadata.
     settings : Path, optional
         Path to experiment settings. Assumed to be a file called settings.csv in metadata directory if not provided.
+        The default is None.
     measlist : Path, optional
         Path to experiment meas list. Assumed to be a file called measlist.csv in metadata directory if not provided.
+        The default is None.
     on_time_window : float, optional
-        Time window for selecting on samples. The default is 300.
+        Time window for selecting on samples up to the end of the run.
+        The default is 300.
     off_time_window : float, optional
-        Time window for selecting off samples. The default is 300.
+        Time window for selecting off samples up to the end of the run.
+        The default is 300.
     heater_instr_name : str, optional
         Name of heater instrument. The default is 'SMU'.
     sensor_instr_name : str, optional
@@ -465,7 +468,7 @@ def parse_v0(
 
     # original draft of the measurement
 
-    e, heater_v,heater_i, fig = staircase_analysis.parse_v0(
+    e, heater_v, heater_i, fig = staircase_analysis.parse_v0(
         metadata_path=str(Path(metadata)),
         settings=str(Path(settings)),
         meas_list=str(Path(measlist)),
@@ -501,15 +504,15 @@ def parse_v0(
 def parse_v1(
     metadata: list[Path],
     thermopile_monitor: str,
+    heater: str,
     on_min_wait_time: float = 0.0,
     on_max_wait_time: float = 1e99,
     off_min_wait_time: float = 0.0,
     off_max_wait_time: float = 1e99,
     min_pwr_setting: float = 0.0,
-    throw_away_min_time: float = 0.,
-    heater: str = 'SMU',
+    throw_away_min_time: float = 0.0,
     thermometer_monitor: str = None,
-    make_plots: bool = True
+    make_plots: bool = True,
 ) -> tuple[configs.ParsedDCSweep, list[plt.Figure]]:
     """
     Parse version 1 of a DC sweep calibration measurement.
@@ -517,30 +520,32 @@ def parse_v1(
     Parameters
     ----------
     metadata : list[Path]
-        List of paths to metadata files.
-    theropile_monitor : str
-        Name of thermopile monitor.
-    on_min_wait_time : float
-        Minimum time to wait before an on measurment should be included as part of the
-        fit.
-    on_max_wait_time : float
+        List of paths to metadata files (or folders) containing dcsweep
+        measurements.
+    thermopile_monitor : str
+        Name of thermopile monitor instrument.
+    heater : str, optional
+        Name of heater instrument.
+    on_min_wait_time : float, optional
+        Minimum time to wait before an on measurement should be included as
+        part of the fit.
+    on_max_wait_time : float, optional
         Maximum time to wait before an on measurement should be included as
         part of the fit.
-    off_min_wait_time : float
+    off_min_wait_time : float, optional
         Minimum time to wait before an off measurement should be included as
-        part of the fit..
-    off_max_wait_time : float
+        part of the fit.
+    off_max_wait_time : float, optional
         Maximum time to wait before an off measurement should be included as
         part of the fit.
-    min_pwr_setting : float
+    min_pwr_setting : float, optional
         Exclude and power levels below this value.
-    throw_away_min_time : float
+    throw_away_min_time : float, optional
         Throw away samples taken before this time since source adjustment.
-    heater : str, optional
-        Name of heater. Default is 'SMU'.
-    thermometer_monitor : str, optional
-        Name of thermomter_monitor. Default is None.
-    make_plots : bool, optional
+    thermometer_monitor : str, optional, optional
+        Name of instrument in the thermometer_monitor role. The default
+        is None.
+    make_plots : bool, optional, optional
         Generates plots if asked. Default is True.
 
     Returns
@@ -559,9 +564,9 @@ def parse_v1(
     # run through parser to extract parameters from the timeseries
     parsed, figs = staircase_analysis.parse_v1(
         metadata=metadata,
-        heater = heater,
-        thermometer_monitor =thermometer_monitor,
-        thermopile_monitor = thermopile_monitor,
+        heater=heater,
+        thermometer_monitor=thermometer_monitor,
+        thermopile_monitor=thermopile_monitor,
         throw_away_min_time=throw_away_min_time,
         on_min_wait_time=on_min_wait_time,
         on_max_wait_time=on_max_wait_time,
@@ -575,6 +580,7 @@ def parse_v1(
         output.attrs['metadata'] = str([str(p) for p in metadata])
     return parsed, figs
 
+
 def run_gui(
     config_files: list[Path],
     runlist: Path,
@@ -583,18 +589,21 @@ def run_gui(
     dry_run: bool = False,
 ):
     """
-    dcsweep runner GUI.
+    Run a dc sweep measurement.
 
     Parameters
     ----------
     config_files : list[Path]
-        Path to the settings config file.
+        Path to the config files used for the measurement. Point to all of the
+        instruments and other needed config files.
     runlist : Path
-        Path to the measurement list file.
+        Path to the dcsweep run list config file.
     output_dir : Folder
-        Directory to output data to.
+        Directory to output measurement data to.
     meas_name : str, optional
-        Name of measurement. Default is 'dcsweep'.
+        Name of measurement. Default is 'dcsweep'. A folder will be created
+        in output_dir with this name + '_{i}' where i is incremented if the
+        folder already exists.
     dry_run : bool, optional
         Does everything up to but not including run the
         experiment. Can be used to validate settings. The default is False.
@@ -604,13 +613,13 @@ def run_gui(
         'dcsweep',
         'run',
         f'"{str(Path(output_dir))}"',
-        ]
-    commands += ['--runlist',f'"{str(Path(runlist))}"']
+    ]
+    commands += ['--runlist', f'"{str(Path(runlist))}"']
 
     for c in config_files:
         commands += ['--config-files', f'"{Path(c).resolve()}"']
 
-    commands += ['--meas-name',f'{meas_name}']
+    commands += ['--meas-name', f'{meas_name}']
 
     if dry_run:
         commands.append('--dry-run')
