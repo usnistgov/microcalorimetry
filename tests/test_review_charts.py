@@ -15,6 +15,7 @@ if __name__ == '__main__':
         metadata='tests/sample_calruns/C24N118/calrun_1/20250226_metadata.csv',
         make_plots=True,
         plot_all_segments_analysis=True,
+        include_time_std=True,
         analysis_config={
             'signal_config': {
                 'DUT_power': {

@@ -66,17 +66,16 @@ def _cli_make_k_coeffs(
 
 def fit_thermoelectric(
     parsed_dcsweep: configs.ParsedDCSweep,
-    constrain_zero: bool = False,
     thermometer_corrected: bool = False,
+    constrain_zero: bool = False,
     p_of_e: bool = False,
     deg: int = 2,
     make_plots: bool = False,
-) -> tuple[ RMEMeas, plt.Figure]:
+) -> tuple[RMEMeas, plt.Figure]:
     r"""
-    Load and analyze a sensitivity run.
+    Fit sensitivity coefficients to a dcsweep measurement of a thermoelectric.
 
-    Takes in a sensitivity experiment and generate sensitivity coefficients
-    and other relevant data.
+    Takes in a parsed dc measurement and generates sensitivity coefficients.
 
     Parameters
     ----------
@@ -86,19 +85,20 @@ def fit_thermoelectric(
         and the last field is the measure thermopile voltage.
     thermometer_corrected : bool, optional
         Use a thermometer corrected model. Requires a thermometer
-        voltage and current to be present in the parsed DC sweep.
+        voltage and current to be present in the parsed DC sweep. The default
+        is False.
     constrain_zero : bool, optional
-        Constrains the fit to zero, only applies to non thermometer
+        Constrains the fit to zero, only applies to non-thermometer
         corrected models. The default is False.
     p_of_e : bool, optional
-        Fit power as a function of thermopile voltage, only applies to non
+        Fit power as a function of thermopile voltage if True. If False,
+        fits thermopile voltage as a function of power. Only applies to non
         thermometer corrected models. The default is False.
     deg : int, optional
-        Fit degrees of polynomial, only applies to non
-        thermometer corrected models. The default is 2.
+        Fit degrees of polynomial for non thermometer corrected models.
+        Only applies to non thermometer corrected models. The default is 2.
     make_plots : bool, optional
-        Output plots if True, outputs None in place of figure
-        otherwise.
+        Output plots if True.
 
     Returns
     -------
@@ -112,26 +112,23 @@ def fit_thermoelectric(
     # wrap any uncertainty functions
     calc_thermopile_sensitivity = propagator.propagate(rfpower.thermopile_sensitivity)
     temperature_corrected_thermoelectric_fit = propagator.propagate(
-        rfpower.temperature_corrected_thermoelectric_fit)
+        rfpower.temperature_corrected_thermoelectric_fit
+    )
     parsed_dcsweep = configs.ParsedDCSweep(parsed_dcsweep)
     v = configs.DCSweep(parsed_dcsweep.pop('heater_v')).load()
     i = configs.DCSweep(parsed_dcsweep.pop('heater_i')).load()
     e = configs.DCSweep(parsed_dcsweep['e']).load()
-    
+
     figures = []
 
     p = v * i
-    
+
     # use the thermometer corrected dataset
     if thermometer_corrected:
         therm_v = configs.DCSweep(parsed_dcsweep.pop('therm_v')).load()
         therm_i = configs.DCSweep(parsed_dcsweep.pop('therm_i')).load()
-        therm_r = therm_v/therm_i
-        coeffs = temperature_corrected_thermoelectric_fit(
-            p,
-            therm_r,
-            e
-            )
+        therm_r = therm_v / therm_i
+        coeffs = temperature_corrected_thermoelectric_fit(p, therm_r, e)
     # otherwise use a simple polynomial
     else:
         therm_r = None
@@ -144,21 +141,19 @@ def fit_thermoelectric(
             punc=p.stdunc().cov,
             eunc=e.stdunc().cov,
         )
-        
+
         coeffs.attrs['constrain_zero'] = constrain_zero
         coeffs.attrs['p_of_e'] = p_of_e
-
 
     coeffs.name = 'coeffs'
     v.name = 'voltage_steps'
     i.name = 'current_steps'
     e.name = 'thermopile_steps'
 
-
     # make plots if asked to
     if make_plots:
-        figs = plot_coeffs(propagator, p, e, coeffs, p_of_e, temperature = therm_r)
-        figures+=figs
+        figs = plot_coeffs(propagator, p, e, coeffs, p_of_e, temperature=therm_r)
+        figures += figs
 
     return coeffs, figures
 
@@ -166,14 +161,7 @@ def fit_thermoelectric(
 _cli_make_k_coeffs = clitools.format_from_npdoc(fit_thermoelectric)(_cli_make_k_coeffs)
 
 
-def plot_coeffs(
-    propagator,
-    p,
-    e,
-    coeffs,
-    p_of_e,
-    temperature: RMEMeas | None
-    ):
+def plot_coeffs(propagator, p, e, coeffs, p_of_e, temperature: RMEMeas | None):
     """
     Plots coefficients
 
@@ -200,7 +188,6 @@ def plot_coeffs(
         matplotlib figure object
     """
 
-   
     @propagator.propagate
     def minus(ref, vals):
         out = ref.copy()
@@ -213,17 +200,12 @@ def plot_coeffs(
         out.values = ref.values / vals.values
         return out
 
-
     k = 2
 
-    
-    get_openloop = propagator.propagate(
-        rfpower.openloop_thermoelectric_power
-        )
-
+    get_openloop = propagator.propagate(rfpower.openloop_thermoelectric_power)
 
     sortind = np.argsort(e.nom.values)
-    p_fit = get_openloop(coeffs, e, p_of_e, temperature = temperature)
+    p_fit = get_openloop(coeffs, e, p_of_e, temperature=temperature)
 
     delta = minus(p_fit, p)
 
@@ -237,15 +219,15 @@ def plot_coeffs(
     e_upper = e.stdunc(k=k)[0]
     p_upper = p.stdunc(k=k)[0]
     p_fit_upper = p_fit.stdunc(k=k)[0]
-    
+
     # plot the measured sensitivity
-    fig0, ax = plt.subplots(1,1)
-    eOp = div(e,p)
+    fig0, ax = plt.subplots(1, 1)
+    eOp = div(e, p)
     ax.errorbar(
         e.nom * 1e3,
         eOp.nom,
         xerr=e_upper * 1e3,
-        yerr= eOp.stdunc(k=k).cov,
+        yerr=eOp.stdunc(k=k).cov,
         marker='o',
         markersize=8,
         linestyle='',
@@ -256,9 +238,7 @@ def plot_coeffs(
     fig0.suptitle('Measured Sensitivity')
 
     # plot the Fit Residuals
-    fig, ax = plt.subplots(2, 1, sharex = True)
-
-    
+    fig, ax = plt.subplots(2, 1, sharex=True)
 
     ax[0].fill_between(
         e.nom * 1e3,
@@ -284,8 +264,8 @@ def plot_coeffs(
     ax[1].errorbar(
         e.nom * 1e3,
         delta.nom * 1e6,
-        xerr= e_upper * 1e3,
-        yerr= p_upper * 1e6,
+        xerr=e_upper * 1e3,
+        yerr=p_upper * 1e6,
         marker='.',
         markersize=8,
         capsize=5,
@@ -301,7 +281,6 @@ def plot_coeffs(
         alpha=0.2,
         label='k = 2 Uncertainty',
     )
-    
 
     ax[0].set_ylabel(r'$P_{heater}\:\left(\mathrm{mW}\right)$')
     ax[1].set_ylabel(r'$P_{fit}-P_{heater}\:\left(\mathrm{\mu W}\right)$')
