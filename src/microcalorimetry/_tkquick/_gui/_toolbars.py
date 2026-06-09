@@ -172,12 +172,13 @@ class ClassMethodToolBar(ctk.CTkFrame):
 
         self.output_selection_frame = ctk.CTkFrame(self)
         self.output_selection_frame.grid(
-            row=1, column=0, columnspan=2, padx=5, pady=5, sticky='nwe'
+            row=1, column=0, columnspan=3, padx=5, pady=5, sticky='nwe'
         )
         self.output_selection_frame.columnconfigure(1, weight=2)
+        self.output_selection_frame.columnconfigure(0, weight=0)
         self.file_button = ctk.CTkButton(
             self.output_selection_frame,
-            text='save to',  # Add these back in when I add versioning, "Checkout", "Restore", "Commit"],
+            text='save to',
             command=self.button_new_file,
         )
 
@@ -187,19 +188,19 @@ class ClassMethodToolBar(ctk.CTkFrame):
             self.output_selection_frame, placeholder_text=None
         )
         self.filename_entry.grid(
-            row=0, column=1, padx=(0, 10), pady=(5, 0), sticky='ew'
+            row=0, column=1, padx=(0, 10), pady=(5, 0), sticky='ew', columnspan= 2
         )
 
         self.group_label = ctk.CTkButton(
             self.output_selection_frame,
-            text='under group',  # Add these back in when I add versioning, "Checkout", "Restore", "Commit"],
+            text='under group',
         )
         self.group_label.grid(row=1, column=0, padx=10, pady=(5, 0), sticky='nwe')
 
         self.group_entry = ctk.CTkEntry(
             self.output_selection_frame, placeholder_text=None
         )
-        self.group_entry.grid(row=1, column=1, padx=(0, 10), pady=(5, 0), sticky='ew')
+        self.group_entry.grid(row=1, column=1, padx=(0, 10), pady=(5, 0), sticky='ew', columnspan= 2)
 
         self.app = self.master.master
 
