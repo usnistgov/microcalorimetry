@@ -75,9 +75,9 @@ def _gui(no_console_stdout: bool = False):
             'review_correction': anl.review_correction_factor,
         },
         output_group_saveable=[
-            'make_eta_repeatability_model'
+            'make_eta_repeatability_model',
             'fit_thermoelectric',
-            'compression_check'
+            'compression_check',
             'make_eta',
             'dc_lead_correction',
             'apply_uncertainty_model',

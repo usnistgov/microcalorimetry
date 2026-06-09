@@ -96,7 +96,6 @@ class FileFrame(customtkinter.CTkFrame):
 
     def plotmenu_export_all(self):
         dialog = customtkinter.CTkInputDialog(
-            initialdir=str(Path.cwd()),
             text='enter a format [.pdf, .png]', title='Export Format'
         )
         text = dialog.get_input()
