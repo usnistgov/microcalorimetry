@@ -943,11 +943,18 @@ def parse(
         plot_outputs = {k: v for k, v in outputs.items() if k in ['zeta']}
         for k, v in plot_outputs.items():
             fig, ax = plt.subplots(1, 1)
-            unc = v.stdunc().cov
-            ax.errorbar(v.nom.frequency, v.nom, yerr=unc, capsize=3, label='k=1', ls='')
-            ax.set_ylabel(k.replace('zeta', 'Uncorrected Eta'))
+            unc = v.stdunc(k=2).cov
+            ax.errorbar(
+                v.nom.frequency,
+                v.nom,
+                yerr=unc,
+                capsize=3,
+                label='Uncertainty k=2',
+                ls='',
+            )
+            ax.set_ylabel(k.replace('zeta', 'Uncorrected $\eta$'))
             ax.set_xlabel('Frequency (GHz)')
-
+            ax.legend(loc='best')
             sidearm_name = None
             try:
                 sidearm_name = ep['measurement_description']['sidearm_name']
@@ -956,11 +963,11 @@ def parse(
 
             try:
                 fig.suptitle(
-                    f'Internal mount: {ep["measurement_description"]["mount_name"]}, external mount: {sidearm_name} \n {k}'
+                    f'Internal mount: {ep["measurement_description"]["mount_name"]}, external mount: {sidearm_name} \n Uncorrected $\eta$'
                 )
 
             except KeyError:
-                fig.suptitle(f'Parsed RF Sweep:  {k}')
+                fig.suptitle('Parsed RF Sweep:  Uncorrected $\eta$')
             fig.tight_layout()
             figures.append(fig)
 
