@@ -973,7 +973,7 @@ def parse(
                 label='Uncertainty k=2',
                 ls='',
             )
-            ax.set_ylabel(k.replace('zeta', 'Uncorrected $\eta$'))
+            ax.set_ylabel(k.replace('zeta', r'Uncorrected $\eta$'))
             ax.set_xlabel('Frequency (GHz)')
             ax.legend(loc='best')
             sidearm_name = None
@@ -984,11 +984,11 @@ def parse(
 
             try:
                 fig.suptitle(
-                    f'Internal mount: {ep["measurement_description"]["mount_name"]}, external mount: {sidearm_name} \n Uncorrected $\eta$'
+                    rf'Internal mount: {ep["measurement_description"]["mount_name"]}, external mount: {sidearm_name} \n Uncorrected $\eta$'
                 )
 
             except KeyError:
-                fig.suptitle('Parsed RF Sweep:  Uncorrected $\eta$')
+                fig.suptitle(r'Parsed RF Sweep:  Uncorrected $\eta$')
             fig.tight_layout()
             figures.append(fig)
 
