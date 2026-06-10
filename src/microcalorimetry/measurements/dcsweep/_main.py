@@ -169,6 +169,7 @@ def run(
     meas_name: str = 'dcsweep',
     dry_run: bool = False,
     validate: bool = True,
+    initial_wait: float = 0
 ) -> str:
     """
     DCSweep experiment for microcalorimeter.
@@ -190,6 +191,9 @@ def run(
         If True, attempts to validate the measurement.
     validate : bool, optional
         Validate settings against a schema.
+    initial_wait : float, optional
+        Wait this long before starting a measurement. Will measure about
+        zero source for this duration.
 
     Returns
     -------
@@ -347,6 +351,19 @@ def run(
             # print(json.dumps(smu.setup_settings, indent = True))
             # initialize measurement loop
             ep.advance()
+
+
+            # do the initial wait at zero
+            # measure sample
+            mm.measure(
+                dr,
+                source_value=0.0,
+                first_sample_delay=ep.config['first_sample_delay'],
+                step_duration=initial_wait,
+                print_label='Initial Wait',
+            )
+
+            dr.batch_update()
 
             # start measurement
             count = 0
@@ -587,7 +604,8 @@ def run_gui(
     output_dir: Folder,
     meas_name: str = 'dcsweep',
     dry_run: bool = False,
-):
+    initial_wait: float = 0
+    ):
     """
     Run a dc sweep measurement.
 
@@ -607,6 +625,8 @@ def run_gui(
     dry_run : bool, optional
         Does everything up to but not including run the
         experiment. Can be used to validate settings. The default is False.
+    initial_wait : float, optional
+        Wait this long before starting the measurement.
     """
 
     commands = [
@@ -620,6 +640,8 @@ def run_gui(
         commands += ['--config-files', f'"{Path(c).resolve()}"']
 
     commands += ['--meas-name', f'{meas_name}']
+    
+    commands += ['--initial-wait', f'{initial_wait}']
 
     if dry_run:
         commands.append('--dry-run')
@@ -629,6 +651,7 @@ def run_gui(
 
 @click.command(name='run')
 @click.argument('output_dir', type=Path)
+@click.option('--initial-wait', type = float)
 @click.option('--config-files', '-c', type=Path, required=True, multiple=True)
 @click.option('--runlist', '-s', type=Path)
 @click.option('--meas-name', type=str, default='dcsweep')
