@@ -649,7 +649,14 @@ class Run(abc.ABC):
         }
 
         self.analyzers = {}
-        signals = self.parsed_config['signal_config']
+        try:
+            signals = self.parsed_config['signal_config']
+        except KeyError as e:
+            msg = str(e)
+            msg += ' : no signal config was found, please define a signal configuration and \
+pass it in through the parse function via the analysis_config field.'
+            raise KeyError(msg) from e
+
         for signal in self.parsed_config['analysis_config']:
             try:
                 signal_config = self.parsed_config['signal_config'][signal]
