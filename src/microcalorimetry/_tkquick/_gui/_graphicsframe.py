@@ -100,7 +100,7 @@ class GraphicsTabs(customtkinter.CTkTabview):
             if ol not in self.plots_dict:
                 print('Caught hidden tab, ', ol, ', closing it')
                 plt.close(ol)
-    
+
     def add_hidden_tabs(self):
         open_labels = plt.get_figlabels()
         for ol in open_labels:
@@ -274,7 +274,7 @@ class HDF5GroupRow:
             )
             self.plot = ctk.CTkSegmentedButton(
                 master=master,
-                values=['+', ']','u'],
+                values=['+', ']', 'u'],
                 command=self.make_plot,
                 width=20,
                 height=20,
@@ -282,16 +282,16 @@ class HDF5GroupRow:
             self.plot.grid(row=position, column=2)
             print(self.plot.get())
 
-        self.objbutt.grid(row=position, column=0, columnspan = 2, sticky='ew')
+        self.objbutt.grid(row=position, column=0, columnspan=2, sticky='ew')
 
         # button to delete groups
         self.edit_but = ctk.CTkOptionMenu(
-                master=master,
-                width=50,
-                height=20,
-                values=["delete","clip"],
-                command=self.edit,
-            )
+            master=master,
+            width=50,
+            height=20,
+            values=['delete', 'clip'],
+            command=self.edit,
+        )
         self.edit_but.set('edit')
         self.edit_but.grid(row=position, column=1, sticky='e')
 
@@ -313,16 +313,17 @@ class HDF5GroupRow:
         reset = True
         match choice:
             case 'delete':
-                print("deleting : ", self.name)
+                print('deleting : ', self.name)
                 with h5py.File(self.hdf5_file, 'a') as f:
                     del f[self.name]
                 self.master.refresh()
                 reset = False
             case 'clip':
                 import subprocess
-                path = str(Path(self.hdf5_file))  + self.name
+
+                path = str(Path(self.hdf5_file)) + self.name
                 print('Copying', path, 'to clip')
-                subprocess.run("clip", input=path, check=True, encoding="utf-8")
+                subprocess.run('clip', input=path, check=True, encoding='utf-8')
 
             case _:
                 print(choice, 'not defined')
@@ -390,18 +391,16 @@ class HDF5viewer(customtkinter.CTkScrollableFrame):
             master=self, command=self.build, text='root', fg_color='transparent'
         )
         self.root_button.grid(row=0, column=0, columnspan=1, sticky='nesw')
-        
+
         self.refresh_button = ctk.CTkButton(
             master=self, command=self.refresh, text='refresh', fg_color='transparent'
         )
         self.refresh_button.grid(row=0, column=1, columnspan=1, sticky='nesw')
 
-        
         self.file_button = ctk.CTkButton(
             master=self, command=self.set_file, text='open_file', fg_color='transparent'
         )
         self.file_button.grid(row=0, column=2, columnspan=2, sticky='nesw')
-        
 
         # make the column headers
         self.label = ctk.CTkLabel(master=self, text='Objects', justify='left')
@@ -421,7 +420,9 @@ class HDF5viewer(customtkinter.CTkScrollableFrame):
 
     def set_file(self):
         filename = ctk.filedialog.askopenfilename(
-            title='Open File', filetypes=[('HDF5', '.h5'), ('HDF5', '.hdf5')]
+            title='Open File',
+            filetypes=[('HDF5', '.h5'), ('HDF5', '.hdf5')],
+            initialdir=str(Path.cwd()),
         )
         if filename != '':
             self.hdf5_file = filename
@@ -443,7 +444,7 @@ class HDF5viewer(customtkinter.CTkScrollableFrame):
             self.build(path=new_root)
 
     def refresh(self):
-        self.build(path = self.root)
+        self.build(path=self.root)
 
     def build(self, path=None):
         for thing in self.h5rows:
@@ -484,14 +485,15 @@ class HDF5viewer(customtkinter.CTkScrollableFrame):
                             HDF5GroupRow(i + 3, o, self, 0, hdf5_file=self.hdf5_file)
                         )
 
+
 def uncertainty_breakdown(file, hdf5_path):
     """
     Break down the uncertainties of a generic RMEMeas object.
     """
     with h5py.File(file, 'r') as f:
-        data = load_object(f[hdf5_path],load_big_objects = True)
+        data = load_object(f[hdf5_path], load_big_objects=True)
     # remove a trailing unitary dimension, it's fine
-    if (len(data.nom.shape) == 2 and data.nom.shape[1] == 1):
+    if len(data.nom.shape) == 2 and data.nom.shape[1] == 1:
         data = data[:, 0]
 
     if len(data.nom.shape) == 1 and data.nom.dtype is not complex:
@@ -511,8 +513,8 @@ def uncertainty_breakdown(file, hdf5_path):
             data = data
         for ploc in data.umech_id:
             unc = data.usel(umech_id=str(ploc)).stdunc()[0]
-            ax_budget.plot(xvals, unc, '--', lw=2, label=ploc)
-        ax_budget.plot(xvals, utot, 'k', lw=2, label='Total')
+            ax_budget.plot(xvals, unc, 'o', lw=2, label=ploc)
+        ax_budget.plot(xvals, utot, 'ko', lw=2, label='Total')
         box = ax_budget.get_position()
         ax_budget.set_position([box.x0, box.y0, box.width * 0.8, box.height])
         ax_budget.legend(loc='center left', bbox_to_anchor=(1, 0.5))
@@ -527,6 +529,7 @@ def uncertainty_breakdown(file, hdf5_path):
         return None
 
     return [fig]
+
 
 def plot_RMEMeas(file, hdf5_path, fig=None):
     """
@@ -572,7 +575,7 @@ def plot_RMEMeas(file, hdf5_path, fig=None):
                 capsize=3,
                 label=f'(k={k}) .../' + '/'.join(hdf5_path.split('/')[-2:]),
             )
-            
+
             ax.set_xlabel(xlabel)
             ax.set_ylabel(ylabel)
             ax.set_title(hdf5_path)

@@ -11,6 +11,7 @@ from microcalorimetry._tkquick._gui._forms import (
 from numpydoc.docscrape import NumpyDocString
 from pathlib import Path
 from typing import Callable
+import microcalorimetry._tkquick._gui._tooltip as _tooltip
 
 customtkinter = ctk
 
@@ -47,8 +48,10 @@ class AnalysisStageFrame(customtkinter.CTkTabview):
         super().add(name)
 
         tab = self.tab(name)
+
         tab.grid_rowconfigure(1, weight=1)
         tab.grid_columnconfigure(0, weight=1)
+
         # tab.grid(sticky = 'nsew',padx = 0, pady = 0)
         # scrollable frame to see all the stuff
         frame = ctk.CTkScrollableFrame(tab)
@@ -59,26 +62,27 @@ class AnalysisStageFrame(customtkinter.CTkTabview):
         # frame._scrollbar.configure(widt)
         # write the doc strings
         docstrings = function.__doc__
-        doc_frame = customtkinter.CTkFrame(tab, height=100)
-        doc_frame.grid(row=0, column=0, sticky='nsew', columnspan=2)
-        doc_frame.grid_rowconfigure(0, weight=1)
-        for col in [0]:
-            doc_frame.grid_columnconfigure(col, weight=1)
-        textbox = customtkinter.CTkTextbox(
-            doc_frame,
-            activate_scrollbars=False,
-            font=ctk.CTkFont(**themes.docstring_font),
-        )
-        textbox.grid(row=0, column=0, sticky='nsew')
-        textbox.configure(state='disabled')
 
-        textbox_scrollbar = customtkinter.CTkScrollbar(doc_frame, command=textbox.yview)
-        textbox_scrollbar.grid(row=0, column=1, sticky='ns')
+        # doc_frame = customtkinter.CTkFrame(tab, height=100)
+        # doc_frame.grid(row=0, column=0, sticky='nsew', columnspan=2)
+        # doc_frame.grid_rowconfigure(0, weight=1)
+        # for col in [0]:
+        #     doc_frame.grid_columnconfigure(col, weight=1)
+        # textbox = customtkinter.CTkTextbox(
+        #     doc_frame,
+        #     activate_scrollbars=False,
+        #     font=ctk.CTkFont(**themes.docstring_font),
+        # )
+        # textbox.grid(row=0, column=0, sticky='nsew')
+        # textbox.configure(state='disabled')
 
-        textbox.configure(yscrollcommand=textbox_scrollbar.set)
-        textbox.configure(state='normal')
-        textbox.insert('end', docstrings)
-        textbox.configure(state='disabled')
+        # textbox_scrollbar = customtkinter.CTkScrollbar(doc_frame, command=textbox.yview)
+        # textbox_scrollbar.grid(row=0, column=1, sticky='ns')
+
+        # textbox.configure(yscrollcommand=textbox_scrollbar.set)
+        # textbox.configure(state='normal')
+        # textbox.insert('end', docstrings)
+        # textbox.configure(state='disabled')
 
         # generate fields
         npdocs = NumpyDocString(docstrings)

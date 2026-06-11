@@ -2,16 +2,15 @@ from rmellipse.propagators import RMEProp
 from rmellipse.uobjects import RMEMeas
 
 # local packages
-from microcalorimetry.math import rfpower, vna, numbers, fitting, rmemeas_extras
+from microcalorimetry.math import rfpower, numbers, fitting, rmemeas_extras
 from microcalorimetry._helpers._collections import try_sel
+from pathlib import Path
 import microcalorimetry.configs as configs
 import microcalorimetry._gwex as _gwex
-import warnings
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
 import itertools
-from typing import Callable
 
 __all__ = [
     'make_eta',
@@ -39,6 +38,7 @@ def review_eta(
     historical_data : configs.EtaHistorical
         Historical data to review against.
     repeatability_model : configs.Eta
+        Model of calorimeter's repeatability to plot.
     k : int, optional
         Expansion factor, by default 2
 
@@ -52,19 +52,14 @@ def review_eta(
     # i don't want to deal with this one anymore
     # so throw it awway
     del historical_data
-    
-    
+
     eta = configs.Eta(eta).load()
     nom = eta.nom
     new_fgrid = nom.frequency
     lb = eta.uncbounds(k=-k).cov
     ub = eta.uncbounds(k=k).cov
 
-   
-
     cmap = plt.cm.winter
-
-
 
     fig, ax = plt.subplots(2, 1)
 
@@ -76,8 +71,8 @@ def review_eta(
     )
     ax[1].fill_between(
         new_fgrid,
-        lb[..., 0]-nom[:,0],
-        ub[..., 0]-nom[:,0],
+        lb[..., 0] - nom[:, 0],
+        ub[..., 0] - nom[:, 0],
         color='k',
         alpha=0.2,
         label=f'Utot k = {k}',
@@ -96,13 +91,13 @@ def review_eta(
     )
     # plot average of reference data with std
     average_hist = numbers.greedy_average(*list(nominals.values()))
-    use_freqs = np.intersect1d(average_hist.frequency,ref.frequency)
+    use_freqs = np.intersect1d(average_hist.frequency, ref.frequency)
     ax[1].plot(
-        use_freqs, 
-        average_hist.sel(frequency = use_freqs) - ref.sel(frequency=use_freqs),
+        use_freqs,
+        average_hist.sel(frequency=use_freqs) - ref.sel(frequency=use_freqs),
         'r-',
         label='Average of History',
-        zorder = 1000
+        zorder=1000,
     )
     # plot repeatability model centered around
     # the new measurement
@@ -110,8 +105,12 @@ def review_eta(
         center = nom - ref.sel(frequency=nom.frequency)
         repmodel = configs.Eta(repeatability_model).load()
         ub_rep = center + repmodel.stdunc(k=k).cov[:, 0].interp(frequency=nom.frequency)
-        lb_rep = center + repmodel.stdunc(k=-k).cov[:, 0].interp(frequency=nom.frequency)
-        ax[1].plot(ub_rep.frequency, ub_rep, 'k-.', label='Repeatability Model', zorder=1000)
+        lb_rep = center + repmodel.stdunc(k=-k).cov[:, 0].interp(
+            frequency=nom.frequency
+        )
+        ax[1].plot(
+            ub_rep.frequency, ub_rep, 'k-.', label='Repeatability Model', zorder=1000
+        )
         ax[1].plot(lb_rep.frequency, lb_rep, 'k-.', zorder=900)
 
     for a in ax:
@@ -123,22 +122,21 @@ def review_eta(
     for name, datamodel in rev_nominals:
         hdat = nominals[name]
         # plot differences
-        
+
         m = next(marker)
         ax[0].plot(hdat.frequency, hdat, m, label=name)
-        
+
         use_freqs = np.intersect1d(hdat.frequency, ref.frequency)
-        
+
         ax[1].plot(
-            use_freqs, 
-            hdat.sel(frequency = use_freqs) - ref.sel(frequency=use_freqs),
+            use_freqs,
+            hdat.sel(frequency=use_freqs) - ref.sel(frequency=use_freqs),
             m,
-            label=name
+            label=name,
         )
 
-
     pass
-    
+
     ax[0].set_ylabel(r'$\eta$')
     ax[1].set_ylabel(r'$\eta$ - New Nominal')
     ax[1].set_xlabel('Frequency (GHz)')
@@ -181,7 +179,7 @@ def make_classical_eta_unc_model(
     u_type: str,
     correlate_frequencies: bool = True,
     make_plots: bool = True,
-    ) -> tuple[configs.Eta, plt.Figure]:
+) -> tuple[configs.Eta, plt.Figure]:
     """
     Generate a classical uncertainty model for an eta measurement.
 
@@ -230,15 +228,14 @@ def make_classical_eta_unc_model(
     # turn into an RMEMeas object with a nominal zero
     data = RMEMeas.from_nom(f'eta_uncertainty', data)
 
-
     if correlate_frequencies:
-        pert = data.nom.copy() 
-        pert[:,0] += u
+        pert = data.nom.copy()
+        pert[:, 0] += u
         data.add_umech(
             model.name,
             pert,
             category={'Type': u_type, 'Origin': model.name},
-            add_uid = True
+            add_uid=True,
         )
 
     else:
@@ -246,10 +243,11 @@ def make_classical_eta_unc_model(
             u_pert = data.nom.copy()
             u_pert.loc[{'frequency': f}] += u[i]
             data.add_umech(
-                f'u{u_type}_{f}', u_pert, category={'Type': u_type, 'Origin': model.name},add_uid = True
+                f'u{u_type}_{f}',
+                u_pert,
+                category={'Type': u_type, 'Origin': model.name},
+                add_uid=True,
             )
-
-
 
     # add uncertainties
     fig = None
@@ -284,10 +282,11 @@ def make_eta_repeatability_model(
     make_plots : bool, optional
         Generate figures if True.
     coverage : int, optional
-        Attempt to have the repeatability uncertainty meet this coverage
-        factor. Applied frequency point by frequency point.
+        Attempts to have the repeatability uncertainty meet this coverage
+        factor frequency point by frequency point. The default is 3.
     min_points : int, optional
-        Minimum number of required samples per frequency points.
+        Minimum number of required samples per frequency point to be included
+        as part of the fit. The default is 3.
 
     Returns
     -------
@@ -405,14 +404,17 @@ def dc_lead_correction(
     R_bolo: float,
 ) -> tuple[configs.Eta]:
     """
-    Corrects an effective efficiency measurmeent for losses in DC leads.
+    Applies a dc lead correction for bolometer mounts.
+
+    Accounts for heat lost in the 4-wire connection
+    of a bolometer mount biasing the measurement.
 
     Parameters
     ----------
     eta : configs.Eta
-        _description_
+        Path to an effective efficiency measurement to apply the correction to.
     R_lead : float
-        Sum of lead resistance for Force and Sense leads of sensor.
+        Sum of resistance for Force and Sense leads of sensor.
     R_bolo : float
         Bolometer resistance, usually 200 ohms for bolometer sensors.
 
@@ -438,14 +440,16 @@ def make_eta(
     gc: configs.GC,
     s11: configs.S11,
     parsed_rfsweep: configs.ParsedRFSweep,
+    repeatability_model: configs.Eta = None,
+    extra_eta_uncertainties: list[Path] = None,
+    lead_correction: list[float] = None,
     historical_data: configs.EtaHistorical = None,
-    thermal_weights: configs.ThermoelectricFitCoefficients = None,
-    uncertainties: bool = True,
+    clrm_sensitivity: configs.ThermoelectricFitCoefficients = None,
+    propagate_uncertainties: bool = True,
     make_plots: bool = True,
 ) -> tuple[list[plt.Figure] | None, configs.Eta]:
     """
     Make an effective efficiency measurement.
-
 
     Parameters
     ----------
@@ -455,18 +459,31 @@ def make_eta(
         Reflection coefficient of the sensor.
     parsed_rfsweep : configs.ParsedRFSweep
         Parsed RF sweep output.
+    repeatability_model : configs.Eta, optional
+        Supply a repeatability model of the microcalorimeter to apply as
+        uncertainty mechanisms and use in review charts. The default is None.
+    extra_eta_uncertainties : list[Path], optional
+        Supply additional uncertainty models of eta that should be applied
+        after the correction. The default is None.
+    lead_correction : list[float], optional
+        Applies a dc lead correction if provided (and lead resistance is
+        larger than zero) to account for heat lost in the 4-wire connection
+        of a bolometer mount. First value is the total lead resistance of the
+        force and sensor connections. The second value
+        is the bolometer resistance. For example, [0.2, 200] means 0.2 Ohm
+        lead resistance and 200 ohm bolometer resistance.
     historical_data : configs.EtaHistorical, optional
-        Dictionary of key value pairs where values are
-        configs.Eta. The default is None.
-    thermal_weights : configs.ThermoelectricFitCoefficients, optional
-        If provied, assumes gc are thermal weight coefficients and are scaled
-        by the provided sensitivity coefficient before calculating
-        effective efficiency. These should be thermopile sensitivity
-        coefficients of the calorimeter calculated with the same model of
-        sensor. The default is None.
-    uncertainties : bool, optional
-        Propagate uncertainties during calculation, is faster to turn
-        off during debugging or exploratory analysis. The default is True.
+        Supply a historical Eta configuration object to use a reference
+        measurements in the review charts. The default is None.
+    clrm_sensitivity : configs.ThermoelectricFitCoefficients, optional
+        If provided, assumes the correction factor is weighted by the
+        calorimeters sensitivity and provide in units of (V/W).
+        These coefficents will be used to calculate the dimensionless
+        correction factor. The default is None.
+    propagate_uncertainties : bool, optional
+        Propagate uncertainties from the correction factor and the
+        model of the sensors reflection coefficient during calculation.
+        The default is True.
     make_plots : bool, optional
         Make plots during the analsysis,otherwise figs will
         be an empty list. The default is True. Plots are made by passing
@@ -489,7 +506,7 @@ def make_eta(
     historical_data = configs.EtaHistorical(historical_data)
 
     # set up the propagator
-    basic = RMEProp(sensitivity=uncertainties)
+    basic = RMEProp(sensitivity=propagate_uncertainties)
 
     effective_efficiency = basic.propagate(rfpower.effective_efficiency)
     mean_unique = basic.propagate(numbers.mean_unique_values)
@@ -515,8 +532,8 @@ def make_eta(
     s11 = try_sel(s11, 'S11', fgrid)
     gc = try_sel(gc, 'gc', fgrid)
 
-    if thermal_weights:
-        k = configs.ThermoelectricFitCoefficients(thermal_weights).load()
+    if clrm_sensitivity:
+        k = configs.ThermoelectricFitCoefficients(clrm_sensitivity).load()
         calc_te_power = basic.propagate(rfpower.openloop_thermoelectric_power)
 
         polyderive = basic.propagate(fitting.polyderive)
@@ -543,11 +560,22 @@ def make_eta(
 
     eta_new = effective_efficiency(zeta, s11, gc)
 
+    if repeatability_model:
+        eta_new = apply_uncertainty_model(eta_new, repeatability_model)
+    if extra_eta_uncertainties:
+        for eu in extra_eta_uncertainties:
+            eta_new = apply_uncertainty_model(eta_new, eu)
+
+    if lead_correction:
+        eta_new = dc_lead_correction(eta_new, lead_correction[0], lead_correction[1])
+
     # cast as a DataModelContainer and maybe
     # generate review plots
     fig = None
     if make_plots:
-        fig = review_eta(eta_new, historical_data)
+        fig = review_eta(
+            eta_new, historical_data, repeatability_model=repeatability_model
+        )
         fig = list(fig)
 
     return fig, eta_new
@@ -565,7 +593,8 @@ def apply_uncertainty_model(eta: configs.Eta, model: configs.Eta) -> configs.Eta
     eta : configs.Eta
         Eta that will have unertainties applied.
     model : configs.Eta
-        Has uncertainties that will be applied on to eta.
+        Model of uncertainties that will be applied to eta. Should be nominaly
+        zero.
 
     Returns
     -------
@@ -574,7 +603,7 @@ def apply_uncertainty_model(eta: configs.Eta, model: configs.Eta) -> configs.Eta
 
     """
     basic = RMEProp(sensitivity=True)
-    eta  = configs.Eta(eta).load()
+    eta = configs.Eta(eta).load()
     model = configs.Eta(model).load()
     model = model.interp(
         frequency=eta.nom.frequency,

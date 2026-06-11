@@ -7,6 +7,7 @@ import inspect
 import os
 import pandas as pd
 import microcalorimetry._tkquick.dtypes as dtypes
+import microcalorimetry._tkquick._gui._tooltip as _tooltip
 
 customtkinter = ctk
 
@@ -131,6 +132,21 @@ def get_form_field(master, row, npparam, default, level=0):
     else:
         raise Exception('datatype not recognized')
 
+    # attatche a tool tip
+    name = npparam.name
+    param_type = npparam.type
+    desc = '\n'.join(npparam.desc)
+
+    # Customize your output string format here
+    header = '{name}: {param_type}'
+    header += '\n' + len(header) * '=' + '\n'
+    formatted = f'{desc}'
+    _tooltip.CTkToolTip(
+        field.label,
+        message=formatted,
+        justify='left',
+    )
+
     return field
 
 
@@ -163,7 +179,7 @@ class PathBox:
         print(self.dtype)
         if 'Path' == self.dtype:
             filename = ctk.filedialog.askopenfilename(
-                title='Pick File(s)', multiple=False
+                initialdir=str(Path.cwd()), title='Pick File(s)', multiple=False
             )
             if filename != '':
                 self.setfield(filename)
@@ -173,7 +189,9 @@ class PathBox:
 
         elif 'list[Path]' == self.dtype:
             filename = ctk.filedialog.askopenfilename(
-                title='Pick File(s)', multiple=True
+                title='Pick File(s)',
+                multiple=True,
+                initialdir=str(Path.cwd()),
             )
             if filename != '':
                 filename = str(filename).replace("'", '')[1:-1]
@@ -185,7 +203,10 @@ class PathBox:
                 print('no file selected.')
 
         elif 'Folder' in self.dtype:
-            filename = ctk.filedialog.askdirectory(title='Pick Folder')
+            filename = ctk.filedialog.askdirectory(
+                title='Pick Folder',
+                initialdir=str(Path.cwd()),
+            )
             if filename != '':
                 self.setfield(filename)
                 # print(filename)
@@ -195,7 +216,9 @@ class PathBox:
         # treat it as a list if list is present
         elif 'list' in self.dtype:
             filename = ctk.filedialog.askopenfilename(
-                title='Pick File(s)', multiple=True
+                title='Pick File(s)',
+                multiple=True,
+                initialdir=str(Path.cwd()),
             )
             if filename != '':
                 filename = str(filename).replace("'", '')[1:-1]
@@ -206,7 +229,9 @@ class PathBox:
             else:
                 print('no file selected.')
         else:
-            filename = ctk.filedialog.askopenfilename(title='Pick File', multiple=False)
+            filename = ctk.filedialog.askopenfilename(
+                title='Pick File', multiple=False, initialdir=str(Path.cwd())
+            )
             print(filename)
             if filename != '':
                 self.setfield(filename)
@@ -371,12 +396,12 @@ class ToggleFrame(ctk.CTkFrame):
             self.label_frame, text='collapse', command=self._toggle_open_close, width=20
         )
         self.toggle_button.grid(row=0, column=1, sticky='ne', padx=0)
-    
+
     def collapse(self):
         child = self.form_frame
         child.grid_remove()
         self.toggle_button.configure(text='uncollapse')
-    
+
     def uncollapse(self):
         child = self.form_frame
         child.grid()
@@ -394,12 +419,13 @@ class ToggleFrame(ctk.CTkFrame):
         else:
             self.uncollapse()
 
+
 class DictionairyEntry(ctk.CTkFrame):
     def __init__(self, master, row, npparam):
         super().__init__(master)
         self.grid(row=row, column=0, sticky='ew', columnspan=2, pady=10)
         theme_data = ctk.ThemeManager.theme
-        self.configure(fg_color = theme_data["CTk"]["fg_color"][1])
+        self.configure(fg_color=theme_data['CTk']['fg_color'][1])
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
@@ -420,7 +446,10 @@ class DictionairyEntry(ctk.CTkFrame):
         self.label.grid(row=0, column=0, sticky='e', padx=(0, 10))
 
         self.toggle_button = ctk.CTkButton(
-            self.label_frame, text=' collapse', command=self._toggle_open_close, width=20
+            self.label_frame,
+            text=' collapse',
+            command=self._toggle_open_close,
+            width=20,
         )
         self.toggle_button.grid(row=0, column=1, sticky='ne', padx=0)
 
@@ -447,7 +476,7 @@ class DictionairyEntry(ctk.CTkFrame):
             # indicates indent has gone down and we've moved on to the next
             # parameter
             searching = True
-            i_search_param = i+2
+            i_search_param = i + 2
             while searching:
                 check = desc[i_search_param]
                 new_leading_whitespace = len(check) - len(check.lstrip())
@@ -455,7 +484,7 @@ class DictionairyEntry(ctk.CTkFrame):
                 if new_leading_whitespace < min_whitespace:
                     searching = False
                 else:
-                    i_search_param +=1
+                    i_search_param += 1
                     new_desc += [check.lstrip()]
 
             print(new_desc)
@@ -467,7 +496,7 @@ class DictionairyEntry(ctk.CTkFrame):
             field = get_form_field(self.form_frame, row_count, p, None, level=1)
             row_count += 1
             self.fields[p.name] = field
-        
+
         self.collapse()
 
     def get(self):
@@ -476,12 +505,12 @@ class DictionairyEntry(ctk.CTkFrame):
     def setfield(self, setdict):
         for k in setdict:
             self.fields[k].setfield(setdict[k])
-    
+
     def collapse(self):
         child = self.form_frame
         child.grid_remove()
         self.toggle_button.configure(text='uncollapse')
-    
+
     def uncollapse(self):
         child = self.form_frame
         child.grid()
@@ -561,7 +590,9 @@ class NumpyArrayEntry:
 
     def fetch_paths(self):
         filename = ctk.filedialog.askopenfilename(
-            title='Pick Array csv (no header, first column)', multiple=False
+            title='Pick Array csv (no header, first column)',
+            multiple=False,
+            initialdir=str(Path.cwd()),
         )
         if filename != '':
             self.setfield(filename)

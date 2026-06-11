@@ -34,7 +34,6 @@ def test_template(template: Path):
         check_dcsweep_template(template)
     elif fnmatch(template.stem, rfsweep_template_pattern):
         check_rfsweep_template(template)
-    
 
 
 def check_dcsweep_template(template: Path):
@@ -47,7 +46,7 @@ def check_dcsweep_template(template: Path):
     try:
         dcsweep.run(
             config_files=meas_configs,
-            runlist = runlist,
+            runlist=runlist,
             output_dir=IGNORED,
             dry_run=True,
         )
@@ -64,7 +63,6 @@ def check_rfsweep_template(template: Path):
     meas_configs.remove(runlist)
     rfsweep.run(
         IGNORED,
-        1,
         meas_configs,
         runlist,
         sensor_master_list=master_list,

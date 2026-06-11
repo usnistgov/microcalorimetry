@@ -15,8 +15,32 @@ import rmellipse.utils
 import os
 import microcalorimetry._helpers._intf_tools as _intf_tools
 import concurrent.futures
+import inspect
 from pathlib import Path
 import time
+
+
+def helpbutton(tabview, toolbar: 'ClassMethodToolBar'):
+    """
+    help call back button for a function
+    """  # test for class method, if class method call from class
+    opentab = toolbar.stagemenu.get()
+    # test for class method, if class method call from class
+    fun = toolbar.functions[opentab]
+    n = fun.__name__
+    file_path = inspect.getsourcefile(fun)
+    print('')
+    print(n)
+    print(len(n) * '=')
+    print('File Path:', file_path)
+
+    # 2. Get the specific line number where the function is defined
+    _, line_no = inspect.getsourcelines(fun)
+    print('Line Number:', line_no)
+    print('\nSummary')
+    print('-------')
+
+    print(fun.__doc__)
 
 
 def funcrunbutton(tabview, toolbar: 'ClassMethodToolBar'):
@@ -136,6 +160,7 @@ class ClassMethodToolBar(ctk.CTkFrame):
         self.parent = master
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=0)
+        self.columnconfigure(2, weight=0)
 
         self.stagemenu = None
         self.runbutton = None
@@ -147,12 +172,13 @@ class ClassMethodToolBar(ctk.CTkFrame):
 
         self.output_selection_frame = ctk.CTkFrame(self)
         self.output_selection_frame.grid(
-            row=1, column=0, columnspan=2, padx=5, pady=5, sticky='nwe'
+            row=1, column=0, columnspan=3, padx=5, pady=5, sticky='nwe'
         )
         self.output_selection_frame.columnconfigure(1, weight=2)
+        self.output_selection_frame.columnconfigure(0, weight=0)
         self.file_button = ctk.CTkButton(
             self.output_selection_frame,
-            text='save to',  # Add these back in when I add versioning, "Checkout", "Restore", "Commit"],
+            text='save to',
             command=self.button_new_file,
         )
 
@@ -162,19 +188,19 @@ class ClassMethodToolBar(ctk.CTkFrame):
             self.output_selection_frame, placeholder_text=None
         )
         self.filename_entry.grid(
-            row=0, column=1, padx=(0, 10), pady=(5, 0), sticky='ew'
+            row=0, column=1, padx=(0, 10), pady=(5, 0), sticky='ew', columnspan= 2
         )
 
         self.group_label = ctk.CTkButton(
             self.output_selection_frame,
-            text='under group',  # Add these back in when I add versioning, "Checkout", "Restore", "Commit"],
+            text='under group',
         )
         self.group_label.grid(row=1, column=0, padx=10, pady=(5, 0), sticky='nwe')
 
         self.group_entry = ctk.CTkEntry(
             self.output_selection_frame, placeholder_text=None
         )
-        self.group_entry.grid(row=1, column=1, padx=(0, 10), pady=(5, 0), sticky='ew')
+        self.group_entry.grid(row=1, column=1, padx=(0, 10), pady=(5, 0), sticky='ew', columnspan= 2)
 
         self.app = self.master.master
 
@@ -221,6 +247,7 @@ class ClassMethodToolBar(ctk.CTkFrame):
                 filetypes=[('HDF5', '.hdf5'), ('HDF5', '.h5')],
                 title='Output File',
                 defaultextension='.h5',
+                initialdir=str(Path.cwd()),
             )
         )
         if filename != '':
@@ -269,5 +296,11 @@ class ClassMethodToolBar(ctk.CTkFrame):
         def button_callback():
             return funcrunbutton(tabview, self)
 
+        def help_callback():
+            return helpbutton(tabview, self)
+
         self.runbutton = ctk.CTkButton(self, text='>>', command=button_callback)
-        self.runbutton.grid(row=0, column=1, padx=(0, 10), sticky='ne')
+        self.runbutton.grid(row=0, column=2, padx=(0, 10), sticky='ne')
+
+        self.helpbutton = ctk.CTkButton(self, text='?', command=help_callback)
+        self.helpbutton.grid(row=0, column=1, padx=(0, 10), sticky='ne')

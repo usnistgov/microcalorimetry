@@ -822,7 +822,20 @@ def _group_saveable_from_datamodelcontainer(
             g = f
             if group is not None:
                 g = f[group]
-            data = load_object(g, load_big_objects=True)
+                data = load_object(g, load_big_objects=True)
+            else:
+                try:
+                    data = load_object(g, load_big_objects=True)
+                except KeyError as e:
+                    subgroups = [gi for gi in g]
+                    if len(subgroups) == 1:
+                        g = g[subgroups[0]]
+                        data = load_object(g, load_big_objects=True)
+                    else:
+                        msg = 'If pointing to a file, the root group must be group saveable or their must be a single group saveable group below it.'
+                        msg  = str(e) + ': ' + msg
+                        raise e from e
+                                     
             # incase the person pointed to a container, and not the data set itself
             if isinstance(data, DataModelContainer):
                 data = data.data

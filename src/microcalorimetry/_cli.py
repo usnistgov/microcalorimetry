@@ -35,24 +35,31 @@ def _gui(no_console_stdout: bool = False):
         right_sidebar_kwargs=dict(width=350),
         icon_path=Path(__file__).parent / 'graphics/icon.ico',
     )
+    # find installed python packages matching aname pattern lik ('-microcalorimetry')
+
+    # OR look for python scripts you defines some how
+
+    # look for {package_name}.GUI_PLUGIN
+
+    # append as function tab
 
     app.add_function_tab(
         'measurements.',
         # view function is just parse but with out the ability to save.
         functions={
             'view': measurements.view,
-            'dcsweep.parse_v0': dcsweep.parse_v0,
-            'dcsweep.parse_v1': dcsweep.parse_v1,
+            # 'dcsweep.parse_v0': dcsweep.parse_v0,
             'dcsweep.run': dcsweep._main.run_gui,
-            'rfsweep.parse': rfsweep.parse,
+            'dcsweep.parse': dcsweep.parse_v1,
             'rfsweep.run': rfsweep._main.run_gui,
+            'rfsweep.parse': rfsweep.parse,
             'rfsweep.make_settled_runlist': rfsweep.generate_settled_runlist,
             'rfsweep.make_runlist_from_loss': rfsweep.runlist_from_loss,
             'rfsweep.reduce_initial_power': rfsweep.reduce_initial_power,
             'rfsweep.reorder_runlist': rfsweep.reorder_runlist,
             'rfsweep.review_runlist': rfsweep.review_runlist,
         },
-        output_group_saveable=['dcsweep.parse_v0', 'dcsweep.parse_v1', 'rfsweep.parse'],
+        output_group_saveable=['dcsweep.parse', 'rfsweep.parse'],
     )
 
     app.add_function_tab(
@@ -68,12 +75,12 @@ def _gui(no_console_stdout: bool = False):
             'review_correction': anl.review_correction_factor,
         },
         output_group_saveable=[
+            'make_eta_repeatability_model',
             'fit_thermoelectric',
+            'compression_check',
             'make_eta',
-            'make_eta_hist_model',
             'dc_lead_correction',
             'apply_uncertainty_model',
-            'compression_check',
         ],
     )
 

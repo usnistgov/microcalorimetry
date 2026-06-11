@@ -17,12 +17,16 @@ class FileFrame(customtkinter.CTkFrame):
     def __init__(self, master):
         super().__init__(master)
 
+        self.columnconfigure(2, weight = 2)
+        self.columnconfigure((0,1), weight = 0)
         self.filemenu = customtkinter.CTkOptionMenu(
-            self, values=['Open', 'Save As'], command=self.filemenu_callback
+            self, values=['Open', 'Save As', 'Change Working Directory'], command=self.filemenu_callback
         )
         self.filemenu.grid(row=0, column=0, padx=(0, 10), sticky='nwe')
-        self.filemenu.set('File')
+        self.filemenu.set('GUI')
         self._filename = ''
+
+ 
 
         # button for managing plot settings
         self.plotmenu = customtkinter.CTkOptionMenu(
@@ -30,6 +34,13 @@ class FileFrame(customtkinter.CTkFrame):
         )
         self.plotmenu.grid(row=0, column=1, padx=(0, 10), sticky='nwe')
         self.plotmenu.set('Plots')
+
+        self.cwd_label = customtkinter.CTkLabel(self )
+        self.update_cwd_label()
+        self.cwd_label.grid(row=0, column=2, padx=(0, 10), sticky='e')
+
+    def update_cwd_label(self):
+        self.cwd_label.configure(text = 'Working Directory: ' + Path.cwd().as_posix())
 
     @property
     def graphicstabs(self):
@@ -49,11 +60,16 @@ class FileFrame(customtkinter.CTkFrame):
         self.master.title(self.master.title_name + ' : ' + os.path.basename(text))
 
     def filemenu_callback(self, choice, file=None):
-        self.filemenu.set('File')
-        if choice == 'Save As':
-            self.button_save_as()
-        if choice == 'Open':
-            self.button_open(file=file)
+        self.filemenu.set('GUI')
+        match choice:
+            case 'Save As':
+                self.button_save_as()
+            case 'Open':
+                self.button_open(file=file)
+            case "Change Working Directory":
+                self.change_dir()
+            case _:
+                raise ValueError(f'{choice} not recognized')
 
     def plotmenu_callback(self, choice, file=None):
         self.plotmenu.set('Plots')
@@ -85,6 +101,7 @@ class FileFrame(customtkinter.CTkFrame):
         text = dialog.get_input()
         folder = str(
             ctk.filedialog.askdirectory(
+                initialdir=str(Path.cwd()),
                 title='Export plots to folder',
             )
         )
@@ -121,7 +138,8 @@ class FileFrame(customtkinter.CTkFrame):
         import pickle
         files =  ctk.filedialog.askopenfilenames(
                 title='(Only select files you made, pickling can be unsafe) Select pickle objects to open:',
-                filetypes=[('Pickled Figure', '.pklfig')]
+                filetypes=[('Pickled Figure', '.pklfig')],
+                initialdir=str(Path.cwd()),
             )
         
 
@@ -130,12 +148,19 @@ class FileFrame(customtkinter.CTkFrame):
                 fig_loaded = pickle.load(f)
             self.graphicstabs.add_plot(fig_loaded, Path(fn).stem)
 
+    def change_dir(self):
+        newdir = ctk.filedialog.askdirectory(title='Pick New Working Directory', initialdir=str(Path.cwd()))
+        if newdir is not None:
+            os.chdir(Path(newdir))
+            print(f"changed to {newdir}")
+            self.update_cwd_label()
 
     def button_open(self, file=None):
         filename = file
         if filename is None:
             filename = ctk.filedialog.askopenfilename(
-                title='Open File', filetypes=[('JSON', '.json')]
+                title='Open File', filetypes=[('JSON', '.json')],
+                initialdir=str(Path.cwd()),
             )
         if filename != '':
             with open(filename) as f:
@@ -154,7 +179,8 @@ class FileFrame(customtkinter.CTkFrame):
     def button_save_as(self):
         filename = str(
             ctk.filedialog.asksaveasfilename(
-                filetypes=[('JSON', '.json')], title='Save As', defaultextension='.json'
+                filetypes=[('JSON', '.json')], title='Save As', defaultextension='.json',
+                initialdir=str(Path.cwd()),
             )
         )
 

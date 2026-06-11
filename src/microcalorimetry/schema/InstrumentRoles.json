@@ -18,7 +18,7 @@
             ]
         },
         "InstrumentRole": {
-            "type": "object",
+            "type": ["object","array"],
             "description": "Describes an instrument and its role in the context of a measurement.",
             "properties": {
                 "output_column": {
