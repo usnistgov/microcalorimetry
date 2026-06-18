@@ -706,6 +706,9 @@ pass it in through the parse function via the analysis_config field.'
             signal_type = self.parsed_config['signal_config'][signal]['type']
 
             signal_class = signal_classes[signal_type]
+            # special signals have no power metering capabilities
+            if signal_type == 'special':
+                continue
             if signal_class is None:
                 raise ValueError(
                     f'Signal type {signal_type} assigned to {

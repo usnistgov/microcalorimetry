@@ -115,7 +115,13 @@ def openloop_thermoelectric_power(
         # this is faster than polyroot
         # deg 2, solve root
         # this is faster than polyroot
-        if max(coeffs.deg) == 2:
+        if max(coeffs.deg) == 1:
+            p = e.copy()
+            slope = coeffs.sel(deg=[1]).data
+            off = coeffs.sel(deg=[0]).data
+            p.data[..., :] = (e.data - off) / slope
+        
+        elif max(coeffs.deg) == 2:
             p = e.copy()
             a = coeffs.sel(deg=[2]).data
             b = coeffs.sel(deg=[1]).data
@@ -183,6 +189,7 @@ def openloop_thermoelectric_power(
             p.data[..., :] = out_data
 
         else:
+            raise NotImplementedError('Maximum degree coeffiicient is 3 currently for fitting thermopile voltage as a function of power.')
             p = fitting.polyroot2(coeffs, y=e)
 
     return p

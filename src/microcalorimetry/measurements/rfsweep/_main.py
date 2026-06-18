@@ -569,11 +569,12 @@ def parse(
                         print(
                             f'Making review figure segment: {si} : {signal} : {type(analyzer)}'
                         )
+                        new_figures = None
                         try:
                             new_figures = analyzer.plot_analysis(segment)
                         except NotImplementedError:
-                            new_figures = None
                             print('  Not implemented')
+
                         if not isinstance(new_figures, list):
                             new_figures = [new_figures]
                         for figure in new_figures:
