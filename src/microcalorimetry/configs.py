@@ -75,6 +75,7 @@ __all__ = [
     'RFSweepParserConfig',
 ]
 
+HDF5_EXTENSIONS = ['.h5', '.hdf5','.hdf']
 
 # %% File loaders for configs
 def _load_file(obj, group=None):
@@ -89,7 +90,7 @@ def _load_file(obj, group=None):
         data = __load_experiment_parameters(path)
     elif path.suffix == '.json':
         data = _load_json(path)
-    elif path.suffix == '.h5' or path.suffix == '.hdf5':
+    elif path.suffix in HDF5_EXTENSIONS:
         data = _load_h5(path, group)
     else:
         raise ValueError(
@@ -169,7 +170,7 @@ def split_h5path(path: Path | str) -> tuple[Path, str | None]:
     # split file paths and determine
     # if there is a valid h5 extension
     p = str(full_path.as_posix())
-    possible_h5_extensions = ['.h5', '.hdf5']
+    possible_h5_extensions = HDF5_EXTENSIONS
     h5_ext = None
     for ext in possible_h5_extensions:
         if ext in p:
@@ -448,7 +449,7 @@ class S11(DataModelContainer):
             path = container.path
             suffix = path.suffix
 
-            if '.h5' == suffix or '.hdf5' == suffix:
+            if suffix in HDF5_EXTENSIONS:
                 try:
                     d = _group_saveable_from_datamodelcontainer(container)
                 except ModuleNotFoundError:
@@ -502,58 +503,60 @@ class Eta(DataModelContainer):
     def load(self) -> RMEMeas:
         """Load data from file or access data in container."""
         container = self
-
-        # load from hdf format
+        # print(container.path)
+        
+        # if already data return data
         if container.data:
             return container.data
 
-        else:
-            path = container.path
-            suffix = path.suffix
+        path = container.path
+        suffix = path.suffix
+        # print(' ')
+        # print(suffix)
 
-            if '.h5' == suffix or '.hdf5' == suffix:
-                try:
-                    d = _group_saveable_from_datamodelcontainer(container)
-                except ModuleNotFoundError:
-                    # probably an old MUFmeas naning of the objects,
-                    # try to use the deprecated function
-                    d = _group_saveable_from_deprecatedmufmeas(container)
+        if suffix in HDF5_EXTENSIONS:
+            try:
+                d = _group_saveable_from_datamodelcontainer(container)
+            except ModuleNotFoundError:
+                # probably an old MUFmeas naning of the objects,
+                # try to use the deprecated function
+                d = _group_saveable_from_deprecatedmufmeas(container)
 
-            elif '.eff' in suffix:
-                df = pd.read_csv(path, sep=r'\s+', comment='#', header=None)
-                # old format, not uncertainties
-                if len(df.columns) == 4:
-                    eta = xr.DataArray(
-                        np.expand_dims(df[3].to_numpy(), -1),
-                        dims=('frequency', 'eta'),
-                        coords={'frequency': df[0].to_numpy(), 'eta': [0]},
-                    )
-                    eta = gwex.as_format(eta, gwex.eff)
-                    d = RMEMeas.from_nom(path.stem, eta)
-                # some format with uncertainties
-                else:
-                    read = False
-                    fmts = [gwex.eff_7, gwex.eff_5, gwex.eff_2]
-                    for fmt in fmts:
-                        if not read:
-                            try:
-                                data = gwex.from_csv(str(path), fmt)
-                                read = True
-                                # print(' ' * 8, 'reading ', path)
-                            except Exception as e:
-                                read = False
-                                # print(e)
-                    if not read:
-                        raise ValueError(f'Failed to read {path} as any of {fmts}')
-                    data = data.sel(col=['eta'])
-                    data = gwex.as_format(data, gwex.eff)
-                    d = RMEMeas(str(path), data)
-
-            else:
-                raise ValueError(
-                    f"Extension {suffix} not supporte for {path}. Must be ['h5','hdf5', or 'eff']"
+        elif '.eff' in suffix:
+            df = pd.read_csv(path, sep=r'\s+', comment='#', header=None)
+            # old format, not uncertainties
+            if len(df.columns) == 4:
+                eta = xr.DataArray(
+                    np.expand_dims(df[3].to_numpy(), -1),
+                    dims=('frequency', 'eta'),
+                    coords={'frequency': df[0].to_numpy(), 'eta': [0]},
                 )
-            return d
+                eta = gwex.as_format(eta, gwex.eff)
+                d = RMEMeas.from_nom(path.stem, eta)
+            # some format with uncertainties
+            else:
+                read = False
+                fmts = [gwex.eff_7, gwex.eff_5, gwex.eff_2]
+                for fmt in fmts:
+                    if not read:
+                        try:
+                            data = gwex.from_csv(str(path), fmt)
+                            read = True
+                            # print(' ' * 8, 'reading ', path)
+                        except Exception as e:
+                            read = False
+                            # print(e)
+                if not read:
+                    raise ValueError(f'Failed to read {path} as any of {fmts}')
+                data = data.sel(col=['eta'])
+                data = gwex.as_format(data, gwex.eff)
+                d = RMEMeas(str(path), data)
+
+        else:
+            raise ValueError(
+                f"Extension {suffix} not supported for {path}."
+            )
+        return d
 
 
 class GC(DataModelContainer):

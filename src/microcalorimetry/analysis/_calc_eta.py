@@ -533,9 +533,10 @@ def make_eta(
     gc = try_sel(gc, 'gc', fgrid)
 
     if clrm_sensitivity:
+        
+        # estimate coefficients
         k = configs.ThermoelectricFitCoefficients(clrm_sensitivity).load()
         calc_te_power = basic.propagate(rfpower.openloop_thermoelectric_power)
-
         polyderive = basic.propagate(fitting.polyderive)
         polyval = basic.propagate(fitting.polyval2)
         derivative = polyderive(k)
@@ -557,6 +558,9 @@ def make_eta(
         #     k = k.sel(deg=1, drop=True)
         k = np.abs(k)
         gc = gc / k
+        
+        # invert polynomial instead?
+        # gc = calc_te_power(k, gc, k.attrs['p_of_e'] )
 
     eta_new = effective_efficiency(zeta, s11, gc)
 

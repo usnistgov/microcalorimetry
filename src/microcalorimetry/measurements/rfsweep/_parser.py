@@ -429,13 +429,13 @@ class Campaign:
         # categories from the uncertainty mechanisms
         a_cats = {
             'Type': 'A',
-            'Origin': 'Cal Run Noise',
-            'Experiment': 'Calorimeter Run',
+            'Origin': 'RF Sweep Noise',
+            'Experiment': 'RF Sweep',
         }
         b_cats = {
             'Type': 'B',
-            'Origin': 'Cal Run DC Traceability',
-            'Experiment': 'Calorimeter Run',
+            'Origin': 'RF Sweep DC Traceability',
+            'Experiment': 'RF Sweep',
         }
 
         # add the uncertainty associated with

@@ -822,7 +822,9 @@ def parse(
             therm_v = data.sel(col=therm_v_col + '_on')
             therm_i = data.sel(col=therm_i_col + '_on')
             temperature = therm_v / therm_i
+            p2dc_on = therm_v * therm_i
             outputs.update({'temperature_p2': temperature})
+            outputs.update({'p2dc_on': p2dc_on})
 
         # this is a polyomial fit
         # check if the slope of the sensor equals the slope of the
@@ -831,7 +833,7 @@ def parse(
         # measured needs to be multiplied by -1.\
         else:
             temperature = None
-
+            p2dc_on = 0
             s_e_const = 1.0
             measured_slope_sign = np.sign(data.nom.sel(col=s_e_col + '_on')[0])
             coeff_sign = np.sign(s_coeffs.nom.sel(deg=1))
@@ -848,6 +850,7 @@ def parse(
         )
 
         # if a fast off is available, use that
+        # using the thermometer in this calculation was causing me problems, why?
         try:
             p2_fast = openloope_te_power(
                 s_coeffs,
@@ -863,6 +866,7 @@ def parse(
                 cal_coeffs,
                 cal_coeffs.attrs['p_of_e'],
                 p2_slow,
+                # P_dc_on_slow = p2dc_on
             )
 
         except KeyError:
@@ -875,6 +879,7 @@ def parse(
                 cal_coeffs,
                 cal_coeffs.attrs['p_of_e'],
                 p2_fast,
+                # P_dc_on_slow = p2dc_on
             )
 
         outputs.update(

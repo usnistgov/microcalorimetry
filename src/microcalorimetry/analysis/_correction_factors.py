@@ -158,6 +158,7 @@ def make_correction_factor(
     make_plots: bool = True,
     nominals: bool = False,
     cache_s11: bool = True,
+    freq_resolution: int = 4,
 ) -> tuple[configs.GC, list[plt.Figure]]:
     """
     Calculate the correction factor for a given sensor model.
@@ -334,7 +335,7 @@ def make_correction_factor(
         # but by weighting the correction factor regressor
         # by the sensitivity
         if calc_thermal_weights:
-            # nonlinear approximation
+            # nonlinear approximation by evaluatiing derivative
             derivative = polyderive(fs_clrm_coeffs)
             # evaluate the sensitivity at the power
             # levels being measureed
@@ -347,6 +348,7 @@ def make_correction_factor(
                 E = calc_te_power(fs_clrm_coeffs,e_on_fs - e_off_fs, p_of_e = False)
                 k = polyval(derivative, E)
             k = np.abs(k)
+            
             # linear approximation?
             # if fs_clrm_coeffs.attrs['p_of_e']:
             #     k = 1 / fs_clrm_coeffs.sel(deg=1, drop=True)
@@ -355,6 +357,10 @@ def make_correction_factor(
             # k = np.abs(k)
             # divide by row
             row = row / k.sel(frequency = union_f)
+            # if fs_clrm_coeffs.attrs['p_of_e']:
+            #     row = calc_te_power(fs_clrm_coeffs,row, p_of_e = True)
+            # else:
+            #     raise NotImplemented("clrm coeffs need to be fit with power as function of voltage to work for correction factor measurements.")
 
         rows.append(row)
         solutions.append(solution)
