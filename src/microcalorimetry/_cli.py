@@ -15,10 +15,14 @@ def _main():
     default=False,
     help='Sets the stdout to the GUIs internal console (buggy, a terminal console is nicer).',
 )
+def _gui_cli(*args, **kwargs):
+    click.echo(_gui(*args, **kwargs))
+
+
 def _gui(no_console_stdout: bool = False):
     # put import statements here so they are delay until run time
     from microcalorimetry._tkquick import GUI
-    from microcalorimetry._tkquick._gui._graphicsframe import HDF5viewer
+    from microcalorimetry._tkquick._gui._graphicsframes import HDF5viewer
     import sys
     import microcalorimetry.measurements.dcsweep as dcsweep
     import microcalorimetry.measurements.rfsweep as rfsweep
@@ -44,7 +48,7 @@ def _gui(no_console_stdout: bool = False):
     # append as function tab
 
     app.add_function_tab(
-        'measurements.',
+        'measurements',
         # view function is just parse but with out the ability to save.
         functions={
             'view': measurements.view,
@@ -53,8 +57,8 @@ def _gui(no_console_stdout: bool = False):
             'dcsweep.parse': dcsweep.parse_v1,
             'rfsweep.run': rfsweep._main.run_gui,
             'rfsweep.parse': rfsweep.parse,
-            'rfsweep.make_settled_runlist': rfsweep.generate_settled_runlist,
-            'rfsweep.make_runlist_from_loss': rfsweep.runlist_from_loss,
+            # 'rfsweep.make_settled_runlist': rfsweep.generate_settled_runlist,
+            # 'rfsweep.make_runlist_from_loss': rfsweep.runlist_from_loss,
             'rfsweep.reduce_initial_power': rfsweep.reduce_initial_power,
             'rfsweep.reorder_runlist': rfsweep.reorder_runlist,
             'rfsweep.review_runlist': rfsweep.review_runlist,
@@ -63,34 +67,58 @@ def _gui(no_console_stdout: bool = False):
     )
 
     app.add_function_tab(
-        'analysis.',
+        'analysis',
         functions={
-            'make_eta_repeatability_model': anl.make_eta_repeatability_model,
+            # 'make_eta_repeatability_model': anl.make_eta_repeatability_model,
             'fit_thermoelectric': anl.fit_thermoelectric,
-            'compression_check': anl.compression_check,
+            # 'compression_check': anl.compression_check,
             'make_eta': anl.make_eta,
             'dc_lead_correction': anl.dc_lead_correction,
-            'apply_uncertainty_model': anl.apply_uncertainty_model,
+            # 'apply_uncertainty_model': anl.apply_uncertainty_model,
             'review_eta': anl.review_eta,
             'review_correction': anl.review_correction_factor,
         },
         output_group_saveable=[
-            'make_eta_repeatability_model',
+            # 'make_eta_repeatability_model',
             'fit_thermoelectric',
-            'compression_check',
+            # 'compression_check',
             'make_eta',
             'dc_lead_correction',
-            'apply_uncertainty_model',
+            # 'apply_uncertainty_model',
         ],
     )
 
     app.add_function_tab(
-        'export.',
+        'export',
         functions={
             'as_doteff': export.as_doteff,
         },
         output_group_saveable=[],
     )
+
+    # discover any plugins
+    import pkgutil
+    import importlib
+    import traceback
+
+    discovered_plugins = [
+        name
+        for finder, name, ispkg in pkgutil.iter_modules()
+        if name.endswith('_microcalorimetry')
+    ]
+    # everything matching the name space try to load in the plugin
+    for k in discovered_plugins:
+        try:
+            m = importlib.import_module(k + '.plugin')
+
+            app.add_function_tab(
+                k.replace('_microcalorimetry', ''),
+                m.FUNCTIONS,
+                m.OUTPUT_GROUP_SAVEABLE,
+            )
+            print(f'Plugin Added: {k} ')
+        except Exception as e:
+            print(f'Failed to load plugin {k} for: \n {traceback.format_exc()}')
 
     app.mainloop()
     pass
@@ -134,3 +162,7 @@ def _dcsweep():
 )
 def _rfsweep():
     pass
+
+
+if __name__ == '__main__':
+    _gui()

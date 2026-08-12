@@ -56,8 +56,8 @@
                 "max_source_power_change_dB": {
                     "type": "number",
                     "description": "rf power will not change by more than this amount in a levelling step",
-                    "minimum": 0,
-                    "exclusiveMaximum": 1
+                    "exclusiveMinimum": 0,
+                    "maximum": 2
                 },
                 "V_off_slow_min": {
                     "type": "number",

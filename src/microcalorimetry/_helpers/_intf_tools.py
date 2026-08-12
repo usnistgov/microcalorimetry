@@ -163,9 +163,7 @@ def save_saveable_objects(
             print(f'Not saving {None}, None')
             continue
 
-
-
-        with h5py.File(path, 'a') as f:
+        with h5py.File(path, 'w') as f:
             g = f
             if group is not None:
                 g = f.require_group(group)

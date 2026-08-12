@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from fnmatch import fnmatch
 import numpy as np
+from microcalorimetry._tkquick.gui_dtypes import Folder
 
 __all__ = ['view']
 
@@ -27,25 +28,21 @@ def _apply_tunit(x: np.array, time_units: str, relative: bool) -> np.array:
 
 
 def view(
-    metadata: Path,
+    datarecord: Folder,
     include_columns: list[str] = ['*'],
-    exclude_columns: list[str] = [],
-    time_units: str = 'seconds',
-    relative_time: bool = True,
+    time_units: str = 'datetime',
+    relative_time: bool = False,
 ) -> tuple[plt.Figure]:
     """
     Generic plot columns in a data record.
 
     Parameters
     ----------
-    metadata : Path
+    datarecord : Folder
         Path to the metadata file of an active experiment
     include_columns : list[str]
-        Columns to include with glob patters. Leave as ['*']
+        Columns to include with glob patterns. Leave as ['*']
         to include all. The default is ['*']
-    exclude_columns : list[str]
-        Columns to exclude with glob patterns. Leave as [] to not exclude
-        any. The default is []
     time_units : str, optional
         Options Format
         --------------
@@ -66,7 +63,7 @@ def view(
     figures : tuple[Figure]
         Tuple of output figures.
     """
-    metadata = Path(metadata)
+    metadata = Path(datarecord)
     if metadata.is_dir():
         metadata = [p for p in metadata.glob('*metadata*')][0]
 
@@ -80,6 +77,10 @@ def view(
         for k, v in d_full.items()
         if any([fnmatch(k, pattern) for pattern in include_columns])
     }
+
+    if time_units == 'datetime' and relative_time:
+        print("Datetime units don't support relative time.")
+        relative_time = False
 
     # otherwise, plot each sensors raw time series in a seperate window
     sensor_figs = []

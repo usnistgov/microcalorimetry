@@ -57,6 +57,8 @@ def drop_duplicate(arr: xr.DataArray, dim: str = 'frequency') -> xr.DataArray:
 
 
 def concat(*arrs, dim: str, new_coords: iter):
-    out = xr.concat(arrs, dim)
+    # this is set explicitly to fix a deprecation warning
+    # that might cause errors in the future
+    out = xr.concat(arrs, dim, join = 'outer')
     out = out.assign_coords({dim: new_coords})
     return out

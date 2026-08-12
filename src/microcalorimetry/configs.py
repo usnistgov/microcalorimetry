@@ -75,7 +75,8 @@ __all__ = [
     'RFSweepParserConfig',
 ]
 
-HDF5_EXTENSIONS = ['.h5', '.hdf5','.hdf']
+HDF5_EXTENSIONS = ['.h5', '.hdf5', '.hdf']
+
 
 # %% File loaders for configs
 def _load_file(obj, group=None):
@@ -110,8 +111,21 @@ def _load_h5(file, group=None):
         g = f
         if group is not None:
             g = f[group]
-        obj = load_object(g, load_big_objects=True)
-    return obj
+            data = load_object(g, load_big_objects=True)
+        else:
+            try:
+                data = load_object(g, load_big_objects=True)
+            except KeyError as e:
+                subgroups = [gi for gi in g]
+                if len(subgroups) == 1:
+                    g = g[subgroups[0]]
+                    data = load_object(g, load_big_objects=True)
+                else:
+                    msg = 'If pointing to a file, the root group must be group saveable or their must be a single group saveable group below it.'
+                    msg = str(e) + ': ' + msg
+                    raise e from e
+
+    return data
 
 
 def _load_yaml(path: Path | str):
@@ -504,7 +518,7 @@ class Eta(DataModelContainer):
         """Load data from file or access data in container."""
         container = self
         # print(container.path)
-        
+
         # if already data return data
         if container.data:
             return container.data
@@ -521,6 +535,17 @@ class Eta(DataModelContainer):
                 # probably an old MUFmeas naning of the objects,
                 # try to use the deprecated function
                 d = _group_saveable_from_deprecatedmufmeas(container)
+
+            # sometimes the eta dimension is left off, if it's not there
+            # add it in for compatability.
+            if len(d.dims) == 1 and 'eta' not in d.cov.coords:
+                prop = RMEProp(sensitivity=True)
+
+                @prop.propagate
+                def add_eta_coord(x):
+                    return x.expand_dims('eta', axis=-1)
+
+                d = add_eta_coord(d)
 
         elif '.eff' in suffix:
             df = pd.read_csv(path, sep=r'\s+', comment='#', header=None)
@@ -553,9 +578,7 @@ class Eta(DataModelContainer):
                 d = RMEMeas(str(path), data)
 
         else:
-            raise ValueError(
-                f"Extension {suffix} not supported for {path}."
-            )
+            raise ValueError(f'Extension {suffix} not supported for {path}.')
         return d
 
 
@@ -836,9 +859,9 @@ def _group_saveable_from_datamodelcontainer(
                         data = load_object(g, load_big_objects=True)
                     else:
                         msg = 'If pointing to a file, the root group must be group saveable or their must be a single group saveable group below it.'
-                        msg  = str(e) + ': ' + msg
+                        msg = str(e) + ': ' + msg
                         raise e from e
-                                     
+
             # incase the person pointed to a container, and not the data set itself
             if isinstance(data, DataModelContainer):
                 data = data.data

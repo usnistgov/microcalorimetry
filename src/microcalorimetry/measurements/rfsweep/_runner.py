@@ -554,11 +554,20 @@ class MicrocalorimeterRunner:
             ).load()
 
             # if it was a path, then load that bad boy in and check the linear term
-            if isinstance(coeffs, RMEMeas):
+            # if it's a simple polynomial model, then sensitivity is
+            # the 0th order term
+            if isinstance(coeffs, RMEMeas) and 'deg' in coeffs.dims:
+                # if p_of_e, then W/V, expecting V/W
                 if coeffs.attrs['p_of_e']:
                     linear_term = 1 / float(coeffs.nom.sel(deg=1))
                 else:
                     linear_term = float(coeffs.nom.sel(deg=1))
+
+            # if a dimension called column is present its a temperature
+            # dependent model, so the linear approximation is the
+            # constant c
+            elif isinstance(coeffs, RMEMeas) and 'col' in coeffs.dims:
+                linear_term = 1 / float(coeffs.nom.sel(col = 'c'))
 
             # you could load in a float too, that's cool.
             elif isinstance(coeffs, float):
@@ -566,9 +575,9 @@ class MicrocalorimeterRunner:
 
             else:
                 raise TypeError(
-                    f'unexpected type of {
+                    fr'unexpected type of {
                         coeffs
-                    }, expected RMEMeas or float (can provide the linear term as a float).'
+                    }, expected RMEMeas or float (can provide the linear term as a float in V/W).'
                 )
 
             # okedoke check it

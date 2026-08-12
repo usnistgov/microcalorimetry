@@ -5,6 +5,7 @@ This module contains functions for exporting effective efficiency datasets.
 from __future__ import annotations
 import microcalorimetry.configs as configs
 from microcalorimetry.math import rmemeas_extras
+from microcalorimetry._tkquick.gui_dtypes import SaveAsPath
 from rmellipse.uobjects import RMEMeas
 import numpy as np
 import warnings
@@ -56,7 +57,7 @@ def group_typed_uncertainties(params: RMEMeas) -> RMEMeas:
 
 
 def as_doteff(
-    path: Path,
+    output_path: SaveAsPath,
     eta: configs.Eta,
     s11: configs.S11,
     sensor_name: str = None,
@@ -82,7 +83,7 @@ def as_doteff(
 
     Parameters
     ----------
-    path : Path
+    output_path : SaveAsPath
         File path to save to.
     eta : configs.Eta
         Effective efficiency of the sensor.
@@ -154,7 +155,7 @@ def as_doteff(
     data_line = (' ' * 7).join(data_line)
     # print(data_line)
     # calculate eta uncertainty
-    with open(path, 'w') as f:
+    with open(output_path, 'w') as f:
 
         def line(line: str, nl='\n'):
             f.write(line + nl)

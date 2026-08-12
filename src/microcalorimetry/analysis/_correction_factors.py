@@ -198,10 +198,8 @@ def make_correction_factor(
 
     basic = RMEProp(sensitivity=not nominals)
     
-
-    calc_delta_power = basic.propagate(rfpower.calorimetric_power_delta_general)
     calc_te_power = basic.propagate(rfpower.openloop_thermoelectric_power)
-    calc_alpha = basic.propagate(rfpower.calorimetric_alpha_xs)
+    calc_p_comp = basic.propagate(rfpower.p_comp)
     calc_row = basic.propagate(rfpower.gc_device_row)
     calc_gc = basic.propagate(rfpower.gc_correction_factor)
     concat_along = basic.propagate(concat)
@@ -245,7 +243,14 @@ def make_correction_factor(
             configs.RFSweep(parsed_special['e_off']).load(), 'frequency'
         )
         e_on_fs = mean_unq(configs.RFSweep(parsed_special['e_on']).load(), 'frequency')
-
+        
+        e_off_std = mean_unq(
+            configs.RFSweep(parsed_standard['e_off']).load(), 'frequency'
+        )
+        
+        e_on_std = mean_unq(
+            configs.RFSweep(parsed_standard['e_on']).load(), 'frequency'
+        )
         # try to read the slow dc power from special reflect
         # assume zero if it's not present
         
@@ -268,23 +273,16 @@ def make_correction_factor(
             p2dc_off_slow_fs = 0
 
 
-
-        # calorimeter coefficients when
-        # sensor fs (special) was measured
-        fs_clrm_coeffs = configs.ThermoelectricFitCoefficients(
+        clrm_coeffs = {}
+        clrm_coeffs['fs'] = configs.ThermoelectricFitCoefficients(
             gcr['special']['clrm_coeffs']
         ).load()
 
-        # rf power absorved by mount assuming gx = 1
-        delta_x = calc_delta_power(
-            e_on_fs.sel(frequency = union_f),
-            e_off_fs.sel(frequency = union_f),
-            fs_clrm_coeffs,
-            fs_clrm_coeffs.attrs['p_of_e'],
-            P_dc_on_slow=p2dc_on_fs,
-            P_dc_off_slow=p2dc_off_slow_fs,
-        )
+        clrm_coeffs['std'] = configs.ThermoelectricFitCoefficients(
+            gcr['standard']['clrm_coeffs']
+        ).load()
 
+        
         # down select frequencies on S1P files
         # interpolate if missing, tell user
         # I think its ok to interpolate on the S1P if
@@ -296,12 +294,12 @@ def make_correction_factor(
         Gamma_std = configs.S11(gcr['standard']['s11']).load()
         Gamma_fs = configs.S11(gcr['special']['s11']).load()
 
-        # use the paths a
+        # reduce down to the union of frequencies
         Gamma_G = try_sel(Gamma_G, f'{row_name}-gamma_g', union_f)
         Gamma_std = try_sel(Gamma_std, f'{row_name}-standard s11', union_f)
         Gamma_fs = try_sel(Gamma_fs, f'{row_name}-special s11', union_f)
 
-        alpha_xs = calc_alpha(
+        p_comp = calc_p_comp(
             p2_fast_std.sel(frequency = union_f),
             p3_fast_fs.sel(frequency = union_f),
             p3_fast_std.sel(frequency = union_f),
@@ -309,6 +307,22 @@ def make_correction_factor(
             Gamma_fs,
             Gamma_G
         )
+        
+
+        
+        # i left this in because I wanted to check some numbers,
+        # should be turned off normally.
+        debug = False
+        if debug:
+            p_comp_mismatch_term = (p_comp*p3_fast_std.sel(frequency = union_f))/(p2_fast_std.sel(frequency = union_f)*p3_fast_fs.sel(frequency = union_f))
+            
+            fig,ax = plt.subplots(1,1)
+            ax.plot(union_f, p_comp_mismatch_term.nom)
+            fig.suptitle("Mismatch Term on $P^{comp}$\n" + f"{row_name}")
+            fig.tight_layout()
+            ax.set_xlabel("Frequency (GHz)")
+            ax.set_ylabel("Mismatch Term")
+            ...
 
         if correction_terms == 2:
             raise NotImplementedError('Not implemented.')
@@ -322,46 +336,92 @@ def make_correction_factor(
             # basis = try_sel(basis, basis_id, frq_std)
             # Gamma_s = rotate_s1p(Gamma_s, basis)
             # Gamma_x = rotate_s1p(Gamma_x, basis)
+
+        # calorimeter coefficients when
+        # sensor fs (special) was measured
+
+
+        # Force calorimeter coefficients to be linearized
+        # (if they aren't already) and in units of V/W
+        k = {}
+        p_off_check = {}
+        
+        # etimate what the power would be in the off state. If its
+        # > 10 mW then the calorimeter is operating in a dc substitution mode
+        # and the off measurement is a good estimate of sensitivity.
+        # Otherwise, the off measurement is the time varying e0 estimate
+        # and will need to be suvtracted from e_on to estimate k
+        off_check = {'fs':e_off_fs[0], 'std': e_off_std[0]}
+        e_ons = {'fs':e_on_fs, 'std':e_on_std}
+        e_offs = {'fs':e_off_fs, 'std':e_off_std}
+        p_cal = {}
+        for sensor_type in ['fs','std']:
+            # get the power estimated from the thermopile voltage in the off
+            # state (as a float). This will tell us what operating mode the
+            # microcalorimeter is in.
+            p_off_check = calc_te_power(
+                clrm_coeffs[sensor_type],
+                off_check[sensor_type],
+                clrm_coeffs[sensor_type].attrs['p_of_e']
+                ).nom.values.tolist()
+        
+            # determine what e value to use for estimating sensitivity
+            # if the off power estimate > 10 MW, dc substitution mode and
+            # use the off values as the estimate of k
+            if p_off_check > 0.01:
+                e_k_est = e_ons[sensor_type]
+
+            # other wise we are in an open loop mode and need to pick the 
+            # right sensitivity on the curve
+            else:
+                e_k_est = e_ons[sensor_type] - e_offs[sensor_type]
+                
+            k[sensor_type] = polyval(clrm_coeffs[sensor_type], e_k_est)
+            # k[sensor_type] = clrm_coeffs[sensor_type].sel(deg = 0, drop = True)
+            # if k is units of W/V, then invert it
+            if clrm_coeffs[sensor_type].attrs['p_of_e']:
+                k[sensor_type] = 1/k[sensor_type]
+                
+            # calculate the p_cal for the flush short (special reflect)
+            if sensor_type == 'fs':
+                p_cal['fs'] = calc_te_power(
+                    clrm_coeffs['fs'],
+                    e_ons['fs'] - e_offs['fs'],
+                    p_of_e = clrm_coeffs['fs'].attrs['p_of_e']
+                    )
+                # if in dc substitution mode, subtract off dc power
+                if p_off_check > 0.01:
+                    p_cal['fs'] = p_cal['fs'] - (p2dc_on_fs - p2dc_off_slow_fs)
+            # nonlinear approximation by evaluatiing derivative
+            # at the measured power level
+            # in the linear case this just resolves to the slope of the linear fit.
+            # in the nonlinear case this (might) correct for nonlinearity.
+            # derivative = polyderive(clrm_coeffs[sensor_type])
+            # if clrm_coeffs[sensor_type].attrs['p_of_e']:
+            #     # because of inverse function theorem,
+            #     # I can just invert the derivate of P(e)
+            #     kinv = polyval(derivative, e_on_fs - e_off_fs)
+            #     k[sensor_type] = 1 / kinv
+            # else:
+            #     E = calc_te_power(clrm_coeffs[sensor_type],e_on_fs - e_off_fs, p_of_e = False)
+            #     k[sensor_type] = polyval(derivative, E)
+        
+        # if not asked to, calculate a traditional
+        # correction factor, not krf
+        if not calc_thermal_weights:
+            k['std'] = 1
+            k['fs'] = 1
+
         row, solution = calc_row(
-            alpha_xs,
-            delta_x,
+            p_comp,
+            p_cal['fs'],
             zeta_std.sel(frequency = union_f),
             Gamma_std,
             Gamma_fs,
-            correction_terms
+            k_s = k['std'],
+            k_x = k['fs'],
+            n_correction_terms = correction_terms
         )
-
-        # thermal correction factors are calculated the same weigh
-        # but by weighting the correction factor regressor
-        # by the sensitivity
-        if calc_thermal_weights:
-            # nonlinear approximation by evaluatiing derivative
-            derivative = polyderive(fs_clrm_coeffs)
-            # evaluate the sensitivity at the power
-            # levels being measureed
-            if fs_clrm_coeffs.attrs['p_of_e']:
-                # because of inverse function theorem,
-                # I can just invert the derivate of P(e)
-                kinv = polyval(derivative, e_on_fs - e_off_fs)
-                k = 1 / kinv
-            else:
-                E = calc_te_power(fs_clrm_coeffs,e_on_fs - e_off_fs, p_of_e = False)
-                k = polyval(derivative, E)
-            k = np.abs(k)
-            
-            # linear approximation?
-            # if fs_clrm_coeffs.attrs['p_of_e']:
-            #     k = 1 / fs_clrm_coeffs.sel(deg=1, drop=True)
-            # else:
-            #     k = fs_clrm_coeffs.sel(deg=1, drop=True)
-            # k = np.abs(k)
-            # divide by row
-            row = row / k.sel(frequency = union_f)
-            # if fs_clrm_coeffs.attrs['p_of_e']:
-            #     row = calc_te_power(fs_clrm_coeffs,row, p_of_e = True)
-            # else:
-            #     raise NotImplemented("clrm coeffs need to be fit with power as function of voltage to work for correction factor measurements.")
-
         rows.append(row)
         solutions.append(solution)
         all_union_freqs.append(union_f)
@@ -381,8 +441,9 @@ def make_correction_factor(
             super_union = np.intersect1d(super_union, fl)
     
     gc = gc.sel(frequency = super_union)
+    print(gc.sel(gc = 0)[-1])
 
     if make_plots:
         figures = review_correction_factor(gc, budget = True)
-
+    # gc.assign_categories_to_all(Origin = 'Correction Factor')
     return gc, figures

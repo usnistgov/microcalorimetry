@@ -4,6 +4,7 @@ import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
 import microcalorimetry.configs as configs
+
 from rminstr.data_structures import ExistingRecord, ExptParameters, TimeSeries
 from pathlib import Path
 import rminstr_specs.K2450 as kspecs
@@ -80,6 +81,9 @@ def zero_one_norm(x: np.array):
     out = x - np.min(x)
     out = out/np.max(out)
     return out
+
+def zero_hrs(t, t0):
+    return (t - t0)/3600
 
 # %% Version 0 Stuff
 # These are functions and classes for parsing the version 1 of the experiment.
@@ -304,6 +308,7 @@ def parse_v0(
     ValueError
         Fails to parse.
     """
+    
     print(metadata_path)
     data, ep = read_experiment_v0(metadata_path, settings, meas_list)
     
@@ -377,6 +382,7 @@ def parse_v0(
 
 
     # timestamps in hours
+    t0 = e.time[0]
     te_hrs = (e.time-e.time[0])/3600
     h_hrs = (heater_v.time - heater_v.time[0])/3600
 
@@ -384,16 +390,29 @@ def parse_v0(
     # this will get added to through the rest
     # of this function
     fig,ax= plt.subplots(2,1, sharex = True)
-    for us in np.unique(sensor_step_numbers):
-        ind_sensor = sensor_step_numbers == us
-        ind_heater = heater_step_numbers == us
-        ax[0].plot(e[ind_sensor].time, e[ind_sensor]*1e3)
-        ax[1].plot(heater_p[ind_heater].time, heater_p[ind_heater]*1000)
-    ax[1].set_xlabel('Time (s)')
-    ax[0].set_ylabel(r'$e \left(\mathrm{mV}\right)$')
-    ax[1].set_ylabel(r'$P_{heater} \left(\mathrm{mW}\right)$')
+    # fig2,ax2 = plt.subplots(1,1, sharex = True)
+    l0 = []
+    h0 = []
+    l1 = []
+    h1 = []
+    
+    # ax = [ax1,ax2]
+    # for us in np.unique(sensor_step_numbers):
+    #     ind_sensor = sensor_step_numbers == us
+    #     ind_heater = heater_step_numbers == us
+    rawe_line, = ax[0].plot(zero_hrs(e.time, t0), e*1e3)
+    rawp_line, = ax[1].plot(zero_hrs(heater_p.time, t0), heater_p*1000)
+    # ax[0].set_xlabel('Time (hrs)')
+    ax[1].set_xlabel('Time (hrs)')
+    ax[0].set_ylabel(r'$e\:\left(\mathrm{mV}\right)$')
+    ax[1].set_ylabel(r'$P_{dc}\:\left(\mathrm{mW}\right)$')
     heater_v = xr.DataArray(heater_v)
     
+    l0.append(('Raw Data'))
+    h0.append(rawe_line)
+    
+    l1.append(('Raw Data'))
+    h1.append(rawp_line)
     
     # final values
     ons = xr.Dataset()
@@ -413,9 +432,11 @@ def parse_v0(
     
     
     for sample in e_on_samples:
-        ax[0].plot(sample.time, sample*1000,'k')
+        ax[0].plot(zero_hrs(sample.time,t0), sample*1000,'k')
     
-    ax[0].plot(e_ons.time, e_ons*1000, 'ko')
+    e_ons_line, = ax[0].plot(zero_hrs(e_ons.time,t0), e_ons*1000, 'ko')
+    l0.append(('On Samples'))
+    h0.append(e_ons_line)
     
     # get the heater v ons
     heater_v_ons, heater_v_ons_std,  heater_v_ons_samples = mean_settled_by_group(
@@ -434,9 +455,11 @@ def parse_v0(
         )
     
     
-    ax[1].plot(heater_v_ons.time, heater_v_ons*heater_i_ons*1000,'k.')
+    p_ons_line, = ax[1].plot(zero_hrs(heater_v_ons.time, t0), heater_v_ons*heater_i_ons*1000,'ko')
+    l1.append(('On Samples'))
+    h1.append(p_ons_line)
     for v,i in zip(heater_v_ons_samples, heater_i_ons_samples):
-        ax[1].plot(v.time, v*i*1000,'k')
+        ax[1].plot(zero_hrs(v.time,t0), v*i*1000,'k')
 
 
     # get the off measurements
@@ -450,13 +473,15 @@ def parse_v0(
         window = off_time_window
         )
     for sample in e_off_samples:
-        ax[0].plot(sample.time, sample*1000,'k.')
+        ax[0].plot(zero_hrs(sample.time,t0), sample*1000,'kx')
 
-    ax[0].plot(e_offs_mn.time, e_offs_mn*1000,'k.')
+    e_offs_line, = ax[0].plot(zero_hrs(e_offs_mn.time,t0), e_offs_mn*1000,'kx')
+    l0.append(('Off Samples'))
+    h0.append(e_offs_line)
     
     # interpolate to the on times
     e_offs = e_offs_mn.interp(time = e_ons.time)
-    ax[0].plot(e_offs.time, e_offs*1000,'ko--')
+    # ax[0].plot(zero_hrs(e_offs.time,t0), e_offs*1000,'ko--')
     
     
     # get the heater v offs
@@ -477,10 +502,12 @@ def parse_v0(
     
     
     for v,i in zip(heater_v_offs_samples, heater_i_offs_samples):
-        ax[1].plot(v.time, v*i*1000,'k')    
+        p_offs_line, = ax[1].plot(zero_hrs(v.time,t0), v*i*1000,'kx')    
+    l1.append(('Off Samples'))
+    h1.append(p_offs_line)
     
-    for v,i in zip(heater_v_ons_samples, heater_i_ons_samples):
-        ax[1].plot(v.time, v*i*1000,'k')
+    # for v,i in zip(heater_v_ons_samples, heater_i_ons_samples):
+    #     ax[1].plot(zero_hrs(v.time,t0), v*i*1000,'kx')
     
     heater_v_offs = heater_v_offs.interp(time = heater_v_ons.time)
     heater_i_offs = heater_i_offs.interp(time = heater_i_ons.time)
@@ -492,18 +519,18 @@ def parse_v0(
     e_specs = nvmspecs.DatasheetDCV('HP34420A',serial = 'xxx',suppress_warnings = True)
     
     # put in to RMEMEas objects with correlated uncertainties
-    e_ons = metered_to_linmeas('e_on',e_ons,std = e_ons_std,specs = e_specs, umech_prefix= 'DC Sweep')
-    e_offs = metered_to_linmeas('e_off',e_offs,specs = e_specs, umech_prefix= 'DC Sweep')
+    e_ons = metered_to_linmeas('e_on',e_ons,std = e_ons_std,specs = e_specs, umech_prefix= 'DC Sweep', origin= 'DC Sweep')
+    e_offs = metered_to_linmeas('e_off',e_offs,specs = e_specs, umech_prefix= 'DC Sweep', origin= 'DC Sweep')
     
     heater_v_ons = metered_to_linmeas(
-        'heater_v_on',heater_v_ons,std = heater_v_ons_std,specs = heater_v_specs, umech_prefix= 'DC Sweep')
+        'heater_v_on',heater_v_ons,std = heater_v_ons_std,specs = heater_v_specs, umech_prefix= 'DC Sweep', origin= 'DC Sweep')
     heater_v_offs = metered_to_linmeas(
-        'heater_v_off',heater_v_offs,specs = heater_v_specs, umech_prefix= 'DC Sweep')
+        'heater_v_off',heater_v_offs,specs = heater_v_specs, umech_prefix= 'DC Sweep', origin= 'DC Sweep')
     
     heater_i_ons = metered_to_linmeas(
-        'heater_i_on',heater_i_ons,std = heater_i_ons_std,specs = heater_i_specs, umech_prefix= 'DC Sweep')
+        'heater_i_on',heater_i_ons,std = heater_i_ons_std,specs = heater_i_specs, umech_prefix= 'DC Sweep', origin= 'DC Sweep')
     heater_i_offs = metered_to_linmeas(
-        'heater_i_off',heater_i_offs,specs = heater_i_specs, umech_prefix= 'DC Sweep')
+        'heater_i_off',heater_i_offs,specs = heater_i_specs, umech_prefix= 'DC Sweep', origin= 'DC Sweep')
     
     
     # correct for the offset
@@ -518,6 +545,13 @@ def parse_v0(
     heater_v = sub(heater_v_ons, heater_v_offs)
     heater_i = sub(heater_i_ons, heater_i_offs)
     p = mul(heater_v, heater_i)
+    
+    # ax[0].legend(h0,l0,loc = 'best')
+    # ax[1].legend(h1,l1,loc = 'best')
+    fig.subplots_adjust(top = 0.95)
+    # h, l = ax[-1].get_legend_handles_labels()
+    fig.legend(h0,l0,loc='center', bbox_to_anchor=(0.5, 1), ncol = 3)
+    
     return e, heater_v, heater_i, fig
 
 
@@ -663,35 +697,55 @@ def read_v1(
 
 
 def review_plot_v1(
-        var: str, 
+        var_ls: list[str], 
         raw: DCCalibrationData, 
         corr: DCCalibrationData | None = None,
         offs: DCCalibrationData | None = None,
         offs_samples: DCCalibrationData | None = None,
         ons: DCCalibrationData | None = None,
-        ylabel: str | None = None,
-        yscale: float = 1) -> plt.Figure:
-    fig,ax = plt.subplots(1,1)
-    t0 = raw.time[0]
-    def zero(x):
-        return (x - t0)/3600
-    if ons is not None:
-        ax.plot(zero(ons.time), ons[var]*yscale, 'k*', label = 'On Measurements')
-    if corr is not None:
-        ax.plot(zero(corr.time), corr[var]*yscale,'o',label = 'Offset Corrected')
-    if offs_samples is not None:
-        ax.plot(zero(offs_samples.time), offs_samples[var]*yscale,'kx', label = 'Off Samples')
-    ax.plot(zero(raw.time), raw[var]*yscale,'-',label = 'Raw Data')
-    if offs is not None:
-        ax.plot(zero(offs.time), offs[var]*yscale,'k.', label = 'Offs Interp')
-
-    # cbar.set_ticklabels([str(v) for v in unq_pwr])
-    ax.set_xlabel(r'Time (hrs)')
-    if ylabel is None:
-        ax.set_ylabel(var)
-    else:
-        ax.set_ylabel(ylabel)
-    ax.legend(loc = 'best')
+        ylabels: list[str | None] = None,
+        yscales: list[float] = 1) -> plt.Figure:
+    if isinstance(var_ls, str):
+        var_ls = [var_ls]
+    if isinstance(ylabels, str) or ylabels is None:
+        ylabels = [ylabels]
+    if isinstance(yscales,float) or yscales is None:
+        yscales = [yscales]
+        
+    fig,axs = plt.subplots(len(var_ls),1)
+    if len(var_ls) == 1:
+        axs = [axs]
+    for var, ax, yscale, ylabel in zip(var_ls, axs, yscales, ylabels):
+        handles = []
+        labels = []
+        t0 = raw.time[0]
+        def zero(x):
+            return (x - t0)/3600
+        ax.plot(zero(raw.time), raw[var]*yscale,'-',label = 'Raw Data')
+        if ons is not None:
+            ax.plot(zero(ons.time), ons[var]*yscale, 'ko', label = 'On Samples')
+        if corr is not None:
+            ax.plot(zero(corr.time), corr[var]*yscale,'*',label = 'Offset Corrected')
+        if offs_samples is not None:
+            ax.plot(zero(offs_samples.time), offs_samples[var]*yscale,'kx', label = 'Off Samples')
+    
+        # if offs is not None:
+        #     ax.plot(zero(offs.time), offs[var]*yscale,'k.', label = 'Offs Interp')
+    
+        # cbar.set_ticklabels([str(v) for v in unq_pwr])
+        if ylabel is None:
+            ax.set_ylabel(var)
+        else:
+            ax.set_ylabel(ylabel)
+    fig.subplots_adjust(top = 0.95)
+    h, l = axs[-1].get_legend_handles_labels()
+    fig.legend(h,l,loc='center', bbox_to_anchor=(0.5, 1), ncol = 3)
+    # ax.legend(loc = 'best')
+    axs[-1].set_xlabel(r'Time (hrs)')
+    # if ons is not None:
+    #     # pick the closeses on value at 10
+    #     i = np.searchsorted(ons.time, np.max(np.diff(zero(ons.time)))*10,side = 'right')
+    #     ax.set_xlim(0,zero(ons.time)[i])
     return fig
 
 def parse_v1(
@@ -769,17 +823,19 @@ def parse_v1(
 
     unq_pwr = np.unique(data.pwr_setting)
 
+
+    cmap = plt.cm.viridis
     # make review plots
     figs = []
     fig = review_plot_v1(
-        'e',
+        ['heater_p','e'],
         raw = raw,
-        corr = data,
-        offs = offs,
+        # corr = data,
+        # offs = offs,
         offs_samples=offs_samples,
         ons = ons,
-        ylabel = r'$e_{sensor}$ (mV)',
-        yscale = 1e3
+        ylabels = [r'$P_{dc}\:\left(\mathrm{mW}\right)$', r'$e$ (mV)'],
+        yscales = [1e3, 1e3]
     )
     figs.append(fig)
 
@@ -787,99 +843,104 @@ def parse_v1(
         fig = review_plot_v1(
             'therm_r',
             raw,
-            corr = data,
-            ylabel = r'$R_{thermometer}\:\left(\mathrm{k}\Omega\right)$',
-            yscale = 1e-3
+            ons = ons,
+            # corr = data,
+            ylabels = r'$R_{thermometer}\:\left(\mathrm{k}\Omega\right)$',
+            yscales = 1e-3
         )
-    figs.append(fig)
-    fig = review_plot_v1(
-        'heater_p',
-        raw,
-        ylabel = r'$P_{heater}\:\left(\mathrm{mW}\right)$',
-        yscale = 1e3
-    )
-    figs.append(fig)
-
-
-    fig,ax = plt.subplots(1,1)
-    # color by approximate unique powers
-    colors = colorbar(fig,ax, unq_pwr, label = 'Power Setting (mW)')
-    for i, pi in enumerate(unq_pwr):
-        di = data.where(data.pwr_setting == pi)
-        # print(color)
-        ax.plot(di.heater_p*1000, di.e*1e3,'o',color = colors(i))
-
-    # cbar.set_ticklabels([str(v) for v in unq_pwr])
-    ax.set_xlabel(r'$P_{smu}$ (mW)')
-    ax.set_ylabel(r'$e_{sensor}$ (mV)')
-    figs.append(fig)
-
-
-    fig,ax = plt.subplots(1,1)
-    # color by approximate unique powers
-    colors = colorbar(fig,ax, unq_pwr, label = 'Power Setting (mW)')
-    for i, pi in enumerate(unq_pwr):
-        di = data.where(data.pwr_setting == pi)
-        # print(color)
-        ax.plot(di.heater_p*1000, di.e*1e3,'o',color = colors(i))
-
-    # cbar.set_ticklabels([str(v) for v in unq_pwr])
-    ax.set_xlabel(r'$P_{smu}$ (mW)')
-    ax.set_ylabel(r'$e_{sensor}$ (mV)')
-    figs.append(fig)
-
-    if thermometer_monitor:
-        fig,ax = plt.subplots(1,1)
-        # color by approximate unique powers
-        colors = colorbar(fig,ax, unq_pwr*1e3, label = 'Power Setting (mW)')
-        for i, pi in enumerate(unq_pwr):
-            di = data.where(data.pwr_setting == pi)
-            # print(color)
-            ax.plot(di.therm_r/1000, mean_sub(di.e)*1e6,'o',color = colors(i))
-        ax.set_xlabel(r'$R_{thermometer}\:\left(\mathrm{k}\Omega\right)$')
-        ax.set_ylabel(r'$e_{sensor}- $ - $\mu_{e}\:\left(\mu\mathrm{V}\right)$ by Power Setting')
         figs.append(fig)
+    # fig = review_plot_v1(
+    #     'heater_p',
+    #     raw,
+    #     ons = ons,
+    #     offs_samples=offs_samples,
+    #     ylabel = r'$P_{dc}\:\left(\mathrm{mW}\right)$',
+    #     yscale = 1e3
+    # )
+    # figs.append(fig)
+
 
     fig,ax = plt.subplots(1,1)
     # color by approximate unique powers
-    scatter = ax.scatter(data.e*1e3, data.e/data.heater_p, c= data.env_temp, cmap = plt.cm.jet)
-    fig.colorbar(scatter, label = 'Ambient Temperature')
-    ax.set_xlabel(r'$e\:\left(\mathrm{mV}\right)$')
-    ax.set_ylabel(r'$\frac{e}{P_{smu}}$')
+    scatter = ax.scatter(data.heater_p*1e3, data.e, c= data.env_temp, cmap = cmap)
+    fig.colorbar(scatter, label = 'Ambient Temperature (°C)')
+    ax.set_xlabel(r'$P_{dc}\:\left(\mathrm{mW}\right)$')
+    ax.set_ylabel(r'$e-e_0\:\left(\mathrm{mV}\right)$')
     figs.append(fig)
 
-    if thermometer_monitor:
-        fig,ax = plt.subplots(1,1)
-        # color by approximate unique powers
-        scatter = ax.scatter(data.e*1e3, data.therm_r, c= data.env_temp, cmap = plt.cm.jet)
-        fig.colorbar(scatter, label = 'Ambient Temperature')
-        ax.set_xlabel(r'e (mV)')
-        ax.set_ylabel(r'$R_{thermometer}\:\left(\Omega\right)$')
-        figs.append(fig)
+    # fig,ax = plt.subplots(1,1)
+    # # color by approximate unique powers
+    # colors = colorbar(fig,ax, unq_pwr, label = 'Power Setting (mW)')
+    # for i, pi in enumerate(unq_pwr):
+    #     di = data.where(data.pwr_setting == pi)
+    #     # print(color)
+    #     ax.plot(di.heater_p*1000, di.e*1e3,'o',color = colors(i))
+
+    # # cbar.set_ticklabels([str(v) for v in unq_pwr])
+    # ax.set_xlabel(r'$P_{dc}$ (mW)')
+    # ax.set_ylabel(r'$e-e_0$ (mV)')
+    # figs.append(fig)
+
+    # if thermometer_monitor:
+    #     fig,ax = plt.subplots(1,1)
+    #     # color by approximate unique powers
+    #     colors = colorbar(fig,ax, unq_pwr*1e3, label = 'Power Setting (mW)')
+    #     for i, pi in enumerate(unq_pwr):
+    #         di = data.where(data.pwr_setting == pi)
+    #         # print(color)
+    #         ax.plot(di.therm_r/1000, mean_sub(di.e)*1e6,'o',color = colors(i))
+    #     ax.set_xlabel(r'$R_{thermometer}\:\left(\mathrm{k}\Omega\right)$')
+    #     ax.set_ylabel(r'$e-e_0 $ - $\mu_{e-e_0}\:\left(\mu\mathrm{V}\right)$ by Power Setting')
+    #     figs.append(fig)
 
     fig,ax = plt.subplots(1,1)
     # color by approximate unique powers
-    scatter = ax.scatter(data.e*1e3, data.e/data.heater_p, c= data.heater_p, cmap = plt.cm.jet)
-    fig.colorbar(scatter, label = r'$P_{heater}\:\left(\mathrm{mW}\right)$')
-    ax.set_xlabel(r'$e\:\left(\mathrm{mV}\right)$')
-    ax.set_ylabel(r'$\frac{e}{P_{smu}}$')
+    scatter = ax.scatter(data.e*1e3, data.e/data.heater_p, c= data.env_temp, cmap = cmap)
+    fig.colorbar(scatter, label = 'Ambient Temperature (°C)')
+    ax.set_xlabel(r'$e-e_0\:\left(\mathrm{mV}\right)$')
+    ax.set_ylabel(r'$\frac{e-e_0}{P_{dc}}\:\left(\frac{\mathrm{V}}{\mathrm{W}}\right)$')
+    figs.append(fig)
+    
+    fig,ax = plt.subplots(1,1)
+    # color by approximate unique powers
+    scatter = ax.scatter(data.heater_p*1e3, data.e/data.heater_p, c= data.env_temp, cmap = cmap)
+    fig.colorbar(scatter, label = 'Ambient Temperature (°C)')
+    ax.set_xlabel(r'$P_{dc}\:\left(\mathrm{mW}\right)$')
+    ax.set_ylabel(r'$k^{dc}\:\left(\frac{\mathrm{V}}{\mathrm{W}}\right)$')
     figs.append(fig)
 
+    # if thermometer_monitor:
+    #     fig,ax = plt.subplots(1,1)
+    #     # color by approximate unique powers
+    #     scatter = ax.scatter(data.e*1e3, data.therm_r, c= data.env_temp, cmap = plt.cm.jet)
+    #     fig.colorbar(scatter, label = 'Ambient Temperature')
+    #     ax.set_xlabel(r'e (mV)')
+    #     ax.set_ylabel(r'$R_{thermometer}\:\left(\Omega\right)$')
+    #     figs.append(fig)
+
+    # fig,ax = plt.subplots(1,1)
+    # # color by approximate unique powers
+    # scatter = ax.scatter(data.e*1e3, data.e/data.heater_p, c= data.heater_p, cmap = plt.cm.jet)
+    # fig.colorbar(scatter, label = r'$P_{dc}\:\left(\mathrm{mW}\right)$')
+    # ax.set_xlabel(r'$e-e_0\:\left(\mathrm{mV}\right)$')
+    # ax.set_ylabel(r'$\frac{e-e_0}{P_{dc}}$')
+    # figs.append(fig)
+
     fig,ax = plt.subplots(1,1)
     # color by approximate unique powers
-    scatter = ax.scatter(data.e*1e3, data.e/data.heater_p, c= data.adjust_time/3600, cmap = plt.cm.jet)
+    scatter = ax.scatter(data.e*1e3, data.e/data.heater_p, c= data.adjust_time/3600, cmap = cmap)
     fig.colorbar(scatter, label = 'Sample Time (hrs)')
-    ax.set_xlabel(r'$e\:\left(\mathrm{mV}\right)$')
-    ax.set_ylabel(r'$\frac{e}{P_{smu}}$')
+    ax.set_xlabel(r'$e-e_0\:\left(\mathrm{mV}\right)$')
+    ax.set_ylabel(r'$\frac{e-e_0}{P_{dc}}\:\left(\frac{\mathrm{V}}{\mathrm{W}}\right)$')
     figs.append(fig)
 
     if thermometer_monitor:
         fig,ax = plt.subplots(1,1)
         # color by approximate unique powers
-        scatter = ax.scatter(data.e*1e3, data.e/data.heater_p, c= data.therm_r, cmap = plt.cm.jet)
-        fig.colorbar(scatter, label = r'$R_{thermometer}\:\left(\Omega\right)$')
-        ax.set_xlabel(r'$e\:\left(\mathrm{mV}\right)$')
-        ax.set_ylabel(r'$\frac{e}{P_{smu}}$')
+        scatter = ax.scatter(data.e*1e3, data.e/data.heater_p, c= data.therm_r/1000, cmap = cmap)
+        fig.colorbar(scatter, label = r'$R_{\mathrm{T}}\:\left(\mathrm{k\Omega}\right)$')
+        ax.set_xlabel(r'$e-e_0\:\left(\mathrm{mV}\right)$')
+        ax.set_ylabel(r'$k_{dc}\:\left(\frac{\mathrm{V}}{\mathrm{W}}\right)$')
         figs.append(fig)
         
     # spec sheets

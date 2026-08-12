@@ -50,7 +50,7 @@
                 "DC_source_type":{
                     "description":"What type of DC source is being used to bias the DUT (if applicable)",
                     "type":"string",
-                    "enum":["PTC_SMU", "NTC_SMU", "NTC_TYPE_IV", "PTC_TYPE_IV"]
+                    "enum":["PTC_SMU", "NTC_SMU", "NTC_TYPE_IV", "PTC_TYPE_IV", "no_source"]
                 },
                 "RF_source_type":{
                     "description":"What type of DC source is being used to bias the DUT (if applicable)",
