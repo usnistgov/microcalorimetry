@@ -5,14 +5,17 @@ import sys
 import os.path as path
 from pathlib import Path
 import matplotlib as mpl
-import microcalorimetry._tkquick._gui._filebar as _filebar
-import microcalorimetry._tkquick._gui._graphicsframe as _graphicsframe
-import microcalorimetry._tkquick._gui._workingmodes as _workingmodes
+import microcalorimetry._tkquick._gui._toolbar as _toolbar
+import microcalorimetry._tkquick._gui._graphicsframes as _graphicsframes
+import microcalorimetry._tkquick._gui._methodframes as _methodframes
 from importlib.metadata import version
 import matplotlib.backends.backend_tkagg
 
 # Change theme to dark because it doesn't hurt my eyes
 ctk.set_appearance_mode('dark')
+
+# reference to the active application to grab from other modules
+_APP: 'GUI' = None
 
 
 class GUI(ctk.CTk):
@@ -55,6 +58,11 @@ class GUI(ctk.CTk):
             If not provided (row=1, column=2, padx=10, pady=(10, 10), sticky='nswe')
         """
         super().__init__()
+        global _APP
+        if _APP is None:
+            _APP = self
+        else:
+            raise Exception('Only one GUI active per process.')
         version_num = version(package_name)
         self.package_name = package_name
         self.version_num = version_num
@@ -75,18 +83,18 @@ class GUI(ctk.CTk):
         # it only saves the form fields.
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(1, weight=1)
-        self.fileframe = _filebar.FileFrame(master=self)
+        self.fileframe = _toolbar.ToolBarFrame(master=self)
         self.fileframe.grid(
             row=0, column=0, padx=10, pady=(10, 0), sticky='new', columnspan=3
         )
 
         # set up working tabs
-        self.workingtabs = _workingmodes.WorkingTabs(master=self)
-        self.workingtabs.grid(row=1, column=0, padx=10, pady=10, sticky='nswe')
-        self.workingtabs.grid_columnconfigure(0, weight=1)
+        self.moduletabs = _methodframes.ModuleTabs(master=self)
+        self.moduletabs.grid(row=1, column=0, padx=10, pady=10, sticky='nswe')
+        self.moduletabs.grid_columnconfigure(0, weight=1)
 
         # set up a graphics
-        self.graphicstabs = _graphicsframe.GraphicsTabs(master=self)
+        self.graphicstabs = _graphicsframes.GraphicsTabs(master=self)
 
         # add a right sidebar if supplied(file navigator, or whatever)
         if right_sidebar:
@@ -138,6 +146,6 @@ class GUI(ctk.CTk):
             Name of attributes under group to make functions for.
         output_group_saveable : list[str]
         """
-        self.workingtabs.add_module_tab(
+        self.moduletabs.add_module_tab(
             name, functions, output_groupsaveable=output_group_saveable
         )

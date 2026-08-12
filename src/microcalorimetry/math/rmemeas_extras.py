@@ -7,8 +7,23 @@ instead of operating on the underlying datasets though propagation.
 from rmellipse.uobjects import RMEMeas
 import numpy as np
 import xarray as xr
+from fnmatch import fnmatch
 
 __all__ = ['categorize_by']
+
+DEFAULT_ORIGIN_FILTER= {
+    '*DC*Trace*': 'DC Measurement Accuracy',
+    '*DC*Datasheet*': 'DC Measurement Accuracy',
+    '*DC*Noise*': 'DC Measurement Noise',
+    '*DC*Repeat*':'DC Measurement Noise',
+    '*Noise*': 'DC Measurement Noise',
+    '*Short Population': 'S-Parameters', # exists from dc measurements of some S-parameter standards.
+    '*Cable Bend*': 'S-Parameters',
+    '*Airline*': 'S-Parameters',
+    '*VNA*': 'S-Parameters',
+    # '*Correction*': 'Correction Factor',
+    }
+
 
 def categorize_by(
         meas: RMEMeas,
@@ -17,7 +32,9 @@ def categorize_by(
         uncategorized_name: str = 'uncategorized',
         deg: bool = False,
         rad: bool = False,
-        verbose: bool = False) -> 'RMEMeas':
+        verbose: bool = False,
+        apply_origin_filter: dict = DEFAULT_ORIGIN_FILTER
+        ) -> 'RMEMeas':
         """
         Group linear uncertainty mechanisms into categories.
 
@@ -52,6 +69,9 @@ def categorize_by(
             as radians.
         verbose : bool, optional
             Print information about grouping. The default is False.
+        apply_origin_filter : bool, optional
+            If True, regroup origins by applying a filter that renames
+            origins according to pattern matching.
 
         Returns
         -------
@@ -117,5 +137,28 @@ def categorize_by(
             new_mc = meas.mc.copy()
 
         out = RMEMeas(name=meas.name, cov=new_cov, mc=new_mc)
+
+
+
+        if apply_origin_filter:
+            for u in out.umech_id:
+                out.assign_categories([u],['Origin'], [u])
+            for pattern, new_origin in apply_origin_filter.items():
+                update = [u for u in out.umech_id if fnmatch(u, pattern)]
+                # print(pattern, update)
+                n = len(update)
+                out.assign_categories(update, ['Origin']*n, [new_origin]*n)
+
+            out = categorize_by(
+                    meas = out,
+                    category = 'Origin',
+                    combine_uncategorized = False,
+                    uncategorized_name = 'uncategorized',
+                    deg = deg,
+                    rad = rad,
+                    verbose = False,
+                    apply_origin_filter = {}
+                    )
+
         return out
 

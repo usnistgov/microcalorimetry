@@ -15,7 +15,7 @@ import json
 import time
 import microcalorimetry.measurements.dcsweep._analysis as staircase_analysis
 import click
-from microcalorimetry._tkquick.dtypes import Folder
+from microcalorimetry._tkquick.gui_dtypes import Folder
 from typing import TYPE_CHECKING, Mapping
 from datetime import timedelta
 
@@ -165,11 +165,11 @@ class MeasurementManager:
 def run(
     config_files: list[Path],
     runlist: Path,
-    output_dir: str = '.',
+    output_dir: Folder = '.',
     meas_name: str = 'dcsweep',
     dry_run: bool = False,
     validate: bool = True,
-    initial_wait: float = 0
+    initial_wait: float = 0,
 ) -> str:
     """
     DCSweep experiment for microcalorimeter.
@@ -182,9 +182,9 @@ def run(
         Settings files for experiment.
     runlist : Path
         Voltage measurment list for experiment.
-    output_dir : str
-        Directory to output to, creats a new folder inside of to store
-        csv files.
+    output_dir : Folder
+        Directory to output to, creates a DataRecord here the name
+        meas_name,
     meas_name : str, optional
         Name of measurement. Default is 'dcsweep'.
     dry_run : bool, optional
@@ -352,7 +352,6 @@ def run(
             # initialize measurement loop
             ep.advance()
 
-
             # do the initial wait at zero
             # measure sample
             mm.measure(
@@ -412,7 +411,7 @@ def _get_metadata(path: Path):
 
 
 def parse_v0(
-    metadata: Path,
+    datarecord: Path,
     settings: Path = None,
     measlist: Path = None,
     on_time_window: float = 300,
@@ -432,8 +431,8 @@ def parse_v0(
 
     Parameters
     ----------
-    metadata : Path
-        Path to datarecord metadata.
+    datarecord : Path
+        Path to datarecord metadata file or folder.
     settings : Path, optional
         Path to experiment settings. Assumed to be a file called settings.csv in metadata directory if not provided.
         The default is None.
@@ -474,7 +473,7 @@ def parse_v0(
     # look at first meatadata file and check what's in it
 
     # do the analysis and save things
-    metadata = Path(metadata)
+    metadata = Path(datarecord)
     if metadata.is_dir():
         metadata = [p for p in metadata.glob('*metadata*')][0]
     meta_dir = metadata.parents[0]
@@ -485,7 +484,7 @@ def parse_v0(
 
     # original draft of the measurement
 
-    e, heater_v, heater_i, fig = staircase_analysis.parse_v0(
+    e, heater_v, heater_i, fig1 = staircase_analysis.parse_v0(
         metadata_path=str(Path(metadata)),
         settings=str(Path(settings)),
         meas_list=str(Path(measlist)),
@@ -506,7 +505,8 @@ def parse_v0(
 
     figs = []
     if make_plots:
-        figs.append(fig)
+        figs.append(fig1)
+        # figs.append(fig2)
 
     # attatch metadata
     settings_path = settings
@@ -519,7 +519,7 @@ def parse_v0(
 
 
 def parse_v1(
-    metadata: list[Path],
+    datarecords: list[Folder],
     thermopile_monitor: str,
     heater: str,
     on_min_wait_time: float = 0.0,
@@ -536,8 +536,8 @@ def parse_v1(
 
     Parameters
     ----------
-    metadata : list[Path]
-        List of paths to metadata files (or folders) containing dcsweep
+    datarecords : list[Folder]
+        List of paths to datarecord files (or their folders) containing dcsweep
         measurements.
     thermopile_monitor : str
         Name of thermopile monitor instrument.
@@ -575,6 +575,7 @@ def parse_v1(
     """
 
     # distinguish between list of paths and single path
+    metadata = datarecords
     if isinstance(metadata, str) or isinstance(metadata, Path):
         metadata = [metadata]
 
@@ -604,8 +605,8 @@ def run_gui(
     output_dir: Folder,
     meas_name: str = 'dcsweep',
     dry_run: bool = False,
-    initial_wait: float = 0
-    ):
+    initial_wait: float = 0,
+):
     """
     Run a dc sweep measurement.
 
@@ -640,7 +641,7 @@ def run_gui(
         commands += ['--config-files', f'"{Path(c).resolve()}"']
 
     commands += ['--meas-name', f'{meas_name}']
-    
+
     commands += ['--initial-wait', f'{initial_wait}']
 
     if dry_run:
@@ -651,7 +652,7 @@ def run_gui(
 
 @click.command(name='run')
 @click.argument('output_dir', type=Path)
-@click.option('--initial-wait', type = float)
+@click.option('--initial-wait', type=float)
 @click.option('--config-files', '-c', type=Path, required=True, multiple=True)
 @click.option('--runlist', '-s', type=Path)
 @click.option('--meas-name', type=str, default='dcsweep')

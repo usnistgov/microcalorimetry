@@ -55,8 +55,7 @@
       "required": [
         "units",
         "can_level",
-        "type",
-        "input_signals"
+        "type"
       ]
     },
     "ThermoelectricSignal": {

@@ -661,8 +661,10 @@ class Run(abc.ABC):
             signals = self.parsed_config['signal_config']
         except KeyError as e:
             msg = str(e)
-            msg += ' : no signal config was found, please define a signal configuration and \
+            msg += (
+                ' : no signal config was found, please define a signal configuration and \
 pass it in through the parse function via the analysis_config field.'
+            )
             raise KeyError(msg) from e
 
         for signal in self.parsed_config['analysis_config']:
@@ -670,12 +672,40 @@ pass it in through the parse function via the analysis_config field.'
                 signal_config = self.parsed_config['signal_config'][signal]
             except KeyError:
                 print(
-                    f'Analysis config for {signal} found, {signal} not a part of measurment. Skipping.'
+                    f'Analysis config for {signal} found but {signal} is not a part of measurment (i.e not in the signal configuration). Skipping this analyzer.'
                 )
                 continue
+
+            signal_type = self.parsed_config['signal_config'][signal]['type']
+
+            signal_class = signal_classes[signal_type]
+
+            # special signals have no power metering capabilities
+            # in general so just skip
+            # over them immediatley
+            if signal_type == 'special':
+                continue
+            if signal_class is None:
+                raise ValueError(
+                    f'Signal type {signal_type} assigned to {
+                        signal
+                    } has no defined SignalAnalyzer.'
+                )
+
             analysis_config = self.parsed_config['analysis_config'][signal]
             analysis_config['time_zero'] = self.results['time_zero']
-
+            signal_type = self.parsed_config['signal_config'][signal]['type']
+            signal_class = signal_classes[signal_type]
+            # special signals have no power metering capabilities
+            if signal_type == 'special':
+                print('Special sensors have no analyzer. Skipping...')
+                continue
+            if signal_class is None:
+                raise ValueError(
+                    f'Signal type {signal_type} assigned to {
+                        signal
+                    } has no defined SignalAnalyzer.'
+                )
             try:
                 input_signal_names = self.parsed_config['signal_config'][signal][
                     'input_signals'
@@ -702,19 +732,6 @@ pass it in through the parse function via the analysis_config field.'
                             signal
                         } not one of {self.parsed_config["instruments"].keys()}'
                         raise KeyError(msg)
-
-            signal_type = self.parsed_config['signal_config'][signal]['type']
-
-            signal_class = signal_classes[signal_type]
-            # special signals have no power metering capabilities
-            if signal_type == 'special':
-                continue
-            if signal_class is None:
-                raise ValueError(
-                    f'Signal type {signal_type} assigned to {
-                        signal
-                    } has no defined SignalAnalyzer.'
-                )
 
             analyzer = signal_class(
                 analysis_config, signal_config, input_signal_config, instruments
@@ -2166,23 +2183,27 @@ class ThermoelectricAnalyzer(SignalAnalyzer):
 
     def plot_analysis(self, segment, *args) -> list[pl.Figure]:
         figures = []
-        review = [(self.column, 'Thermopile Voltage (V)', self.fast_off_analysis)]
+        review = [
+            (self.column, r'$e\:\left(\mathrm{mV}\right)$', self.fast_off_analysis, 1e3)
+        ]
         if self.has_thermometer():
             review += [
                 (
                     self.input_signal_config['therm_i']['column'],
-                    'Thermometer Current (A)',
+                    r'Thermometer Current $\left(\mathrm{\mu A}\right)$',
                     False,
+                    1e6,
                 ),
                 (
                     self.input_signal_config['therm_v']['column'],
-                    'Thermometer Volts (V)',
+                    r'Thermometer Volts $\left(\mathrm{mV}\right)$',
                     False,
+                    1e3,
                 ),
             ]
 
-        for column, title, fast in review:
-            print(column)
+        for column, title, fast, yscale in review:
+            # print(column)
             if fast:
                 # print(self.column, 'fast')
                 figures.append(
@@ -2192,12 +2213,17 @@ class ThermoelectricAnalyzer(SignalAnalyzer):
                         title,
                         self.V_off_function,
                         self.V_off_delay,
+                        yscale=yscale,
                         *args,
                     )
                 )
             else:
                 # print(self.column, 'slow')
-                figures.append(_plot_slow_off_analysis(column, segment, title, *args))
+                figures.append(
+                    _plot_slow_off_analysis(
+                        column, segment, title, *args, yscale=yscale
+                    )
+                )
         return figures
 
 
@@ -2740,7 +2766,9 @@ class CommercialPowerMeterAnalyzer(SignalAnalyzer):
         return _plot_slow_off_analysis(self.column, segment, 'Power (W)', *args)
 
 
-def _plot_slow_off_analysis(column, segment: Segment, ylabel: str, *args) -> pl.Figure:
+def _plot_slow_off_analysis(
+    column, segment: Segment, ylabel: str, yscale: float = 1, *args
+) -> pl.Figure:
     """
     Generate plot of the thermopile voltage to allow user to see if the measurements look normal.
 
@@ -2766,9 +2794,32 @@ def _plot_slow_off_analysis(column, segment: Segment, ylabel: str, *args) -> pl.
 
     start_time = segment_raw_data[column + '_timestamp'][0]
     plot_time = segment_raw_data[column + '_timestamp'] - start_time
+
+    # figure out what the x scale should be
+
+    max_plot_time = np.max(plot_time)
+
+    # 10 minutes, use seconds
+    if max_plot_time < 600:
+        xscale = 1
+        xunit = '(s)'
+    # < 1 hr, use minutes
+    if max_plot_time < 3600:
+        xscale = 1 / 60
+        xunit = '(min)'
+    # use hours else wise
+    else:
+        xscale = 1 / 3600
+        xunit = '(hrs)'
+
     raw = segment_raw_data[column]
 
-    ax.plot(plot_time, raw, color=MAIN_TRACE_COLOR, linewidth=MAIN_TRACE_LINEWIDTH)
+    ax.plot(
+        plot_time * xscale,
+        raw * yscale,
+        color=MAIN_TRACE_COLOR,
+        linewidth=MAIN_TRACE_LINEWIDTH,
+    )
     # e_i_fit = _linear(segment_raw_data["NVM_volts_timestamp"] - segment_results["time_zero_NVM_volts_i"], segment_results["NVM_volts_off_i_drift"], segment_results["NVM_volts_off_i"])
     # e_f_fit = _linear(segment_raw_data["NVM_volts_timestamp"] - segment_results["time_zero_NVM_volts_f"], segment_results["NVM_volts_off_f_drift"], segment_results["NVM_volts_off_f"])
     e_off_fit = _linear(
@@ -2780,8 +2831,8 @@ def _plot_slow_off_analysis(column, segment: Segment, ylabel: str, *args) -> pl.
     # ax.plot(plot_time, e_i_fit, color=INITIAL_STABLE_TRACE_COLOR, linewidth=STABLE_TRACE_LINEWIDTH)
     # ax.plot(plot_time, e_f_fit, color=FINAL_STABLE_TRACE_COLOR, linewidth=STABLE_TRACE_LINEWIDTH)
     ax.plot(
-        plot_time,
-        e_off_fit,
+        plot_time * xscale,
+        e_off_fit * yscale,
         ls='--',
         color=MIDDLE_STABLE_TRACE_COLOR,
         linewidth=STABLE_TRACE_LINEWIDTH,
@@ -2799,8 +2850,8 @@ def _plot_slow_off_analysis(column, segment: Segment, ylabel: str, *args) -> pl.
         )
 
         ax.plot(
-            plot_time_step,
-            raw_step,
+            plot_time_step * xscale,
+            raw_step * yscale,
             linewidth=MAIN_TRACE_LINEWIDTH,
             color=PLOT_COLORS[i % len(PLOT_COLORS)],
         )
@@ -2808,8 +2859,8 @@ def _plot_slow_off_analysis(column, segment: Segment, ylabel: str, *args) -> pl.
         if i == 0:
             label = 'Stable Samples'
         ax.plot(
-            plot_time_step[stable],
-            raw_step[stable],
+            plot_time_step[stable] * xscale,
+            raw_step[stable] * yscale,
             linewidth=STABLE_TRACE_LINEWIDTH,
             color=MIDDLE_STABLE_TRACE_COLOR,
             label=label,
@@ -2832,9 +2883,9 @@ def _plot_slow_off_analysis(column, segment: Segment, ylabel: str, *args) -> pl.
             if i == 0:
                 label = 'Off and On Summary'
             ax.plot(
-                [RF_off_time, RF_off_time],
-                [raw_on, raw_off],
-                ls=':',
+                [RF_off_time * xscale, RF_off_time * xscale],
+                [raw_on * yscale, raw_off * yscale],
+                ls='',
                 marker='*',
                 markersize=FIT_POINT_SIZE,
                 color=MIDDLE_STABLE_TRACE_COLOR,
@@ -2842,20 +2893,20 @@ def _plot_slow_off_analysis(column, segment: Segment, ylabel: str, *args) -> pl.
             )
             ylim = ax.get_ylim()
             # pick limit farthest from the off point
-            closest = np.argmax(np.abs([yl - raw_off for yl in ylim]))
+            closest = np.argmax(np.abs([yl - raw_off * yscale for yl in ylim]))
             # ylim = ylim[closest]
             # get amount to extend the annotation by towards the limit
             # extend_annotate = (ylim - raw_on)*0.05
-            extend_annotate = (ylim[1] - ylim[0]) * 0.05
+            extend_annotate = (ylim[1] - ylim[0]) * 0.2
             if closest == 0:
-                y_annotate = raw_on + extend_annotate
+                y_annotate = raw_on * yscale + extend_annotate
                 y_annotate = max(y_annotate, ylim[0])
             else:
-                y_annotate = raw_on - extend_annotate
+                y_annotate = raw_on * yscale - extend_annotate
                 y_annotate = min(y_annotate, ylim[1])
             ax.annotate(
                 f'{step_i.frequency} GHz',
-                ((plot_time_step[0] + RF_off_time) / 2, y_annotate),
+                ((plot_time_step[0] + RF_off_time) * xscale / 2, y_annotate),
                 ha='left',
                 va='center',
                 rotation=90,
@@ -2869,21 +2920,32 @@ def _plot_slow_off_analysis(column, segment: Segment, ylabel: str, *args) -> pl.
             )
 
     ax.plot(
-        plot_time[initial_off_start:initial_off_stop],
-        raw[initial_off_start:initial_off_stop],
+        plot_time[initial_off_start:initial_off_stop] * xscale,
+        raw[initial_off_start:initial_off_stop] * yscale,
         color=INITIAL_STABLE_TRACE_COLOR,
         linewidth=STABLE_TRACE_LINEWIDTH,
     )
     ax.plot(
-        plot_time[final_off_start:final_off_stop],
-        raw[final_off_start:final_off_stop],
+        plot_time[final_off_start:final_off_stop] * xscale,
+        raw[final_off_start:final_off_stop] * yscale,
         color=FINAL_STABLE_TRACE_COLOR,
         linewidth=STABLE_TRACE_LINEWIDTH,
     )
 
-    ax.set_xlabel('Time (s)')
+    ax.set_xlabel('Time ' + xunit)
     ax.set_ylabel(ylabel)
     ax.legend(loc='best')
+    # h,l = ax.get_legend_handles_labels()
+    # fig.subplots_adjust(right=0.9)
+    # fig.legend(
+    #     h,
+    #     l,
+    #     loc='center left',
+    #     ncol=1,
+    #     bbox_to_anchor=(0.9, 0.5),
+    #     bbox_transform=fig.transFigure,
+    # )
+    # fig.tight_layout()
     return fig
 
 
@@ -2894,6 +2956,7 @@ def _plot_fast_off_analysis(
     V_off_function: str,
     V_off_delay: float,
     *args,
+    yscale=1,
 ) -> pl.Figure:
     """
     Generate plot of a data column in a segment that had fast off data.
@@ -2914,14 +2977,39 @@ def _plot_fast_off_analysis(
     plot_time = segment_raw_data[column + '_timestamp'] - start_time
     V_DVM = segment_raw_data[column]
 
-    pl.plot(plot_time, V_DVM, color=MAIN_TRACE_COLOR, linewidth=MAIN_TRACE_LINEWIDTH)
+    max_plot_time = np.max(plot_time)
+
+    # 10 minutes, use seconds
+    if max_plot_time < 600:
+        xscale = 1
+        xunit = '(s)'
+    # < 1 hr, use minutes
+    if max_plot_time < 3600:
+        xscale = 1 / 60
+        xunit = '(min)'
+    # use hours else wise
+    else:
+        xscale = 1 / 3600
+        xunit = '(hrs)'
+
+    pl.plot(
+        plot_time * xscale,
+        V_DVM * yscale,
+        color=MAIN_TRACE_COLOR,
+        linewidth=MAIN_TRACE_LINEWIDTH,
+    )
 
     initial_off_start = segment_results[f'{column}_initial_off_start']
     initial_off_stop = segment_results[f'{column}_initial_off_stop']
     final_off_start = segment_results[f'{column}_final_off_start']
     final_off_stop = segment_results[f'{column}_final_off_stop']
 
-    ax.plot(plot_time, V_DVM, color=MAIN_TRACE_COLOR, linewidth=MAIN_TRACE_LINEWIDTH)
+    ax.plot(
+        plot_time * xscale,
+        V_DVM * yscale,
+        color=MAIN_TRACE_COLOR,
+        linewidth=MAIN_TRACE_LINEWIDTH,
+    )
 
     # e_i_fit = _linear(segment_raw_data["NVM_volts_timestamp"] - segment_results["time_zero_NVM_volts_i"], segment_results["NVM_volts_off_i_drift"], segment_results["NVM_volts_off_i"])
     # e_f_fit = _linear(segment_raw_data["NVM_volts_timestamp"] - segment_results["time_zero_NVM_volts_f"], segment_results["NVM_volts_off_f_drift"], segment_results["NVM_volts_off_f"])
@@ -2934,8 +3022,8 @@ def _plot_fast_off_analysis(
     # ax.plot(plot_time, e_i_fit, color=INITIAL_STABLE_TRACE_COLOR, linewidth=STABLE_TRACE_LINEWIDTH)
     # ax.plot(plot_time, e_f_fit, color=FINAL_STABLE_TRACE_COLOR, linewidth=STABLE_TRACE_LINEWIDTH)
     ax.plot(
-        plot_time,
-        e_off_fit,
+        plot_time * xscale,
+        e_off_fit * yscale,
         label='Slow Off Fit',
         ls='-.',
         color=MIDDLE_STABLE_TRACE_COLOR,
@@ -2943,16 +3031,16 @@ def _plot_fast_off_analysis(
     )
 
     slow_sample_line = ax.plot(
-        plot_time[initial_off_start:initial_off_stop],
-        V_DVM[initial_off_start:initial_off_stop],
+        plot_time[initial_off_start:initial_off_stop] * xscale,
+        V_DVM[initial_off_start:initial_off_stop] * yscale,
         'v',
         label='Slow Off Samples',
         color=INITIAL_STABLE_TRACE_COLOR,
         linewidth=STABLE_TRACE_LINEWIDTH,
     )
     ax.plot(
-        plot_time[final_off_start:final_off_stop],
-        V_DVM[final_off_start:final_off_stop],
+        plot_time[final_off_start:final_off_stop] * xscale,
+        V_DVM[final_off_start:final_off_stop] * yscale,
         'v',
         color=FINAL_STABLE_TRACE_COLOR,
         linewidth=STABLE_TRACE_LINEWIDTH,
@@ -3007,18 +3095,22 @@ def _plot_fast_off_analysis(
 
         if V_off_function == 'lin_plus_exp' or V_off_function == 'linear':
             pl.plot(
-                fit_region_time - start_time,
-                fit_volts,
+                (fit_region_time - start_time) * xscale,
+                fit_volts * yscale,
                 color=MIDDLE_STABLE_TRACE_COLOR,
             )
-        pl.plot(plot_time_step, V_DVM_step, linewidth=STABLE_TRACE_LINEWIDTH)
+        pl.plot(
+            plot_time_step * xscale,
+            V_DVM_step * yscale,
+            linewidth=STABLE_TRACE_LINEWIDTH,
+        )
 
         label = None
         if i == len_step - 1:
             label = 'Fast Off Samples'
         pl.plot(
-            fit_region_time - start_time,
-            fit_region_volts,
+            (fit_region_time - start_time) * xscale,
+            fit_region_volts * yscale,
             label=label,
             marker='o',
             ls='',
@@ -3030,10 +3122,10 @@ def _plot_fast_off_analysis(
         if i == len_step - 1:
             label = 'Off/On Summary'
         pl.plot(
-            [t_off, t_off, t_off],
-            [V_off_fast, V_off_slow, V_on],
+            [t_off * xscale, t_off * xscale, t_off * xscale],
+            [V_off_fast * yscale, V_off_slow * yscale, V_on * yscale],
             marker='*',
-            linestyle='--',
+            linestyle='',
             label=label,
             color=FIT_TRACE_COLOR,
             markersize=RESAMPLE_POINTS_SIZE,
@@ -3043,8 +3135,8 @@ def _plot_fast_off_analysis(
         if i == len_step - 1:
             label = 'Fast Off'
         pl.plot(
-            [eval_time],
-            [V_off_fast],
+            [eval_time * xscale],
+            [V_off_fast * yscale],
             marker='D',
             ls='',
             label=label,
@@ -3057,8 +3149,8 @@ def _plot_fast_off_analysis(
         if i == len_step - 1:
             label = 'On Samples'
         pl.plot(
-            plot_time_step[initial_stable:final_stable],
-            V_DVM_step[initial_stable:final_stable],
+            plot_time_step[initial_stable:final_stable] * xscale,
+            V_DVM_step[initial_stable:final_stable] * yscale,
             'x',
             label=label,
             linewidth=STABLE_TRACE_LINEWIDTH,
@@ -3067,20 +3159,20 @@ def _plot_fast_off_analysis(
 
         ylim = ax.get_ylim()
         # pick limit farthest from the off point
-        closest = np.argmax(np.abs([yl - V_off_slow for yl in ylim]))
+        closest = np.argmax(np.abs([yl - V_off_slow * yscale for yl in ylim]))
         # ylim = ylim[closest]
         # get amount to extend the annotation by towards the limit
         # extend_annotate = (ylim - raw_on)*0.05
-        extend_annotate = (ylim[1] - ylim[0]) * 0.05
+        extend_annotate = (ylim[1] - ylim[0]) * 0.2
         if closest == 0:
-            y_annotate = V_on + extend_annotate
+            y_annotate = V_on * yscale + extend_annotate
             y_annotate = max(y_annotate, ylim[0])
         else:
-            y_annotate = V_on - extend_annotate
+            y_annotate = V_on * yscale - extend_annotate
             y_annotate = min(y_annotate, ylim[1])
         ax.annotate(
             f'{step_i.frequency} GHz',
-            ((plot_time_step[0] + t_off) / 2, y_annotate),
+            ((plot_time_step[0] + t_off) * xscale / 2, y_annotate),
             ha='left',
             va='center',
             rotation=90,
@@ -3093,7 +3185,7 @@ def _plot_fast_off_analysis(
             ),
         )
     pl.legend(loc='best')
-    pl.xlabel('Time (s)')
+    pl.xlabel('Time ' + xunit)
     pl.ylabel(ylabel)
     return fig
 

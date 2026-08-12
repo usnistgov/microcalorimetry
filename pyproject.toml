@@ -1,4 +1,5 @@
 [build-system]
+# these versions of setuptools are the ones that seem to work
 requires = ["setuptools>=80,<81", "setuptools-scm[simple]>=8,<9"]
 build-backend = "setuptools.build_meta"
 

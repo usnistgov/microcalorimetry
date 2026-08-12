@@ -4,6 +4,7 @@ from rmellipse.uobjects import RMEMeas
 # local packages
 from microcalorimetry.math import rfpower, numbers, fitting, rmemeas_extras
 from microcalorimetry._helpers._collections import try_sel
+import matplotlib.patches as mpatches
 from pathlib import Path
 import microcalorimetry.configs as configs
 import microcalorimetry._gwex as _gwex
@@ -27,7 +28,9 @@ def review_eta(
     historical_data: configs.EtaHistorical = None,
     repeatability_model: configs.Eta = None,
     k: int = 2,
-):
+    max_hist_legend: int = None,
+    hist_avg: bool = True,
+) -> tuple[plt.Figure, plt.Figure]:
     """
     Make review plots of effective efficiency data.
 
@@ -41,6 +44,20 @@ def review_eta(
         Model of calorimeter's repeatability to plot.
     k : int, optional
         Expansion factor, by default 2
+    max_hist_legend : int, optional
+        Maxmium number of historical measurmeents to include in the legend.
+        If None, will include all. Many historical measurements will result
+        in large legends.
+    hist_avg : bool, optional
+        If True, include the average of historical measurements in the plot.
+
+    Returns
+    -------
+    fig_hist:
+        Figure of effectice efficiency measurement plotted against reference
+        data provided.
+    fig_budget:
+        Figure of uncertainty budget for effective efficiency measurement.
 
     """
     # get historical data
@@ -61,44 +78,57 @@ def review_eta(
 
     cmap = plt.cm.winter
 
+    ydiff_scale = 100
+
     fig, ax = plt.subplots(2, 1)
+
+    handles = []
+    labels = []
 
     ref = nom.copy()
 
     # plot the new data uncertainties behind everything
-    ax[0].fill_between(
-        new_fgrid, lb[..., 0], ub[..., 0], color='k', alpha=0.2, label=f'Utot k = {k}'
-    )
-    ax[1].fill_between(
+    ax[0].fill_between(new_fgrid, lb[..., 0], ub[..., 0], color='k', alpha=0.2)
+    new_err = ax[1].fill_between(
         new_fgrid,
-        lb[..., 0] - nom[:, 0],
-        ub[..., 0] - nom[:, 0],
+        (lb[..., 0] - nom[:, 0]) * ydiff_scale,
+        (ub[..., 0] - nom[:, 0]) * ydiff_scale,
         color='k',
         alpha=0.2,
-        label=f'Utot k = {k}',
     )
-    nom_line = ax[0].plot(
-        new_fgrid, nom, 'k--', marker='o', lw=3, label='New Nominal', zorder=1000
+
+    (nom_line,) = ax[0].plot(
+        new_fgrid, nom, 'k-', marker='o', label='New Nominal', zorder=1000
     )
+
+    handles.append((new_err, nom_line))
+    labels.append(r'$\eta^{\mathrm{\left(new\right)}}$' + f' (k={k})')
+
     ax[1].plot(
         new_fgrid,
-        nom - ref.sel(frequency=nom.frequency),
+        (nom - ref.sel(frequency=nom.frequency)) * ydiff_scale,
         'k',
-        marker='o',
         lw=3,
-        label='New Nominal',
         zorder=-900,
     )
     # plot average of reference data with std
-    average_hist = numbers.greedy_average(*list(nominals.values()))
+    if len(nominals) > 0:
+        average_hist = numbers.greedy_average(*list(nominals.values()))
+    else:
+        average_hist = eta.nom
     use_freqs = np.intersect1d(average_hist.frequency, ref.frequency)
-    ax[1].plot(
-        use_freqs,
-        average_hist.sel(frequency=use_freqs) - ref.sel(frequency=use_freqs),
-        'r-',
-        label='Average of History',
-        zorder=1000,
-    )
+
+    if hist_avg:
+        (hist_avg_line,) = ax[1].plot(
+            use_freqs,
+            (average_hist.sel(frequency=use_freqs) - ref.sel(frequency=use_freqs))
+            * ydiff_scale,
+            'r-',
+            zorder=1000,
+        )
+        handles.append(hist_avg_line)
+        labels.append(f'Average of History')
+
     # plot repeatability model centered around
     # the new measurement
     if repeatability_model is not None:
@@ -108,10 +138,24 @@ def review_eta(
         lb_rep = center + repmodel.stdunc(k=-k).cov[:, 0].interp(
             frequency=nom.frequency
         )
-        ax[1].plot(
-            ub_rep.frequency, ub_rep, 'k-.', label='Repeatability Model', zorder=1000
+        (rep_line,) = ax[1].plot(
+            ub_rep.frequency,
+            ub_rep * ydiff_scale,
+            '-.',
+            label='Repeatability Model',
+            zorder=1000,
+            color='orange',
         )
-        ax[1].plot(lb_rep.frequency, lb_rep, 'k-.', zorder=900)
+        ax[1].plot(
+            lb_rep.frequency,
+            lb_rep * ydiff_scale,
+            '-.',
+            zorder=900,
+            color='orange',
+        )
+
+        handles.append(rep_line)
+        labels.append(f'Repeatability Model (k=2)')
 
     for a in ax:
         a.set_prop_cycle(plt.cycler('color', cmap(np.linspace(0, 1, len(nominals)))))
@@ -119,7 +163,7 @@ def review_eta(
         ('.', 'o', 'v', '^', 'p', '*', 'h', '<', '>', '1', '2', '3', '4', '8', 's')
     )
     rev_nominals = [(name, datamodel) for name, datamodel in nominals.items()][::-1]
-    for name, datamodel in rev_nominals:
+    for i, (name, datamodel) in enumerate(rev_nominals):
         hdat = nominals[name]
         # plot differences
 
@@ -128,22 +172,40 @@ def review_eta(
 
         use_freqs = np.intersect1d(hdat.frequency, ref.frequency)
 
-        ax[1].plot(
+        (this_line,) = ax[1].plot(
             use_freqs,
-            hdat.sel(frequency=use_freqs) - ref.sel(frequency=use_freqs),
+            (hdat.sel(frequency=use_freqs) - ref.sel(frequency=use_freqs))
+            * ydiff_scale,
             m,
             label=name,
         )
+        if not max_hist_legend:
+            handles.append(this_line)
+            labels.append(name.replace('_', ' ').title())
+        else:
+            if i < max_hist_legend - 1:
+                handles.append(this_line)
+                labels.append(name.replace('_', ' ').title())
 
-    pass
+    if max_hist_legend:
+        # add ...
+        empty_handle = mpatches.Patch(color='none', label='asdas')
+        handles.append(empty_handle)
+        labels.append('...')
+        # last item
+        handles.append(this_line)
+        labels.append(name.replace('_', ' ').title())
 
     ax[0].set_ylabel(r'$\eta$')
-    ax[1].set_ylabel(r'$\eta$ - New Nominal')
+    ax[1].set_ylabel(
+        r'$\left[\eta-\eta^{\mathrm{\left(new\right)}}\right]\cdot' + f'{ydiff_scale}$'
+    )
     ax[1].set_xlabel('Frequency (GHz)')
     fig.tight_layout()
     fig.subplots_adjust(right=0.7)
     fig.legend(
-        *ax[1].get_legend_handles_labels(),
+        handles,
+        labels,
         loc='upper left',
         ncol=1,
         bbox_to_anchor=(0.7, 1.0),
@@ -267,26 +329,52 @@ def make_classical_eta_unc_model(
 
 
 def make_eta_repeatability_model(
-    historical_data: list[configs.EtaHistorical],
+    historical_data: dict[configs.EtaHistorical],
     make_plots: bool = True,
+    dist: str = 'gaussian',
     coverage: float = 2,
+    ddof: int = 1,
     min_points: int = 3,
+    model_type: str = 'expanding_quadratic',
+    categories: dict = {'Type': 'A', 'Origin': 'Repeatability'},
+    umech_id_basename: str = 'Repeatability',
+    frequencies: np.array = None,
 ) -> tuple[configs.Eta, list[plt.Figure], RMEMeas]:
     """
     Generate a historical repeatability model from sensor data.
 
     Parameters
     ----------
-    historical_data : list[configs.EtaHistorical]
-        List of EtaHistorical configuration objects for different sensors.
+    historical_data : dict[configs.EtaHistorical]
+        List of EtaHistorical configuration objects for different sensors. The
+        key of each entry is the name of a sensor, and the values are the
+        EtaHistorical objects.
     make_plots : bool, optional
         Generate figures if True.
+    dist : str, optional
+        Assume a type of distribution. Options are 'guassian' or 'uniform'.
+        By default 'gaussian'.
     coverage : int, optional
-        Attempts to have the repeatability uncertainty meet this coverage
-        factor frequency point by frequency point. The default is 3.
+        Attempts to have 1 std uncertainty meet this coverage
+        factor. The default is 2.
+    ddof : int, optional
+        Delta degrees of freedom when calculating standard uncertainty
+        frequency by frequency, only relevant for gaussian distributions.
     min_points : int, optional
         Minimum number of required samples per frequency point to be included
         as part of the fit. The default is 3.
+    model_type : str, optional, {'expanding_quadratic','expanding_quadratic_linear','quadratic','constant','line'}
+        Type of repeatability model to use. Expanding models are a constant value
+        up to a cut off frequency, at which point they transition to a increasing
+        function. One of 'expanding_quadratic','expanding_quadratic_linear','quadratic','constant','line'.
+    categories: dict, optional
+        Create category metadata for uncertainy mechnisms. The default is
+        {'Type': 'A', 'Origin':'Repeatability'}.
+    umech_id_basename: str, optional
+        Basename for the umech_id generated.
+    frequencies: np.array, optional
+        If provided, will apply the repeatability model to the provided
+        frequencies.
 
     Returns
     -------
@@ -317,7 +405,7 @@ def make_eta_repeatability_model(
         fig, ax = plt.subplots(1, 1, sharex=True)
     # values that will be averaged in the end
     zero_averaged_sensors = {}
-    for i, sensor_data in enumerate(historical_data):
+    for i, (sensor_name, sensor_data) in enumerate(historical_data.items()):
         historical = configs.EtaHistorical(sensor_data)
         sensor_noms = {k: configs.Eta(v).load().nom for k, v in historical.items()}
         sensor_avg = numbers.greedy_average(*list(sensor_noms.values()))
@@ -334,80 +422,145 @@ def make_eta_repeatability_model(
                 nom = sensor_noms[k]
                 znom = zero_averaged_sensors[k]
 
+                # drop points = zero, they would be the only point
+                znom = znom.where(znom != 0, drop=True)
+
                 # included points
                 line = ax.plot(
                     znom.frequency,
-                    znom,
+                    znom * 100,
                     marker=marker,
                     color=color,
                     ls='',
                 )
             keys = list(this_sensor_zero.keys())
-            line[0].set_label('{},..., {}'.format(keys[0], keys[-1]))
+            line[0].set_label(sensor_name)
+    valid_dists = ['gaussian', 'uniform']
+    if dist not in valid_dists:
+        raise ValueError(f'Expect dist to be one of {valid_dists} not {dist}')
 
-    u = coverage * numbers.greedy_std(
-        *list(zero_averaged_sensors.values()), ddof=1, min_points=min_points
-    )
+    # calculate the uncertainty estimate frequency by frequency
 
-    def expanding_uncertainty(freq, fstop, quadratic, offset):
+    # assumes a gaussian distribution
+    if dist == 'gaussian':
+        u = coverage * numbers.greedy_std(
+            *list(zero_averaged_sensors.values()), ddof=ddof, min_points=min_points
+        )
+        u = u.where(u != 0, drop=True).dropna(dim='frequency')
+
+    # assumes a uniform distribution
+    elif dist == 'uniform':
+        u = xr.concat(list(zero_averaged_sensors.values()), dim='new dim', join='inner')
+        diff = u.max(dim='new dim') - u.min(dim='new dim')
+        u = diff / np.sqrt(12) * coverage
+    else:
+        raise ValueError(f'Expect dist to be one of {valid_dists} not {dist}')
+
+    def expanding_quadratic(freq, fstop, quadratic, offset):
         out = np.zeros(freq.shape)
-        out[freq < fstop] = offset
+        out[freq <= fstop] = offset
         out[freq > fstop] = quadratic * (freq[freq > fstop] - fstop) ** 2 + offset
         # print(out)
         return out
 
-    fit = u[:, 0].curvefit('frequency', expanding_uncertainty)
+    def expanding_linear(freq, fstop, slope, offset):
+        out = np.zeros(freq.shape)
+        out[freq <= fstop] = offset
+        out[freq > fstop] = slope * (freq[freq > fstop] - fstop) + offset
+        # print(out)
+        return out
 
-    print(fit.curvefit_coefficients)
-    coeffs = fit.curvefit_coefficients
+    def quadratic(freq, offset, quadratic):
+        out = offset + quadratic * freq**2
+        # print(out)
+        return out
 
-    u_fit_data = expanding_uncertainty(
-        u.frequency.data, *fit.curvefit_coefficients.data
-    )
-    u_fit = u.copy()
-    u_fit[:, 0] = u_fit_data
+    def constant(freq, offset):
+        return offset
 
-    model = u * 0
+    def line(freq, offset, slope):
+        return offset + slope * freq
+
+    fit_funs = [expanding_quadratic, expanding_linear, quadratic, constant, line]
+    fit_funs = {f.__name__: f for f in fit_funs}
+
+    spline_funs = ['makima']
+    if frequencies is None:
+        freqs = u.frequency.data
+    else:
+        freqs = frequencies
+    caught = None
+    if model_type in fit_funs:
+        try:
+            fit = u[:, 0].curvefit('frequency', fit_funs[model_type])
+
+            u_fit_data = fit_funs[model_type](freqs, *fit.curvefit_coefficients.data)
+            u_fit = u.copy().interp(
+                frequency=freqs, kwargs=dict(fill_value='extrapolate')
+            )
+            u_fit[:, 0] = u_fit_data
+
+            print(fit.curvefit_coefficients)
+            coeffs = fit.curvefit_coefficients
+        except Exception as e:
+            caught = e
+            print('Fit failed for - {e}')
+    elif model_type in spline_funs:
+        u_fit = u.interp(frequency=freqs, method=model_type)
+        coeffs = None
+
+    else:
+        raise ValueError(
+            f'model_type {model_type} not recognized. Must be one of {[k for k in fit_funs] + spline_funs}'
+        )
+
+    # coerce into the expected structure of an eta file
+    model = (u_fit[:, 0] * 0).expand_dims('eta', axis=-1)
 
     model = RMEMeas.from_nom('repeatability_model', model)
     model.add_umech(
-        'Repeatabliity',
+        umech_id_basename,
         u_fit,
         dof=len(zero_averaged_sensors),
-        category={'Type': 'A', 'Origin': 'Historical Repeatablity'},
+        add_uid=True,
+        category=categories,
     )
-
+    pretty_model_name = model_type.replace('_', ' ').title()
     ub = model.stdunc().cov[..., 0]
     ax.fill_between(
         model.nom.frequency,
-        ub * 2,
-        ub * -2,
+        ub * 2 * 100,
+        ub * -2 * 100,
         color='k',
         alpha=0.2,
-        label='Historical Repeatability Model (k=2)',
+        label=f'{pretty_model_name} Model (k=2)',
         zorder=1000,
     )
-    ax.legend(loc='best')
-    ax.legend(loc='best')
+
+    h, l = ax.get_legend_handles_labels()
+
+    ax.legend(loc='upper left')
     ax.set_xlabel('Frequency (GHz)')
-    ax.set_ylabel(r'Inerpolated Values of $\eta$')
-    ax.set_ylabel(r'Variation in $\eta$ from Sensor Average')
+    ax.set_ylabel(r'$\left[\eta - \bar{\eta}_{\mathrm{sensor}}\right]\cdot100$')
 
     fig.tight_layout()
+
+    if caught is not None:
+        raise caught from caught
 
     return model, fig, coeffs
 
 
 def dc_lead_correction(
-    eta: configs.Eta,
-    R_lead: float,
-    R_bolo: float,
+    eta: configs.Eta, R_lead: float, R_bolo: float, R_lead_max: float = 0.14
 ) -> tuple[configs.Eta]:
     """
-    Applies a dc lead correction for bolometer mounts.
+    Applies a dc lead correction.
 
-    Accounts for heat lost in the 4-wire connection
-    of a bolometer mount biasing the measurement.
+    Corrects for heat lost between the dc connector and the
+    4-wire connection of a resistor inside the sensor.
+    See ERROR IN CALORIMETRIC EFFECTIVE EFFICIENCY MEASUREMENTS DUE TO DC LOSSES, T.P
+    Crowley and B.F. Riddle for more details.
 
     Parameters
     ----------
@@ -417,6 +570,14 @@ def dc_lead_correction(
         Sum of resistance for Force and Sense leads of sensor.
     R_bolo : float
         Bolometer resistance, usually 200 ohms for bolometer sensors.
+    R_lead_max : float
+        This is the maximum allowed resistance for force and sense leads of the sensor.
+        Uncertainty is only applied for R_lead > R_lead_max, and only excess uncertainty
+        is applied. It is assumed uncertainty
+        associated with lead resitances less than or equal to R_lead_max have
+        already been accounted for. Set to zero to count all the uncertainty associated
+        with your lead resistance. The default value is 0.14 Ohms, which is the typical
+        allowable value for CN mounts in NIST's Type N microcalorimeter.
 
     Returns
     -------
@@ -428,10 +589,23 @@ def dc_lead_correction(
     eta = configs.Eta(eta).load()
 
     # set up the propagator
-    linear = RMEProp()
+    linear = RMEProp(sensitivity=True)
 
     bias_correct = linear.propagate(rfpower.dcbias_eta_correction)
     corrected = bias_correct(eta, R_lead, R_bolo)
+
+    if R_lead_max < R_lead:
+        print('Excess lead resistance, adding uncertainty')
+        assumed_u_already = R_lead_max / 400 / np.sqrt(3)
+        total_u = R_lead / 400 / np.sqrt(3)
+        extra = np.sqrt(total_u**2 - assumed_u_already**2)
+        corrected.add_umech(
+            name='eta_dclead_excess',
+            value=corrected.nom + extra,
+            dof=np.inf,
+            category={'Type': 'B', 'Origin': 'Excess DC Lead Resistance'},
+            add_uid=True,
+        )
 
     return corrected
 
@@ -440,12 +614,11 @@ def make_eta(
     gc: configs.GC,
     s11: configs.S11,
     parsed_rfsweep: configs.ParsedRFSweep,
+    clrm_sensitivity: configs.ThermoelectricFitCoefficients = None,
     repeatability_model: configs.Eta = None,
     extra_eta_uncertainties: list[Path] = None,
-    lead_correction: list[float] = None,
     historical_data: configs.EtaHistorical = None,
-    clrm_sensitivity: configs.ThermoelectricFitCoefficients = None,
-    propagate_uncertainties: bool = True,
+    legacy_uncertainties: bool = False,
     make_plots: bool = True,
 ) -> tuple[list[plt.Figure] | None, configs.Eta]:
     """
@@ -459,31 +632,29 @@ def make_eta(
         Reflection coefficient of the sensor.
     parsed_rfsweep : configs.ParsedRFSweep
         Parsed RF sweep output.
+    clrm_sensitivity : configs.ThermoelectricFitCoefficients, optional
+        If provided, assumes the correction factor is weighted by the
+        calorimeters sensitivity and provide in units of (V/W).
+        These coefficents will be used to calculate the dimensionless
+        correction factor. The default is None.
     repeatability_model : configs.Eta, optional
         Supply a repeatability model of the microcalorimeter to apply as
         uncertainty mechanisms and use in review charts. The default is None.
     extra_eta_uncertainties : list[Path], optional
         Supply additional uncertainty models of eta that should be applied
         after the correction. The default is None.
-    lead_correction : list[float], optional
-        Applies a dc lead correction if provided (and lead resistance is
-        larger than zero) to account for heat lost in the 4-wire connection
-        of a bolometer mount. First value is the total lead resistance of the
-        force and sensor connections. The second value
-        is the bolometer resistance. For example, [0.2, 200] means 0.2 Ohm
-        lead resistance and 200 ohm bolometer resistance.
     historical_data : configs.EtaHistorical, optional
         Supply a historical Eta configuration object to use a reference
         measurements in the review charts. The default is None.
-    clrm_sensitivity : configs.ThermoelectricFitCoefficients, optional
-        If provided, assumes the correction factor is weighted by the
-        calorimeters sensitivity and provide in units of (V/W).
-        These coefficents will be used to calculate the dimensionless
-        correction factor. The default is None.
-    propagate_uncertainties : bool, optional
-        Propagate uncertainties from the correction factor and the
-        model of the sensors reflection coefficient during calculation.
-        The default is True.
+    legacy_uncertainties : bool, optional
+        If legacy uncertainties are selected, than uncertainties will not
+        be carried forward from the supplied reflection coefficient,
+        correction factor, dc measurements, and or sensitivity model.
+        All uncertainties are expected to be supplied via the
+        extra_eta_uncertainties or repeatability_model options. This
+        is to support legacy microcalorimeter systems which do not
+        forward propagate uncertainties from their measurement. The
+        default is False.
     make_plots : bool, optional
         Make plots during the analsysis,otherwise figs will
         be an empty list. The default is True. Plots are made by passing
@@ -506,10 +677,14 @@ def make_eta(
     historical_data = configs.EtaHistorical(historical_data)
 
     # set up the propagator
-    basic = RMEProp(sensitivity=propagate_uncertainties)
+    # if not using legacy uncertainties, then propagate
+    # uncertainties forward.
+    basic = RMEProp(sensitivity=not legacy_uncertainties)
 
     effective_efficiency = basic.propagate(rfpower.effective_efficiency)
     mean_unique = basic.propagate(numbers.mean_unique_values)
+    calc_te_power = basic.propagate(rfpower.openloop_thermoelectric_power)
+    polyval = basic.propagate(fitting.polyval2)
 
     # load the models into memory from the containers
     parsed_rfsweep = configs.ParsedRFSweep(parsed_rfsweep)
@@ -533,45 +708,52 @@ def make_eta(
     gc = try_sel(gc, 'gc', fgrid)
 
     if clrm_sensitivity:
-        
-        # estimate coefficients
-        k = configs.ThermoelectricFitCoefficients(clrm_sensitivity).load()
-        calc_te_power = basic.propagate(rfpower.openloop_thermoelectric_power)
-        polyderive = basic.propagate(fitting.polyderive)
-        polyval = basic.propagate(fitting.polyval2)
-        derivative = polyderive(k)
-        # evaluate the sensitivity at the power
-        # levels being measureed
-        if k.attrs['p_of_e']:
-            # because of inverse function theorem,
-            # I can just invert the derivate of P(e)
-            kinv = polyval(derivative, e_on - e_off)
-            k = 1 / kinv
-        else:
-            E = calc_te_power(k, e_on - e_off, p_of_e=False)
-            k = polyval(derivative, E)
-        k = np.abs(k)
-
+        sense = configs.ThermoelectricFitCoefficients(clrm_sensitivity).load()
+        # # Old version from when coefficients were e as function of p estimate coefficients
+        #
         # if k.attrs['p_of_e']:
         #     k = 1 / k.sel(deg=1, drop=True)
         # else:
         #     k = k.sel(deg=1, drop=True)
-        k = np.abs(k)
+        # # k = np.abs(k)
+        #
+
+        p_off_check = calc_te_power(
+            sense, e_off[1], sense.attrs['p_of_e']
+        ).nom.values.tolist()
+
+        # determine what e value to use for estimating sensitivity
+        # if the off power estimate > 10 MW, dc substitution mode and
+        # use the on values as the estimate of k
+        if p_off_check > 0.01:
+            e_k_est = e_on
+
+        # other wise we are in an open loop mode and off values are estimates
+        # of e_0 the time varying offset
+        else:
+            e_k_est = e_on - e_off
+
+        k = polyval(sense, e_k_est)
+        # k[sensor_type] = clrm_coeffs[sensor_type].sel(deg = 0, drop = True)
+        # if k is units of W/V, then invert it
+        if sense.attrs['p_of_e']:
+            k = 1 / k
+
+        # print(k)
+
         gc = gc / k
-        
-        # invert polynomial instead?
-        # gc = calc_te_power(k, gc, k.attrs['p_of_e'] )
 
     eta_new = effective_efficiency(zeta, s11, gc)
 
+    # apply model of statistical repeatability
     if repeatability_model:
-        eta_new = apply_uncertainty_model(eta_new, repeatability_model)
+        eta_new = apply_uncertainty_model(
+            eta_new, repeatability_model, make_unique=True
+        )
+
     if extra_eta_uncertainties:
         for eu in extra_eta_uncertainties:
-            eta_new = apply_uncertainty_model(eta_new, eu)
-
-    if lead_correction:
-        eta_new = dc_lead_correction(eta_new, lead_correction[0], lead_correction[1])
+            eta_new = apply_uncertainty_model(eta_new, eu, make_unique=True)
 
     # cast as a DataModelContainer and maybe
     # generate review plots
@@ -585,7 +767,9 @@ def make_eta(
     return fig, eta_new
 
 
-def apply_uncertainty_model(eta: configs.Eta, model: configs.Eta) -> configs.Eta:
+def apply_uncertainty_model(
+    eta: configs.Eta, model: configs.Eta, make_unique: bool = False
+) -> configs.Eta:
     """
     Applies uncertainty models of effective efficiency measurements.
 
@@ -599,6 +783,10 @@ def apply_uncertainty_model(eta: configs.Eta, model: configs.Eta) -> configs.Eta
     model : configs.Eta
         Model of uncertainties that will be applied to eta. Should be nominaly
         zero.
+    make_unique : bool, optional
+        If True, renames all uncertainty mechanisms so they are unique and
+        independent from all other uncertainty mechanisms. Should be set
+        to True for repeatability models.
 
     Returns
     -------
@@ -606,7 +794,12 @@ def apply_uncertainty_model(eta: configs.Eta, model: configs.Eta) -> configs.Eta
         Same nominal as the input eta, but with new uncertainties.
 
     """
-    basic = RMEProp(sensitivity=True)
+    basic = RMEProp(sensitivity=True, set_active=False)
+
+    @basic.propagate
+    def add(x, y):
+        return x + y
+
     eta = configs.Eta(eta).load()
     model = configs.Eta(model).load()
     model = model.interp(
@@ -614,6 +807,9 @@ def apply_uncertainty_model(eta: configs.Eta, model: configs.Eta) -> configs.Eta
         method='linear',
         kwargs={'fill_value': 'extrapolate'},
     )
+    if make_unique:
+        model.make_umechs_unique(same_uid=True)
+
     # add together
-    eta = eta + model
+    eta = add(eta, model)
     return eta

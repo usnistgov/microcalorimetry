@@ -18,10 +18,10 @@ SAMPLE_HIST = LOCAL / 'sample_historical_data'
 
 
 def test_historical_data(make_new_reference: bool = False):
-    historical_files = [
-        SAMPLE_HIST / 'C24N118.yml',
-        SAMPLE_HIST / 'C24N132.yml',
-    ]
+    historical_files = {
+        'Sensor 1': SAMPLE_HIST / 'C24N118.yml',
+        'Sensor 2': SAMPLE_HIST / 'C24N132.yml',
+    }
 
     # generate a data defined model
     print('in test @ ', Path.cwd().resolve())

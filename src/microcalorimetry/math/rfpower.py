@@ -67,7 +67,7 @@ def openloop_thermoelectric_power(
 
     This function can accept models that provide power as a polynomial
     function of voltage (or vice versa) or can be provided a temperature
-    sensitive model of the thermoelectric if temperature readings are 
+    sensitive model of the thermoelectric if temperature readings are
     also provided.
 
     Parameters
@@ -78,8 +78,8 @@ def openloop_thermoelectric_power(
         values corresponding to the polynomail power (i.e.
         deg = 2 corresponds to c_2 for y = c_2*x**^2 ). Fit
         coefficients can be power in terms of voltage (W/V^n) or
-        voltage in terms of power (V/W^n). 
-        
+        voltage in terms of power (V/W^n).
+
         Alternativley, can take in temperature sensitive fit coefficients
         and a temperature reading.
     thermoelectric_voltage : xr.DataArray
@@ -100,114 +100,35 @@ def openloop_thermoelectric_power(
     # if temperature readings were given then do a temperature fit and
     # bounce out
     if temperature is not None:
-        p = apply_temperature_dependent_fit(
+        oneOk = apply_temperature_dependent_fit(
             e, temperature, coeffs)
-        return p
+        return e*oneOk
 
     # otherwise a singlae variable polynmial model
     # if power fit in terms of thermoelectric voltage,
     # just evaluate the fit coefficients, this is easiest
-    if p_of_e:
-        p = fitting.polyval2(coeffs, e)
-
     else:
-        # deg 2, solve root
-        # this is faster than polyroot
-        # deg 2, solve root
-        # this is faster than polyroot
-        if max(coeffs.deg) == 1:
-            p = e.copy()
-            slope = coeffs.sel(deg=[1]).data
-            off = coeffs.sel(deg=[0]).data
-            p.data[..., :] = (e.data - off) / slope
-        
-        elif max(coeffs.deg) == 2:
-            p = e.copy()
-            a = coeffs.sel(deg=[2]).data
-            b = coeffs.sel(deg=[1]).data
-            try:
-                c = coeffs.sel(deg=[0]).data - e.data
-            except KeyError:
-                c = coeffs.sel(deg=[1]).data * 0 - e.data
-            root1 = (-b + np.sqrt(b**2 - 4 * a * c)) / (2 * a)
-            root2 = (-b - np.sqrt(b**2 - 4 * a * c)) / (2 * a)
-            if np.mean(b) > 0:
-                p.data[..., :] = root1
-            else:
-                p.data[..., :] = root2
-        # cubic root formula
-        elif max(coeffs.deg) == 3:
-            p = e.copy()
-            a = coeffs.sel(deg=[3]).data
-            b = coeffs.sel(deg=[2]).data
-            c = coeffs.sel(deg=[1]).data
-            # if the 0th term isnt there, assume its zero
-            try:
-                d = coeffs.sel(deg=[0]).data - e.data
-            except KeyError:
-                d = coeffs.sel(deg=[1]).data * 0 - e.data
-            # intermediate values
-            delta_0 = (b**2 - 3 * a * c).astype(complex)
-            delta_1 = (2 * b**3 - 9 * a * b * c + 27 * a**2 * d).astype(complex)
+        k = fitting.polyval2(coeffs, e)
+        # k = coeffs.sel(deg = 0, drop = True)
+        if p_of_e:
+            k = 1/k
 
-            C_root = np.sqrt(delta_1**2 - 4 * delta_0**3)
-            C = np.power((delta_1 + C_root) / 2, 1 / 3)
-            if np.isclose(np.min(C), 0):
-                C = np.power((delta_1 - C_root) / 2, 1 / 3)
-
-            # if zero at this point, then fraction is zero
-            x = [np.nan] * 3
-            zeta = (-1.0 + (-3.0) ** (1.0 / 2)) / 2.0
-            for k in range(3):
-                if np.isclose(np.min(C), 0):
-                    print(0)
-                    xk = -1 / (3 * a) * (b + zeta**k * C + 0)
-                else:
-                    xk = -1 / (3 * a) * (b + zeta**k * C + delta_0 / (zeta**k * C))
-                x[k] = xk
-            # check for the real root between 0 and 100
-            # that should be the one that indicates the power
-            # reading
-            # pick the right root:
-            # iterate over every single value and do the thing
-            # this could be optimizid probably idk
-            out_data = np.zeros(p.data.shape)
-            for idx, _ in np.ndenumerate(out_data):
-                for k in range(3):
-                    xi = x[k][idx]
-                    # solution shoul be aproimatley real
-                    # and provide a value that is close
-                    # to what we expect to see
-                    if np.isclose(np.imag(xi), 0, atol=1e-10):
-                        if np.real(xi) > -1e-3 and np.real(xi) < 50e-3:
-                            good_root = k
-                            out_data[idx] = np.real(x[k][idx])
-                            # print(x[k][idx])
-
-                if good_root is None:
-                    raise Exception('Failed to pick a root.')
-            p.data[..., :] = out_data
-
-        else:
-            raise NotImplementedError('Maximum degree coeffiicient is 3 currently for fitting thermopile voltage as a function of power.')
-            p = fitting.polyroot2(coeffs, y=e)
-
-    return p
+        return e/k
 
 def _meannorm(x: xr.DataArray, mean: float | xr.DataArray, std: float | xr.DataArray):
     return (x - mean) / std
 
 def temperature_corrected_thermoelectric_fit(
-        P: xr.DataArray, 
-        T: xr.DataArray, 
+        P: xr.DataArray,
+        T: xr.DataArray,
         V: xr.DataArray):
     """
     Fits power, voltage, and temperature to a temperature sensitive model.
-    
+
     Power is in Watts and voltage is is Volts. Temperature can be any units
     provided it is proprtional to temperture and the same unit is units
-    when using the fit later on. 
-    
+    when using the fit later on.
+
     It is typically resistance for a resistance thermometer
 
     Parameters
@@ -226,7 +147,7 @@ def temperature_corrected_thermoelectric_fit(
         a dimension called 'col'.
     """
 
-    def get_meanstd(Input):    
+    def get_meanstd(Input):
         mean = np.mean(Input)
         std = np.std(Input)
         return mean, std
@@ -244,29 +165,29 @@ def temperature_corrected_thermoelectric_fit(
     ds = []
     aps = []
     bps = []
-    
+
     for i in range(0, len(VNorm)):
         if T is not None:
             A = np.column_stack(
                 [
-                    np.ones(len(VNorm[i].flatten())), 
-                    TNorm[i].flatten()**2, 
-                    TNorm[i].flatten(), 
-                    TNorm[i].flatten()*VNorm[i].flatten(), 
-                    VNorm[i].flatten()**2, 
+                    np.ones(len(VNorm[i].flatten())),
+                    TNorm[i].flatten()**2,
+                    TNorm[i].flatten(),
+                    TNorm[i].flatten()*VNorm[i].flatten(),
+                    VNorm[i].flatten()**2,
                     VNorm[i].flatten()
                 ]
             )
         else:
             A = np.column_stack(
                 [
-                    np.ones(len(VNorm[i].flatten())), 
-                    VNorm[i].flatten()**2, 
+                    np.ones(len(VNorm[i].flatten())),
+                    VNorm[i].flatten()**2,
                     VNorm[i].flatten()
                 ]
             )
-        
-        
+
+
         B = P[i].values.flatten() / V[i].values.flatten()
         result, _, _, _ = np.linalg.lstsq(A, B)
         if T is not None:
@@ -274,20 +195,20 @@ def temperature_corrected_thermoelectric_fit(
         else:
             c, ap, bp = result
             d, at, bt = (0,0,0)
-        
+
         cs.append(c)
         ats.append(at)
         bts.append(bt)
         ds.append(d)
         aps.append(ap)
         bps.append(bp)
-    
-    cs = np.array(cs)    
-    ats = np.array(ats)    
-    bts = np.array(bts)    
-    ds = np.array(ds)    
-    aps = np.array(aps)    
-    bps = np.array(bps)    
+
+    cs = np.array(cs)
+    ats = np.array(ats)
+    bts = np.array(bts)
+    ds = np.array(ds)
+    aps = np.array(aps)
+    bps = np.array(bps)
 
     VArray = np.zeros(shape=(len(cs), 10))
     VArray[:,0] = aps
@@ -315,11 +236,11 @@ def apply_temperature_dependent_fit(
         e: xr.DataArray,
         temperature: xr.DataArray,
         coeffs: xr.DataArray
-        ):
+        )->xr.DataArray:
     """
     Apply a temperature dependent fit.
-    
-    Shapes are assumed to be 
+
+    Shapes are assumed to be
 
     Parameters
     ----------
@@ -334,15 +255,17 @@ def apply_temperature_dependent_fit(
     Returns
     -------
     xr.DataArray
-        Array of power readings with the same shape as 
+        Array of 1/k sensitivities corresponding to the the voltage and
+        temperature readings provided. Power is metered as e/k, so
+        multiple the voltages by the output of this function.
     """
     fit = coeffs
     V = e
     T = temperature
 
     VsNorm = (V - fit.sel (col = ['MeanV']).data) / fit.sel (col = ['STDV']).data
-    TsNorm = (T - fit.sel (col = ['MeanT']).data) / fit.sel (col = ['STDT']).data    
-    return V * (fit.sel (col = ['at']).values*TsNorm**2 +
+    TsNorm = (T - fit.sel (col = ['MeanT']).data) / fit.sel (col = ['STDT']).data
+    return (fit.sel (col = ['at']).values*TsNorm**2 +
                    fit.sel (col = ['bt']).values*TsNorm +
                    fit.sel (col = ['ap']).values*VsNorm**2 +
                    fit.sel (col = ['bp']).values*VsNorm +
@@ -351,31 +274,26 @@ def apply_temperature_dependent_fit(
 
 
 def thermopile_sensitivity(
-    p: xr.DataArray,
     e: xr.DataArray,
-    constrain_zero: bool = False,
-    p_of_e: bool = True,
+    k: xr.DataArray,
     deg: int = 2,
-    punc: np.array = None,
-    eunc: np.array = None,
+    kunc: np.array = None,
 ) -> xr.DataArray:
     """
     Calculate the sensitivity of thermopile element using DC power.
 
     v, i, and e are typically estimates of the steady state values of a step
     response. Function performs a polynomial of requested degree. v, i, and e
-    are assuemd to be of shape (..., n) where all coordinates and dimensions are
+    are assumed to be of shape (..., n) where all coordinates and dimensions are
     the same. The fitting is done across the n dimensions, and repeated across
     (...).
 
     Parameters
     ----------
-    v : xr.DataArray
-        DC voltage applied to a sensor.
-    i : xr.DataArray
-        DC current applied to a sensor.
     e : xr.DataArray
-        DC voltage measured across the thermopile.
+        DC voltage applied to a sensor.
+    k : xr.DataArray
+        (e-e_0)/p of the sensor.
     constrain_zero : bool, optional
         Constrain the offset to cross zero.
     p_of_e: bool, optional
@@ -383,10 +301,7 @@ def thermopile_sensitivity(
         thermopile voltage in terms of power.
     deg: int, optional
         Degree of polynomial fit. The default is 2.
-    punc: np.array, optional
-        Uncertainty on power values. The default is None. If provided,
-        used as weights for the ordinary least squares fitting.
-    eunc: np.array, optional
+    kunc: np.array, optional
         Uncertainty on power values. The default is None. If provided,
         used as weights for the ordinary least squares fitting.
 
@@ -397,24 +312,18 @@ def thermopile_sensitivity(
         Resulting coefficients of the fit.
 
     """
-    if p_of_e:
-        y = p
-        yunc = punc
-        x = e
 
-    else:
-        y = e
-        yunc = eunc
-        x = p
 
-    coeffs = fitting.polyfit2(x, y, deg=deg, constrain_zero=constrain_zero, yunc=yunc)
+    coeffs = fitting.polyfit2(e, k, deg=deg, yunc = kunc)
 
     return coeffs
 
 
 def zeta_general(
+    *,
     e_on: xr.DataArray,
     e_off: xr.DataArray,
+    e_0: xr.DataArray,
     cal_k: xr.DataArray,
     p_of_e: bool,
     P2: xr.DataArray,
@@ -424,9 +333,8 @@ def zeta_general(
     """
     Calculate uncorrected effective efficiency for any sensor.
 
-    Requires knowledge of calorimeter's sensitivity, but doesn't
-    assume linearity as it can be corrected for using
-    higher order fit coefficients. This formulation is sensor agnostic.
+    Requires knowledge of calorimeter's sensitivity,
+    This formulation is sensor agnostic.
 
     Parameters
     ----------
@@ -434,6 +342,9 @@ def zeta_general(
         Thermopile voltage in the RF on state (of calorimeter).
     e_off : xr.DataArray
         Thermopile voltage in the RF off state (of calorimeter).
+    e_0 : xr.DataArray
+        Time varying offset of the microcalorimeter's thermopile in the at
+        the time of measurment. Typically inffered by interpolation.
     cal_k : xr.DataArray
         Thermopile sensitivity coefficients of the calorimeter.
         Last dimension called 'deg' with integer coordinates
@@ -460,9 +371,16 @@ def zeta_general(
     """
     # E_off = openloop_thermoelectric_power(cal_k, e_off, p_of_e)
 
-    E  = openloop_thermoelectric_power(cal_k, e_on-e_off, p_of_e)
+    E_on  = openloop_thermoelectric_power(cal_k, e_on - e_0, p_of_e)
+    if e_off is not None:
+        E_off = openloop_thermoelectric_power(cal_k, e_off - e_0, p_of_e)
+    else:
+        E_off = 0
 
-    return P2 / (E - P_dc_on_slow + P_dc_off_slow)
+    P_cal = E_on  - P_dc_on_slow #-(E_off - P_dc_off_slow)
+
+
+    return P2 / P_cal
 
 
 def zeta_dcsub(
@@ -678,105 +596,7 @@ def effective_efficiency(
     eta = dfm.make_into(eta, dfm.eff)
     return eta
 
-
-def calorimetric_power_delta_general(
-    e_on: xr.DataArray,
-    e_off: xr.DataArray,
-    cal_k: xr.DataArray,
-    p_of_e: bool,
-    P_dc_on_slow: xr.DataArray = 0,
-    P_dc_off_slow: xr.DataArray = 0,
-) -> xr.DataArray:
-    """
-    Calculate power delta.
-
-    Requires knowledge of calorimeter's sensitivity, but doesn't
-    assume linearity as it can be corrected for using
-    higher order fit coefficients. This formulation is sensor agnostic.
-
-    Parameters
-    ----------
-    e_on : xr.DataArray
-        Thermopile voltage in the RF on state (of calorimeter).
-    e_off : xr.DataArray
-        Thermopile voltage in the RF off state (of calorimeter).
-    cal_k : xr.DataArray
-        Thermopile sensitivity coefficients of the calorimeter.
-        Last dimension called 'deg' with integer coordinates
-        corresponding to the polynomial order.
-    p_of_e : bool
-        True means cal_k fits power in terms of thermopile
-        voltage. False means cal_k fits thermopile voltage
-        in terms of power. V/W or W/V.
-    P_dc_on_slow : xr.DataArray
-        DC power in the RF on state evalutated on the
-        long term at the point P2 was taken.
-    P_dc_off_slow : xr.DataArray
-        DC power in the RF off state evaluated on the
-        long term at the time P2 was taken (usually via
-        interpolation).
-
-    Returns
-    -------
-    xr.DataArray
-        Uncorrected effective efficiency.
-
-    """
-    E  = openloop_thermoelectric_power(cal_k, e_on - e_off, p_of_e)
-    # E_on = openloop_thermoelectric_power(cal_k, e_on, p_of_e)
-    # E = E_on - E_off
-
-    return E - P_dc_on_slow + P_dc_off_slow
-
-
-def calorimetric_power_delta_dcsub(
-    e_on: xr.DataArray,
-    e_off: xr.DataArray,
-    k: xr.DataArray,
-    p_of_e: bool,
-    dc_sub: xr.DataArray = 0,
-):
-    """
-    Calculate  Delta_x for a calorimeter run.
-
-    Delta_x is the difference in power measured by the calorimeters thermopile
-    element and the power metered by the sensor. It is a term used in calcualting
-    the correction factor of the calorimeter.
-
-    k is assumed to be formatted from the thermopile_sensitivity method.
-
-    If DC current is provided, then the DC power is calculated using V*I, if
-    a set point resistance is provided then DC power is calculated using V**2/R.
-    One of ether the setpoint OR the DC current must be provided.
-
-    Parameters
-    ----------
-    e_on : xr.DataArray
-        Thermopile voltage in the RF on state.
-    e_off : xr.DataArray
-        Thermopile voltage in the RF off state.
-    k : xr.DataArray
-        Sensitivity cofficients that describe the power at the sensitivity
-        of the thermopile element. Assumed to be in the mck data format.
-    p_of_e : bool
-        Whether or not he coefficients (k) are power in terms of e (True)
-        or e in terms of power (False).
-    dc_sub : xr.DataArray
-        DC substituted power.
-
-    Returns
-    -------
-    delta : xr.DataArray
-        Power delta.
-
-    """
-    pe_off = openloop_thermoelectric_power(k, e_off, p_of_e)
-    pe_on = openloop_thermoelectric_power(k, e_on, p_of_e)
-    delta = pe_on - pe_off + dc_sub
-    return delta
-
-
-def calorimetric_alpha_xs(
+def p_comp(
     dcsub_s: xr.DataArray,
     dcsub_3x: xr.DataArray,
     dcsub_3s: xr.DataArray,
@@ -812,9 +632,9 @@ def calorimetric_alpha_xs(
         alpha_xs.
 
     """
-    num = dcsub_s * dcsub_3x * np.abs(1 - gamma_g * gamma_s) ** 2
-    den = (1 - np.abs(gamma_s) ** 2) * dcsub_3s * np.abs(1 - gamma_g * gamma_x) ** 2
-    return num / den
+    num = dcsub_3x * (1 - np.abs(gamma_x) ** 2) * np.abs(1 - gamma_g * gamma_s) ** 2
+    den = dcsub_3s * (1 - np.abs(gamma_s) ** 2) * np.abs(1 - gamma_g * gamma_x) ** 2
+    return dcsub_s * ( num / den )
 
 
 def dc_substituted_power(
@@ -869,11 +689,13 @@ def dc_substituted_power(
 
 
 def gc_device_row(
-    alpha_xs: xr.DataArray,
-    delta_x: xr.DataArray,
+    p_comp_x: xr.DataArray,
+    p_cal_x: xr.DataArray,
     zeta_s: xr.DataArray,
     gamma_s: xr.DataArray,
     gamma_x: xr.DataArray,
+    k_s: xr.DataArray,
+    k_x: xr.DataArray,
     n_correction_terms: int = 1,
 ) -> xr.DataArray:
     """
@@ -893,6 +715,10 @@ def gc_device_row(
         reflection coefficient of standard s in the s1p_c format.
     gamma_x : xr.DataArray
         reflection coefficient of standard x in the s1p_c format.
+    k_s : xr.DataAarray
+        Sensitivity of the microcalorimeter while standard s is inside.
+    k_x : xr.DataArray
+        Sensitivity of the microcalorimeter while standard x is inside.
     n_correction_terms : int, optional
         Number of correction terms being calculated. The default is 1.
 
@@ -910,11 +736,28 @@ def gc_device_row(
     gx = 1 - np.abs(gamma_x) ** 2
     gs = 1 - np.abs(gamma_s) ** 2
 
-    solution = gs * (zeta_s * delta_x - gx * alpha_xs)
+    # coles notation
+    # solution = gs * (zeta_s * p_cal_x - gx * p_comp_x / gx)
+
+    # aarons notation
+    solution = p_cal_x - p_comp_x/(zeta_s)# * gx)
+
+    # the solution to this equation in the regression
     old_d = solution.dims[-1]
     solution = solution.rename({old_d: 'row'})
     solution = solution.assign_coords({'row': [0]})
     solution = solution.expand_dims({'col': [0]}, axis=-1)
+
+    # sparameter coefficients cij from model
+    cx1 = 1 + np.abs(gamma_x) ** 2
+    cs1 = 1 + np.abs(gamma_s) ** 2
+
+    cx2 = -2 * np.real(gamma_x)
+    cs2 = -2 *np.real(gamma_s)
+
+    cx3 = 2 *np.imag(gamma_x)
+    cs3 = 2 *np.imag(gamma_s)
+
     # drop unused scalar coords, dont want them.
     for k in solution.coords:
         if k not in solution.dims:
@@ -922,8 +765,13 @@ def gc_device_row(
 
     # common function for building a single observation in matrix
     def obs(cxi, csi, i):
-        num = gs * alpha_xs * cxi - zeta_s * delta_x * csi
-        out = num
+        # coles notation
+        # out = gs * (p_comp_x / gx)  * cxi /k_x - zeta_s * p_cal_x * csi / k_s
+
+        # aarons notation
+        left = (p_comp_x *cxi)/(zeta_s * gx * k_x)
+        right = (p_cal_x * csi) / (gs * k_s)
+        out = left - right
 
         # recast into mor useful coordinate space
         old_d = out.dims[-1]
@@ -939,50 +787,42 @@ def gc_device_row(
         return out
 
     if n_correction_terms == 1:
-        cx1 = 1 + np.abs(gamma_x) ** 2
-        cs1 = 1 + np.abs(gamma_s) ** 2
         row = obs(cx1, cs1, 1)
 
-    elif n_correction_terms == 2:
-        cx1 = 1 + np.abs(gamma_x) ** 2
-        cs1 = 1 + np.abs(gamma_s) ** 2
-        cx2 = -2 * np.real(gamma_x)
-        cs2 = -2 * np.real(gamma_s)
-        r11 = obs(cx1, cs1, 1)
-        r12 = obs(cx2, cs2, 2)
-        row = xr.concat((r11, r12), dim='col')
+    # elif n_correction_terms == 2:
+    #     raise NotImplementedError()
+    #     # cx1 = 1 + np.abs(gamma_x) ** 2
+    #     # cs1 = 1 + np.abs(gamma_s) ** 2
+    #     # cx2 = -2 * np.real(gamma_x)
+    #     # cs2 = -2 * np.real(gamma_s)
+    #     # r11 = obs(cx1, cs1, 1)
+    #     # r12 = obs(cx2, cs2, 2)
+    #     # row = xr.concat((r11, r12), dim='col')
 
     elif n_correction_terms == 3:
-        cx1 = 1 + np.abs(gamma_x) ** 2
-        cs1 = 1 + np.abs(gamma_s) ** 2
         r11 = obs(cx1, cs1, 1)
-
-        cx2 = -2 * np.real(gamma_x)
-        cs2 = -2 * np.real(gamma_s)
         r12 = obs(cx2, cs2, 2)
-
-        cx3 = 2 * np.imag(gamma_x)
-        cs3 = 2 * np.imag(gamma_s)
         r13 = obs(cx3, cs3, 3)
         row = xr.concat((r11, r12, r13), dim='col')
 
-    elif n_correction_terms == 4:
-        cx1 = 1
-        cs1 = 1
-        r11 = obs(cx1, cs1, 1)
+    # elif n_correction_terms == 4:
+    #     raise NotImplementedError()
+        # cx1 = 1
+        # cs1 = 1
+        # r11 = obs(cx1, cs1, 1)
 
-        cx2 = np.abs(gamma_x) ** 2
-        cs2 = np.abs(gamma_s) ** 2
-        r12 = obs(cx2, cs2, 2)
+        # cx2 = np.abs(gamma_x) ** 2
+        # cs2 = np.abs(gamma_s) ** 2
+        # r12 = obs(cx2, cs2, 2)
 
-        cx3 = -2 * np.real(gamma_x)
-        cs3 = -2 * np.real(gamma_s)
-        r13 = obs(cx3, cs3, 3)
+        # cx3 = -2 * np.real(gamma_x)
+        # cs3 = -2 * np.real(gamma_s)
+        # r13 = obs(cx3, cs3, 3)
 
-        cx4 = 2 * np.imag(gamma_x)
-        cs4 = 2 * np.imag(gamma_s)
-        r14 = obs(cx4, cs4, 4)
-        row = xr.concat((r11, r12, r13, r14), dim='col')
+        # cx4 = 2 * np.imag(gamma_x)
+        # cs4 = 2 * np.imag(gamma_s)
+        # r14 = obs(cx4, cs4, 4)
+        # row = xr.concat((r11, r12, r13, r14), dim='col')
 
     else:
         raise Exception('Correction terms ', n_correction_terms, ' not supported')

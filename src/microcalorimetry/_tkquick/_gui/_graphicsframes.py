@@ -33,6 +33,10 @@ customtkinter = ctk
 
 # plt.ioff()
 
+PLACEHOLDER_TEXT = 'Plots'
+CLOSE_PLOT = 'x'
+PERSISTENT_TABS = [PLACEHOLDER_TEXT, CLOSE_PLOT]
+
 
 class GraphicsTabs(customtkinter.CTkTabview):
     def __init__(self, master, **kwargs):
@@ -40,11 +44,10 @@ class GraphicsTabs(customtkinter.CTkTabview):
 
         # create tabs
         # create tabs
-        self.add('Console')
-        self.tab('Console').grid_rowconfigure(1, weight=1)
-        self.tab('Console').grid_columnconfigure(0, weight=1)
-        self.console = ConsoleFrame(master=self.tab('Console'))
-        self.set('Console')
+        self.add(PLACEHOLDER_TEXT)
+        self.tab(PLACEHOLDER_TEXT).grid_rowconfigure(1, weight=1)
+        self.tab(PLACEHOLDER_TEXT).grid_columnconfigure(0, weight=1)
+        self.console = PlaceHolderFrame(master=self.tab(PLACEHOLDER_TEXT))
 
         # # datafile viewer tab
         # self.add("HDF5")
@@ -53,12 +56,13 @@ class GraphicsTabs(customtkinter.CTkTabview):
         # self.hdf5viewer = HDF5viewer(master=self.tab('HDF5'))
 
         # other stuff
-        self.last_opened_tab = 'Console'
-        self.all_tabs = ['Console']  # , 'HDF5']
+        self.last_opened_tab = PLACEHOLDER_TEXT
+        self.all_tabs = [PLACEHOLDER_TEXT]  # , 'HDF5']
         self.plots_dict = {}
         self.console.grid(row=1, column=0, padx=20, pady=10, sticky='nsew')
         self.parent = master
         self.make_x_tab()
+        self.set(PLACEHOLDER_TEXT)
 
     def get_tab_by_ind(self, ind):
         for tab in self.all_tabs:
@@ -76,11 +80,7 @@ class GraphicsTabs(customtkinter.CTkTabview):
     def close_open_tab(self):
         last_opened = self.last_opened_tab
         if self.get() == 'x':
-            if (
-                self.last_opened_tab != 'Console'
-                and self.last_opened_tab != 'x'
-                and self.last_opened_tab != 'HDF5'
-            ):
+            if self.last_opened_tab not in PERSISTENT_TABS:
                 index = self.index(last_opened)
                 new_tab = self.get_tab_by_ind(index - 1)
                 self.delete(last_opened)
@@ -178,63 +178,18 @@ class GraphicsTabs(customtkinter.CTkTabview):
         # print(len(plt.get_fignums()), " open figures.")
 
 
-class ConsoleRedirector:
-    def __init__(self, widget):
-        self.widget = widget
+# class ConsoleRedirector:
+#     def __init__(self, widget):
+#         self.widget = widget
 
-    def write(self, text):
-        self.widget.insert(tk.END, text)
-        self.widget.see(tk.END)  # Auto-scroll to the bottom
+#     def write(self, text):
+#         self.widget.insert(tk.END, text)
+#         self.widget.see(tk.END)  # Auto-scroll to the bottom
 
 
-class ConsoleFrame(customtkinter.CTkFrame):
+class PlaceHolderFrame(customtkinter.CTkFrame):
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
-
-        # add widgets onto the frame...
-        # self.label = customtkinter.CTkLabel(self,text = '>> TERMINAL OUTPUT')
-        # self.label.grid(row=0, column=0, padx=20)
-        # create scrollable textbox
-        self.grid_rowconfigure(1, weight=1)
-        self.grid_columnconfigure(0, weight=1)
-
-        # console buttons
-        button = customtkinter.CTkButton(self, text='clear', command=self.button_clear)
-        button.grid(row=0, column=0, padx=10, sticky='nw')
-
-        self.textbox = customtkinter.CTkTextbox(
-            self, activate_scrollbars=False, font=ctk.CTkFont(**console_font)
-        )
-        self.textbox.grid(row=1, column=0, sticky='nsew')
-        self.textbox.configure(state='disabled')
-
-        # create CTk scrollbar
-        self.textbox_scrollbar = customtkinter.CTkScrollbar(
-            self, command=self.textbox.yview
-        )
-        self.textbox_scrollbar.grid(row=1, column=1, sticky='ns')
-
-        # connect textbox scroll event to CTk scrollbar
-        self.textbox.configure(yscrollcommand=self.textbox_scrollbar.set)
-
-        self.maxl = 500
-
-    def write(self, text):
-        self.textbox.configure(state='normal')
-        self.textbox.insert('end', text)
-        length = self.textbox.index('end')
-        length = float(length)
-
-        if length > self.maxl:
-            ind_new = length - self.maxl
-            self.textbox.delete('1.0', index2=str(float(ind_new)))
-        self.textbox.see(tk.END)
-        self.textbox.configure(state='disabled')
-
-    def button_clear(self):
-        self.textbox.configure(state='normal')
-        self.textbox.delete('1.0', index2='end')
-        self.textbox.configure(state='disabled')
 
 
 class HDF5GroupRow:
@@ -350,7 +305,7 @@ class HDF5GroupRow:
         # try to plot RMEMeas object onto the active figure
         elif value == ']':
             open_tab = self.master.parent.graphicstabs.get()
-            if open_tab == 'x' or open_tab == 'console':
+            if open_tab == 'x' or open_tab == PLACEHOLDER_TEXT:
                 raise Exception('Cant plot onto open tab')
             figure = self.master.parent.graphicstabs.plots_dict[open_tab]
             output = plot_RMEMeas(self.hdf5_file, self.name, fig=figure)
@@ -470,7 +425,7 @@ class HDF5viewer(customtkinter.CTkScrollableFrame):
             command=self.go_up,
         )
         self.root_label.grid(row=2, column=0, sticky='ew')
-        print('Building viewer from root : ', self.root)
+        # print('Building viewer from root : ', self.root)
         if os.path.isfile(self.hdf5_file):
             with h5py.File(self.hdf5_file, 'r') as f:
                 goto = f

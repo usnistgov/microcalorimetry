@@ -5,6 +5,8 @@
 *_test.hdf5
 htmlcov/
 uv.lock
+.microcalorimetry
+.ruff_cache
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
