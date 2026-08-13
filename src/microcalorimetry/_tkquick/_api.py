@@ -8,6 +8,7 @@ import matplotlib as mpl
 import microcalorimetry._tkquick._gui._toolbar as _toolbar
 import microcalorimetry._tkquick._gui._graphicsframes as _graphicsframes
 import microcalorimetry._tkquick._gui._methodframes as _methodframes
+import microcalorimetry._tkquick._gui._history as _history
 from importlib.metadata import version
 import matplotlib.backends.backend_tkagg
 
@@ -84,40 +85,33 @@ class GUI(ctk.CTk):
 
         self.plots_toolbar = plots_toolbar
 
-        # set up working tabs
+        # set up tabs for interacting with functions
         self.moduletabs = _methodframes.ModuleTabs(master=self)
         self.moduletabs.grid(row=1, column=0, padx=10, pady=10, sticky='nswe')
         self.moduletabs.grid_columnconfigure(0, weight=1)
 
-        # set up a graphics
-        self.graphicsframe = _graphicsframes.PlotsFrame(master=self)
+        # middle frame other stuff
+        self.middle_tabs = ctk.CTkTabview(self)
+        self.middle_tabs.grid(row=1, column=1, padx=0, pady=(10, 10), sticky='nswe')
+        middle_tab_dict = {
+            k: self.middle_tabs.add(k) for k in ['plots', 'history', 'hdf5']
+        }
+        for name, tab in middle_tab_dict.items():
+            tab.columnconfigure(0, weight=1)
+            tab.rowconfigure(0, weight=1)
 
-        # add a right sidebar if supplied(file navigator, or whatever)
-        if right_sidebar:
-            if right_sidebar_kwargs is None:
-                right_sidebar_kwargs = {}
-            self.right_sidebar = right_sidebar(master=self, **right_sidebar_kwargs)
+        # plot viewer
+        self.graphicsframe = _graphicsframes.PlotsFrame(master=middle_tab_dict['plots'])
+        self.graphicsframe.grid(padx=0, sticky='nswe')
 
-            if right_sidebar_grid is None:
-                self.right_sidebar.grid(
-                    row=1, column=2, padx=10, pady=(10, 10), sticky='nswe'
-                )
-            else:
-                self.right_sidebar.grid(**right_sidebar_grid)
+        # history navigator
+        self.hist_frame = _history.HistoryTopLevel(middle_tab_dict['history'])
+        self.hist_frame.grid(padx=0, sticky='nswe')
 
-            self.graphicsframe.grid(
-                row=1, column=1, padx=0, pady=(10, 10), sticky='nswe'
-            )
-        else:
-            self.right_sidebar = None
-            self.graphicsframe.grid(
-                row=1,
-                column=1,
-                padx=(0, 10),
-                pady=(10, 10),
-                sticky='nswe',
-                columnspan=2,
-            )
+        # hdf5 navigator
+        right_sidebar = _graphicsframes.HDF5viewer
+        self.right_sidebar = right_sidebar(master=middle_tab_dict['hdf5'])
+        self.right_sidebar.grid(padx=0, sticky='nswe')
 
     def update_header(self):
         self.title_name = self.package_name + self.version_num

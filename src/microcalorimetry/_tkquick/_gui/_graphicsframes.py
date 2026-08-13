@@ -297,7 +297,9 @@ class GraphicsTabs(customtkinter.CTkTabview):
         canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
         # a custom plot tool bar definition may have been passed in
-        custom_toolbar = self.master.master.plots_toolbar
+        from microcalorimetry._tkquick._api import _APP
+
+        custom_toolbar = _APP.plots_toolbar
         if custom_toolbar is None:
             toolbar = NavigationToolbar2Tk(canvas, root)
         else:
@@ -443,14 +445,16 @@ class HDF5GroupRow:
         self.master.build(path=self.name)
 
     def make_plot(self, value):
+        from microcalorimetry._tkquick._api import _APP
+
         # make a new plot
         self.plot.set(None)
-        plot_name = f'{Path(self.hdf5_file).stem}_{"_".join(self.name.split("/"))}'
+        plot_name = f'{Path(self.hdf5_file).stem}{".".join(self.name.split("/"))}'
         if value == '+':
             output = plot_RMEMeas(self.hdf5_file, self.name)
             for item in output:
                 if isinstance(item, plt.Figure):
-                    self.master.parent.graphicsframe.add_plot(item, plot_name)
+                    _APP.graphicsframe.add_plot(item, plot_name)
         # try to plot RMEMeas object onto the active figure
         elif value == ']':
             open_tab = self.master.parent.graphicstabs.get()
@@ -464,7 +468,7 @@ class HDF5GroupRow:
             output = uncertainty_breakdown(self.hdf5_file, self.name)
             for item in output:
                 if isinstance(item, plt.Figure):
-                    self.master.parent.graphicsframe.add_plot(item, plot_name)
+                    _APP.graphicsframe.add_plot(item, plot_name)
 
     def make_meta(self):
         with h5py.File(self.master.hdf5_file, 'r') as f:
