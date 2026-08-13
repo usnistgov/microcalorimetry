@@ -25,7 +25,9 @@ docstring-code-format = true
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
 
-
+[tool.setuptools_scm]
+# fall back in case the build version fails
+fallback_version = "0.0.0"
 
 
 [project]
