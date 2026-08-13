@@ -59,7 +59,7 @@ class PlotsFrame(customtkinter.CTkFrame):
         # export plots
         self.export_menu = ctk.CTkOptionMenu(
             self.top_frame,
-            values=['snapshot all', 'pickle all', 'pickle', 'unpickle'],
+            values=['snapshot all', 'pickle all', 'unpickle'],
             command=self.export_callback,
         )
         self.export_menu.grid(row=0, column=1, padx=(0, 10), sticky='nwe', pady=10)

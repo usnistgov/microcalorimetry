@@ -78,22 +78,8 @@ class ToolBarFrame(ctk.CTkFrame):
 
         # working directory label
         self.cwd_frame = ctk.CTkFrame(self, fg_color='transparent')
-        self.cwd_frame.grid(row=0, sticky='ew', pady=(0, 10))
+        self.cwd_frame.grid(row=0, sticky='ew')
 
         self.cwd_label: CWDNavigator = CWDNavigator(self.cwd_frame)
         self.cwd_label.grid(row=0, column=0, padx=(0, 10), sticky='ew')
         self.cwd_label.update()
-
-        # other general stuff
-        self.tools_frame = ctk.CTkFrame(self, fg_color='transparent')
-        self.tools_frame.grid(row=1, sticky='ew', pady=(0, 10))
-
-        self.histbutton = ctk.CTkButton(
-            self.tools_frame,
-            text='history',
-            command=self.history_callback,
-        )
-        self.histbutton.grid(row=1, column=0, padx=(0, 10), sticky='nwe')
-
-    def history_callback(self):
-        history = HistoryTopLevel()
