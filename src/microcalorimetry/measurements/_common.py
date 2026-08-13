@@ -28,7 +28,7 @@ def _apply_tunit(x: np.array, time_units: str, relative: bool) -> np.array:
 
 
 def view(
-    datarecord: Folder,
+    data_record: Folder,
     include_columns: list[str] = ['*'],
     time_units: str = 'datetime',
     relative_time: bool = False,
@@ -38,7 +38,7 @@ def view(
 
     Parameters
     ----------
-    datarecord : Folder
+    data_record : Folder
         Path to the metadata file of an active experiment
     include_columns : list[str]
         Columns to include with glob patterns. Leave as ['*']
@@ -63,7 +63,7 @@ def view(
     figures : tuple[Figure]
         Tuple of output figures.
     """
-    metadata = Path(datarecord)
+    metadata = Path(data_record)
     if metadata.is_dir():
         metadata = [p for p in metadata.glob('*metadata*')][0]
 

@@ -1,4 +1,4 @@
-from microcalorimetry._tkquick.settings import history_file
+from microcalorimetry._tkquick.settings import cwd_history_file
 from datetime import datetime
 from pathlib import Path
 from fnmatch import fnmatch
@@ -7,6 +7,7 @@ import customtkinter as ctk
 import shutil
 from typing import TypedDict, TypeAlias
 from functools import partial
+from microcalorimetry._tkquick.settings import get_cwd_settings
 
 
 class FunctionSaveDict(TypedDict):
@@ -33,12 +34,12 @@ def today() -> str:
 
 def clear_history():
     """Clear history file."""
-    Path(history_file()).unlink(missing_ok=True)
+    Path(cwd_history_file()).unlink(missing_ok=True)
 
 
 def read_history() -> dict[FunctionSaveDict]:
     try:
-        with open(history_file(), 'r') as f:
+        with open(cwd_history_file(), 'r') as f:
             history = yaml.safe_load(f)
         if history is None:
             return {}
@@ -74,7 +75,7 @@ def append_history(fname: str, module: str, parameters: FunctionSaveDict):
 
     history[fieldname] = parameters
 
-    with open(history_file(), 'w') as f:
+    with open(cwd_history_file(), 'w') as f:
         yaml.safe_dump(history, f, indent=True, sort_keys=False)
 
 

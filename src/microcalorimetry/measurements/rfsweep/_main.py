@@ -256,7 +256,7 @@ def _parse_cli(
 
 
 def parse(
-    datarecords: list[Folder],
+    data_records: list[Folder],
     DUT_power_analysis: dict,
     calorimeter_power_analysis: dict,
     make_plots: bool = True,
@@ -274,7 +274,7 @@ def parse(
 
     Parameters
     ----------
-    datarecords : list[Folder]
+    data_records : list[Folder]
         Path(s) to metadata files (or directories their directories) containing rfsweep runs.
     DUT_power_analysis : dict, optional
         Set the analysis settings for the DUT.
@@ -416,7 +416,7 @@ def parse(
 
     """
     verbose = False
-    metadata = datarecords
+    metadata = data_records
     # wrap propagator around functions
     basicprop = RMEProp(
         sensitivity=True,

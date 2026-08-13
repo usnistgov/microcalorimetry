@@ -28,6 +28,7 @@ def review_eta(
     historical_data: configs.EtaHistorical = None,
     repeatability_model: configs.Eta = None,
     k: int = 2,
+    frequency_precision: int = 4,
     max_hist_legend: int = None,
     hist_avg: bool = True,
 ) -> tuple[plt.Figure, plt.Figure]:
@@ -44,6 +45,9 @@ def review_eta(
         Model of calorimeter's repeatability to plot.
     k : int, optional
         Expansion factor, by default 2
+    frequency_precision : int, optional
+        Precision (decimal places) to round off frequencies to before averaging and comparing
+        measurements.
     max_hist_legend : int, optional
         Maxmium number of historical measurmeents to include in the legend.
         If None, will include all. Many historical measurements will result
@@ -63,9 +67,20 @@ def review_eta(
     # get historical data
     if historical_data is None:
         historical_data = {}
+
     historical_data = configs.EtaHistorical(historical_data)
 
     nominals = historical_data.load_nominals()
+
+    # average frequency points for each measurement
+    # after rounding off frequency values.
+    nominals = {
+        k: numbers.mean_unique_values(
+            v.assign_coords(frequency=np.round(v.frequency, frequency_precision)),
+            dim='frequency',
+        )
+        for k, v in nominals.items()
+    }
     # i don't want to deal with this one anymore
     # so throw it awway
     del historical_data
@@ -80,7 +95,7 @@ def review_eta(
 
     ydiff_scale = 100
 
-    fig, ax = plt.subplots(2, 1)
+    fig, ax = plt.subplots(2, 1, sharex=True)
 
     handles = []
     labels = []

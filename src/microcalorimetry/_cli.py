@@ -10,16 +10,16 @@ def _main():
 # %% Analysis subgroups
 @_main.command(name='gui')
 @click.option(
-    '--no-console-stdout',
+    '--last_cwd',
     is_flag=True,
     default=False,
-    help='Sets the stdout to the GUIs internal console (buggy, a terminal console is nicer).',
+    help='Sets the CWD to the last one opened in the GUI.',
 )
 def _gui_cli(*args, **kwargs):
     click.echo(_gui(*args, **kwargs))
 
 
-def _gui(no_console_stdout: bool = False):
+def _gui(last_cwd: bool = False):
     # put import statements here so they are delay until run time
     from microcalorimetry._tkquick import GUI
     from microcalorimetry._tkquick._gui._graphicsframes import HDF5viewer
@@ -29,12 +29,18 @@ def _gui(no_console_stdout: bool = False):
     import microcalorimetry.measurements as measurements
     import microcalorimetry.analysis as anl
     import microcalorimetry.export as export
+    from microcalorimetry._tkquick.settings import get_user_settings
     from pathlib import Path
+
+    user_settings = get_user_settings()
+    if last_cwd and user_settings.last_cwd is not None:
+        import os
+
+        # print(f"Starting in {user_settings.last_cwd}")
+        os.chdir(user_settings.last_cwd)
 
     app = GUI(
         'microcalorimetry',
-        stdout_gui=no_console_stdout,
-        stderr_gui=no_console_stdout,
         right_sidebar=HDF5viewer,
         right_sidebar_kwargs=dict(width=350),
         icon_path=Path(__file__).parent / 'graphics/icon.ico',

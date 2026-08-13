@@ -38,16 +38,175 @@ CLOSE_PLOT = 'x'
 PERSISTENT_TABS = [PLACEHOLDER_TEXT, CLOSE_PLOT]
 
 
+class PlotsFrame(customtkinter.CTkFrame):
+    def __init__(self, master, *args, **kwargs):
+        super().__init__(master, *args, **kwargs)
+        self.rowconfigure(2, weight=1)
+        self.columnconfigure(0, weight=1)
+
+        # frame to store little menu drop downs
+        self.top_frame = ctk.CTkFrame(self, fg_color='transparent')
+        self.top_frame.grid(row=0, column=0, sticky='nesw', pady=10)
+
+        self.close_menu = ctk.CTkOptionMenu(
+            self.top_frame,
+            values=['active', 'all'],
+            command=self.close_callback,
+        )
+        self.close_menu.grid(row=0, column=0, padx=(0, 10), sticky='nwe', pady=10)
+        self.close_menu.set('close')
+
+        # export plots
+        self.export_menu = ctk.CTkOptionMenu(
+            self.top_frame,
+            values=['snapshot all', 'pickle all', 'pickle', 'unpickle'],
+            command=self.export_callback,
+        )
+        self.export_menu.grid(row=0, column=1, padx=(0, 10), sticky='nwe', pady=10)
+        self.export_menu.set('file')
+
+        # plot selector, spans the whole row
+
+        self.sel_frame = ctk.CTkFrame(self, fg_color='transparent')
+        self.sel_frame.grid(row=1, column=0, sticky='nesw', pady=10)
+        self.sel_frame.columnconfigure(0, weight=1)
+
+        self.selector = ctk.CTkOptionMenu(
+            self.sel_frame, values=[], command=self.selector_callback
+        )
+        self.selector.grid(row=1, column=0, sticky='nesw', columnspan=100)
+        self.selector.set('')
+
+        # shows the active tabs
+        # this should only be communicated with through
+        # this frame, as it the tool bar widgets need to be updated
+        # accordingly
+        self._tabview: GraphicsTabs = GraphicsTabs(self)
+        self._tabview.grid(row=2, column=0, sticky='nesw')
+
+    def selector_callback(self, choice):
+        self._tabview.set(choice)
+
+    def add_plot_to_selector(self, name):
+        old_values = self.selector.cget('values')
+        values = [name] + old_values
+        self.selector.configure(values=values)
+        self.selector.set(name)
+
+    def add_hidden_tabs(self):
+        open_labels = plt.get_figlabels()
+        for ol in open_labels:
+            if ol not in self._tabview.plots_dict:
+                print('Caught hidden tab, ', ol, ',  adding i it')
+                fig = plt.figure(ol)
+                name = str(plt.figure(ol).number)
+                self.add_plot(fig, 'FAILED' + name)
+
+    def add_dummy_plot(self, name):
+        fig = Figure(figsize=(5, 4), dpi=100)
+        t = np.arange(0, 3, 0.01)
+        fig.add_subplot(111).plot(t, 2 * np.sin(2 * np.pi * t))
+        self.add_plot(fig, name)
+
+    def remove_plot_from_selector(self, name):
+        old_values = self.selector.cget('values')
+        old_values.remove(name)
+        self.selector.configure(values=old_values)
+
+    def clear_selector(self):
+        self.selector.configure(values=[])
+        self.selector.set('')
+
+    def add_plot(self, fig: plt.Figure, name: str):
+        actual_name = self._tabview.add_plot(fig, name)
+        self.add_plot_to_selector(actual_name)
+
+    def export_callback(self, choice):
+        self.export_menu.set('file')
+        match choice:
+            case 'snapshot all':
+                self.plotmenu_export_all()
+            case 'pickle all':
+                self.pickle_all_figs()
+            case 'unpickle':
+                self.unpickle_figs()
+            case _:
+                raise Exception(f'{choice} not recognized')
+
+    def close_callback(self, choice):
+        self.close_menu.set('close')
+        match choice:
+            case 'all':
+                self._tabview.close_all_tabs()
+                self.clear_selector()
+            case 'active':
+                self.remove_plot_from_selector(self._tabview.get())
+                self._tabview.close_open_tab()
+            case _:
+                raise Exception(f'{choice} not recognized')
+
+    def plotmenu_export_all(self):
+        dialog = ctk.CTkInputDialog(
+            text='enter a format [.pdf, .png]', title='Export Format'
+        )
+        text = dialog.get_input()
+        folder = str(
+            ctk.filedialog.askdirectory(
+                initialdir=str(Path.cwd()),
+                title='Export plots to folder',
+            )
+        )
+
+        if folder != '':
+            folder = Path(folder)
+            frmt = text
+            plots_dict = self._tabview.plots_dict
+            for name, fig in plots_dict.items():
+                fig.savefig(folder / f'{name}{frmt}')
+        else:
+            print('no folder selected.')
+
+    def pickle_all_figs(self):
+        """Pickles all the open folders to a figure."""
+        import pickle
+
+        folder = str(
+            ctk.filedialog.askdirectory(
+                initialdir=Path.cwd(),
+                title='Select folder to save pickle figures to.',
+            )
+        )
+
+        if folder != '':
+            folder = Path(folder)
+            plots_dict = self._tabview.plots_dict
+            for name, fig in plots_dict.items():
+                with open(folder / f'{name}.pklfig', 'wb') as f:
+                    pickle.dump(fig, f)
+        else:
+            print('no folder selected.')
+
+    def unpickle_figs(self):
+        """Pickles all the open folders to a figure."""
+        import pickle
+
+        files = ctk.filedialog.askopenfilenames(
+            title='(Only select files you made, pickling can be unsafe) Select pickle objects to open:',
+            filetypes=[('Pickled Figure', '.pklfig')],
+            initialdir=str(Path.cwd()),
+        )
+
+        for fn in files:
+            with open(fn, 'rb') as f:
+                fig_loaded = pickle.load(f)
+            self.add_plot(fig_loaded, Path(fn).stem)
+
+
 class GraphicsTabs(customtkinter.CTkTabview):
+    """Container where plots are viewed."""
+
     def __init__(self, master, **kwargs):
         super().__init__(master, command=self.close_open_tab, **kwargs)
-
-        # create tabs
-        # create tabs
-        self.add(PLACEHOLDER_TEXT)
-        self.tab(PLACEHOLDER_TEXT).grid_rowconfigure(1, weight=1)
-        self.tab(PLACEHOLDER_TEXT).grid_columnconfigure(0, weight=1)
-        self.console = PlaceHolderFrame(master=self.tab(PLACEHOLDER_TEXT))
 
         # # datafile viewer tab
         # self.add("HDF5")
@@ -56,13 +215,10 @@ class GraphicsTabs(customtkinter.CTkTabview):
         # self.hdf5viewer = HDF5viewer(master=self.tab('HDF5'))
 
         # other stuff
-        self.last_opened_tab = PLACEHOLDER_TEXT
-        self.all_tabs = [PLACEHOLDER_TEXT]  # , 'HDF5']
+        self.last_opened_tab = None
+        self.all_tabs = []  # , 'HDF5']
         self.plots_dict = {}
-        self.console.grid(row=1, column=0, padx=20, pady=10, sticky='nsew')
         self.parent = master
-        self.make_x_tab()
-        self.set(PLACEHOLDER_TEXT)
 
     def get_tab_by_ind(self, ind):
         for tab in self.all_tabs:
@@ -70,51 +226,36 @@ class GraphicsTabs(customtkinter.CTkTabview):
                 return tab
         raise ValueError('Index not in tabs')
 
-    def make_x_tab(self):
-        try:
-            self.delete('x')
-        except ValueError:
-            pass
-        self.add('x')
+    def close_all_tabs(self):
+        tabnames = list(self.plots_dict.keys())
+        for tabname in tabnames:
+            try:
+                self.delete(tabname)
+            except Exception as e:
+                print(f'Failed to close {tabname} for {e}')
+        self.close_hidden_tabs()
 
-    def close_open_tab(self):
-        last_opened = self.last_opened_tab
-        if self.get() == 'x':
-            if self.last_opened_tab not in PERSISTENT_TABS:
-                index = self.index(last_opened)
-                new_tab = self.get_tab_by_ind(index - 1)
-                self.delete(last_opened)
-                self.set(new_tab)
-            elif self.last_opened_tab != 'x':
-                self.set(self.last_opened_tab)
-        self.last_opened_tab = self.get()
+    def close_open_tab(self, name: str = None):
+        if name is None:
+            name = self.get()
+
+        index = self.index(name)
+        # change open tab before deleting
+        # if we are deleting the open tab
+        if index > 0 and name == self.get():
+            new_tab_ind = index - 1
+            new_tab = self.get_tab_by_ind(index - 1)
+            self.set(new_tab)
+        self.delete(name)
         self.close_hidden_tabs()
         print(len(plt.get_fignums()), ' open figures.')
 
-    # sometimes analysis functions make plots then throw an error and they dont
-    # get closed out/added to tabs. This looks for them and closes them.
-    # gets run after analysis functions.
     def close_hidden_tabs(self):
         open_labels = plt.get_figlabels()
         for ol in open_labels:
             if ol not in self.plots_dict:
                 print('Caught hidden tab, ', ol, ', closing it')
                 plt.close(ol)
-
-    def add_hidden_tabs(self):
-        open_labels = plt.get_figlabels()
-        for ol in open_labels:
-            if ol not in self.plots_dict:
-                print('Caught hidden tab, ', ol, ',  it')
-                fig = plt.figure(ol)
-                name = str(plt.figure(ol).number)
-                self.add_plot(fig, name)
-
-    def add_dummy_plot(self, name):
-        fig = Figure(figsize=(5, 4), dpi=100)
-        t = np.arange(0, 3, 0.01)
-        fig.add_subplot(111).plot(t, 2 * np.sin(2 * np.pi * t))
-        self.add_plot(fig, name)
 
     def tab_exists(self, name):
         try:
@@ -144,18 +285,19 @@ class GraphicsTabs(customtkinter.CTkTabview):
         name = new_name
         fig.set_label(name)
         self.add(name)
+        self.set(name)
         self.plots_dict[name] = fig
         self.tab(name).grid_rowconfigure(0, weight=1)
         self.tab(name).grid_columnconfigure(0, weight=1)
         self.all_tabs.append(name)
-        self.make_x_tab()
         root = self.tab(name)
 
         canvas = FigureCanvasTkAgg(fig, master=root)  # A tk.DrawingArea.
         canvas.draw()
         canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
-        custom_toolbar = self.master.plots_toolbar
+        # a custom plot tool bar definition may have been passed in
+        custom_toolbar = self.master.master.plots_toolbar
         if custom_toolbar is None:
             toolbar = NavigationToolbar2Tk(canvas, root)
         else:
@@ -169,12 +311,18 @@ class GraphicsTabs(customtkinter.CTkTabview):
             key_press_handler(event, canvas, toolbar)
 
         canvas.mpl_connect('key_press_event', on_key_press)
+        # hide tabs
+        self._top_spacing = 0
+        self._top_button_overhang = 0
+        self._segmented_button.grid_forget()
+        # self._configure_grid()
 
         def _quit():
             root.quit()  # stops mainloop
             root.destroy()  # this is necessary on Windows to prevent
             # Fatal Python Error: PyEval_RestoreThread: NULL tstate
 
+        return name
         # print(len(plt.get_fignums()), " open figures.")
 
 
@@ -297,11 +445,12 @@ class HDF5GroupRow:
     def make_plot(self, value):
         # make a new plot
         self.plot.set(None)
+        plot_name = f'{Path(self.hdf5_file).stem}_{"_".join(self.name.split("/"))}'
         if value == '+':
             output = plot_RMEMeas(self.hdf5_file, self.name)
             for item in output:
                 if isinstance(item, plt.Figure):
-                    self.master.parent.graphicstabs.add_plot(item, 'plt')
+                    self.master.parent.graphicsframe.add_plot(item, plot_name)
         # try to plot RMEMeas object onto the active figure
         elif value == ']':
             open_tab = self.master.parent.graphicstabs.get()
@@ -315,7 +464,7 @@ class HDF5GroupRow:
             output = uncertainty_breakdown(self.hdf5_file, self.name)
             for item in output:
                 if isinstance(item, plt.Figure):
-                    self.master.parent.graphicstabs.add_plot(item, 'plt')
+                    self.master.parent.graphicsframe.add_plot(item, plot_name)
 
     def make_meta(self):
         with h5py.File(self.master.hdf5_file, 'r') as f:

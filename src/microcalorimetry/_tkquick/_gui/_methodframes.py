@@ -326,22 +326,27 @@ class ModuleToolBar(ctk.CTkFrame):
         self.output_selection_frame.grid(
             row=1, column=0, columnspan=4, padx=5, pady=5, sticky='nwe'
         )
-        self.output_selection_frame.columnconfigure(1, weight=2)
-        self.output_selection_frame.columnconfigure(0, weight=0)
-        self.file_button = ctk.CTkButton(
-            self.output_selection_frame,
-            text='save output data as',
-            command=self.button_new_file,
+        self.output_selection_frame.columnconfigure(1, weight=1)
+        self.output_file_button = forms.PathBox(
+            self.output_selection_frame, 0, 'output', 'SaveAsPath'
         )
 
-        self.file_button.grid(row=0, column=0, padx=10, pady=(5, 0), sticky='nwe')
+        # self.output_selection_frame.columnconfigure(1, weight=2)
+        # self.output_selection_frame.columnconfigure(0, weight=0)
+        # self.file_button = ctk.CTkButton(
+        #     self.output_selection_frame,
+        #     text='save output data as',
+        #     command=self.button_new_file,
+        # )
 
-        self.filename_entry = ctk.CTkEntry(
-            self.output_selection_frame, placeholder_text=None
-        )
-        self.filename_entry.grid(
-            row=0, column=1, padx=(0, 10), pady=(5, 0), sticky='ew', columnspan=3
-        )
+        # self.file_button.grid(row=0, column=0, padx=10, pady=(5, 0), sticky='nwe')
+
+        # self.filename_entry = ctk.CTkEntry(
+        #     self.output_selection_frame, placeholder_text=None
+        # )
+        # self.filename_entry.grid(
+        #     row=0, column=1, padx=(0, 10), pady=(5, 0), sticky='ew', columnspan=3
+        # )
 
         # self.group_label = ctk.CTkButton(
         #     self.output_selection_frame,
@@ -433,16 +438,11 @@ class ModuleToolBar(ctk.CTkFrame):
 
     @property
     def filename_path(self):
-        return self.filename_entry.get()
+        return self.output_file_button.get()
 
     @filename_path.setter
     def filename_path(self, text):
-        self.save_to_file = text
-        self.last_save_files[self.func_tabs.get()]['file'] = text
-        self.filename_entry.delete(0, last_index=tk.END)
-        if text is not None:
-            self.filename_entry.insert(0, text)
-        print(self.last_save_files[self.func_tabs.get()])
+        self.output_file_button.setfield(text)
 
     def button_new_file(self):
         filename = str(
@@ -599,24 +599,24 @@ class ModuleToolBar(ctk.CTkFrame):
         """
         toolbar = self
         func_tabs = self.func_tabs
+        opentab = toolbar.stagemenu.get()
+        parameters, _ = self.extract_function_parameters(opentab)
+        filepath = parameters['output']
+        kwargs = parameters['parameters']
 
+        plt_name = f'{self.module_name}.{opentab}'
         # add to history file
 
         def add_plots(item):
             print('adding plots')
             if isinstance(item, plt.Figure):
-                toolbar.parent.master.parent.graphicstabs.add_plot(item, 'plt')
+                toolbar.parent.master.parent.graphicsframe.add_plot(item, plt_name)
             elif isinstance(item, list):
                 for i in item:
                     if isinstance(i, plt.Figure):
-                        toolbar.parent.master.parent.graphicstabs.add_plot(i, 'plt')
+                        toolbar.parent.master.parent.graphicsframe.add_plot(i, plt_name)
             elif isinstance(item, rmellipse.utils.GroupSaveable):
                 pass
-
-        opentab = toolbar.stagemenu.get()
-        parameters, _ = self.extract_function_parameters(opentab)
-        filepath = parameters['output']
-        kwargs = parameters['parameters']
 
         # test for class method, if class method call from class
         fun = toolbar.functions[opentab]
@@ -679,7 +679,7 @@ class ModuleToolBar(ctk.CTkFrame):
                 except Exception as e:
                     print('FUNCTION FAILED')
                     print('---------------')
-                    toolbar.parent.master.parent.graphicstabs.add_hidden_tabs()
+                    toolbar.parent.master.parent.graphicsframe.add_hidden_tabs()
                     print('ERROR TRACE BACK')
                     print('----------------')
                     raise e
