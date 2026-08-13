@@ -79,7 +79,7 @@ def append_history(fname: str, module: str, parameters: FunctionSaveDict):
         yaml.safe_dump(history, f, indent=True, sort_keys=False)
 
 
-class HistoryTopLevel(ctk.CTkToplevel):
+class HistoryTopLevel(ctk.CTkFrame):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -87,8 +87,8 @@ class HistoryTopLevel(ctk.CTkToplevel):
         from microcalorimetry._tkquick._api import _APP, GUI
 
         self.app: GUI = _APP
-        self.title('microcalorimetry history')
-        self.geometry('700x500')
+        # self.title('microcalorimetry history')
+        # self.geometry('700x500')
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
         # self.focus()
@@ -114,11 +114,6 @@ class HistoryTopLevel(ctk.CTkToplevel):
         # display options after selecting a function
         self.options = HistoryOptions(self)
         self.options.grid(row=1, column=2, sticky='nsew')
-
-        # Bring to front temporarily
-        self.lift()
-        self.attributes('-topmost', True)
-        self.focus()
 
     @property
     def default_glob(self) -> str:

@@ -479,7 +479,7 @@ def parse(
         if always_present not in analysis_config['analysis_config']:
             analysis_config['analysis_config'][always_present] = {}
 
-    print(analysis_config)
+    # print(analysis_config)
 
     # set up parser
     metadata_dict = {}

@@ -22,7 +22,6 @@ def _gui_cli(*args, **kwargs):
 def _gui(last_cwd: bool = False):
     # put import statements here so they are delay until run time
     from microcalorimetry._tkquick import GUI
-    from microcalorimetry._tkquick._gui._graphicsframes import HDF5viewer
     import sys
     import microcalorimetry.measurements.dcsweep as dcsweep
     import microcalorimetry.measurements.rfsweep as rfsweep
@@ -41,8 +40,6 @@ def _gui(last_cwd: bool = False):
 
     app = GUI(
         'microcalorimetry',
-        right_sidebar=HDF5viewer,
-        right_sidebar_kwargs=dict(width=350),
         icon_path=Path(__file__).parent / 'graphics/icon.ico',
     )
     # find installed python packages matching aname pattern lik ('-microcalorimetry')
