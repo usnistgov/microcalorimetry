@@ -401,9 +401,9 @@ class PathBox:
         if text == '':
             return None
         if 'list' in self.dtype:
-            modified = text.replace('"', '').replace("'", '').split(', ')
-            result = [item.strip() for item in modified.split(',')]
-            return
+            modified = text.replace('"', '').replace("'", '').split(',')
+            result = [item.strip() for item in modified]
+            return result
         else:
             return text.strip()
 
