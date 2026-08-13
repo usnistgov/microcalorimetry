@@ -567,7 +567,7 @@ class MicrocalorimeterRunner:
             # dependent model, so the linear approximation is the
             # constant c
             elif isinstance(coeffs, RMEMeas) and 'col' in coeffs.dims:
-                linear_term = 1 / float(coeffs.nom.sel(col = 'c'))
+                linear_term = 1 / float(coeffs.nom.sel(col='c'))
 
             # you could load in a float too, that's cool.
             elif isinstance(coeffs, float):
@@ -575,7 +575,7 @@ class MicrocalorimeterRunner:
 
             else:
                 raise TypeError(
-                    fr'unexpected type of {
+                    rf'unexpected type of {
                         coeffs
                     }, expected RMEMeas or float (can provide the linear term as a float in V/W).'
                 )
@@ -1013,7 +1013,7 @@ class MicrocalorimeterRunner:
             print(format_column(cname, self.record[cname]))
 
         # try to plot what is stored in memory and
-        # isnt yet accesible in saved datarecord
+        # isnt yet accesible in saved data_record
         short_plot_window = self.parameters['output_settings']['short_plot_time_window']
         plot_interval = self.parameters['output_settings']['plot_interval']
         last_plot_update_time = self.record['last_plot_update_time']

@@ -411,7 +411,7 @@ def _get_metadata(path: Path):
 
 
 def parse_v0(
-    datarecord: Path,
+    data_record: Path,
     settings: Path = None,
     measlist: Path = None,
     on_time_window: float = 300,
@@ -431,8 +431,8 @@ def parse_v0(
 
     Parameters
     ----------
-    datarecord : Path
-        Path to datarecord metadata file or folder.
+    data_record : Path
+        Path to data_record metadata file or folder.
     settings : Path, optional
         Path to experiment settings. Assumed to be a file called settings.csv in metadata directory if not provided.
         The default is None.
@@ -473,7 +473,7 @@ def parse_v0(
     # look at first meatadata file and check what's in it
 
     # do the analysis and save things
-    metadata = Path(datarecord)
+    metadata = Path(data_record)
     if metadata.is_dir():
         metadata = [p for p in metadata.glob('*metadata*')][0]
     meta_dir = metadata.parents[0]
@@ -519,7 +519,7 @@ def parse_v0(
 
 
 def parse_v1(
-    datarecords: list[Folder],
+    data_records: list[Folder],
     thermopile_monitor: str,
     heater: str,
     on_min_wait_time: float = 0.0,
@@ -536,8 +536,8 @@ def parse_v1(
 
     Parameters
     ----------
-    datarecords : list[Folder]
-        List of paths to datarecord files (or their folders) containing dcsweep
+    data_records : list[Folder]
+        List of paths to data_record files (or their folders) containing dcsweep
         measurements.
     thermopile_monitor : str
         Name of thermopile monitor instrument.
@@ -575,7 +575,7 @@ def parse_v1(
     """
 
     # distinguish between list of paths and single path
-    metadata = datarecords
+    metadata = data_records
     if isinstance(metadata, str) or isinstance(metadata, Path):
         metadata = [metadata]
 

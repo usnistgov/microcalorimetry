@@ -82,7 +82,7 @@ HDF5_EXTENSIONS = ['.h5', '.hdf5', '.hdf']
 def _load_file(obj, group=None):
     # assume string objects or Paths are files
     path = Path(obj)
-    valid = '.yml', '.yaml', '.csv'
+    valid = ['.yml', '.yaml', '.csv'] + HDF5_EXTENSIONS
     # fo yml, yaml files
     if path.suffix == '.yml' or path.suffix == '.yaml':
         data = _load_yaml(path)

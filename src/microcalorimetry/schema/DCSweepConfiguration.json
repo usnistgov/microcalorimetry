@@ -7,11 +7,11 @@
             "properties": {
                 "maxlen": {
                     "type": "integer",
-                    "description": "maximum length of the datarecord in memory"
+                    "description": "maximum length of the data record in memory"
                 },
                 "minlen": {
                     "type": "integer",
-                    "description": "minimum length of the datarecord in memory"
+                    "description": "minimum length of the data record in memory"
                 }
             },
             "additionalProperties": false

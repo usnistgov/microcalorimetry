@@ -280,7 +280,7 @@ class PathBox:
             self.setfield(default)
 
     def fetch_paths(self):
-        print(self.dtype)
+        # print(self.dtype)
         if 'Path' == self.dtype:
             filename = ctk.filedialog.askopenfilename(
                 initialdir=str(Path.cwd()),
@@ -291,7 +291,8 @@ class PathBox:
                 self.setfield(filename)
                 # print(filename)
             else:
-                print('no file selected.')
+                pass
+                # print('no file selected.')
 
         elif 'SaveAsPath' == self.dtype:
             filename = ctk.filedialog.asksaveasfilename(
@@ -302,7 +303,8 @@ class PathBox:
                 self.setfield(filename)
                 # print(filename)
             else:
-                print('no file selected.')
+                pass
+                # print('no file selected.')
 
         elif 'list[Path]' == self.dtype:
             filename = ctk.filedialog.askopenfilename(
@@ -317,7 +319,8 @@ class PathBox:
                 self.setfield(filename)
                 # print(filename)
             else:
-                print('no file selected.')
+                pass
+                # print('no file selected.')
 
         elif 'list[Folder]' == self.dtype:
             selected_folders = []
@@ -334,14 +337,16 @@ class PathBox:
                     break
 
                 selected_folders.append(folder)
-                print(f'Added: {folder}')
+                pass
+                # print(f'Added: {folder}')
 
             if selected_folders:
                 folders = ', '.join(selected_folders)
                 self.setfield(folders)
                 # print(filename)
             else:
-                print('no folders selected selected.')
+                pass
+                # print('no folders selected selected.')
 
         elif 'Folder' in self.dtype:
             filename = ctk.filedialog.askdirectory(
@@ -352,7 +357,8 @@ class PathBox:
                 self.setfield(filename)
                 # print(filename)
             else:
-                print('no folder selected.')
+                pass
+                # print('no folder selected.')
 
         # treat it as a list if list is present
         elif 'list' in self.dtype:
@@ -368,18 +374,26 @@ class PathBox:
                 self.setfield(filename)
                 # print(filename)
             else:
-                print('no file selected.')
+                pass
+                # print('no file selected.')
         else:
             filename = ctk.filedialog.askopenfilename(
                 title='Pick File', multiple=False, initialdir=str(Path.cwd())
             )
-            print(filename)
+            # print(filename)
             if filename != '':
                 self.setfield(filename)
                 # print(filename)
             else:
-                print('no file selected.')
-            raise Exception(f'{self.dtype} not a recognized pathbox type')
+                pass
+                # print('no file selected.')
+            # raise Exception(f'{self.dtype} not a recognized pathbox type')
+
+    def relative_if_possible(self, p: str | Path):
+        try:
+            return Path(p).relative_to(Path.cwd()).as_posix()
+        except ValueError:
+            return Path(p).as_posix()
 
     def get(self):
         text = self.box.get()
@@ -387,15 +401,30 @@ class PathBox:
         if text == '':
             return None
         if 'list' in self.dtype:
-            return text.replace('"', '').replace("'", '').split(', ')
+            modified = text.replace('"', '').replace("'", '').split(', ')
+            result = [item.strip() for item in modified.split(',')]
+            return
         else:
-            return text
+            return text.strip()
 
     def setfield(self, text):
         if text is None:
             text = ''
-        if 'list' in self.dtype:
-            text = str(text).replace('[', '').replace("'", '').replace(']', '')
+        elif 'list' in self.dtype:
+            # format properly
+            text = (
+                str(text)
+                .replace('[', '')
+                .replace("'", '')
+                .replace(']', '')
+                .replace('"', '')
+            )
+            # convert to relative paths when possible
+            paths = [self.relative_if_possible(p) for p in text.split(', ')]
+            text = ', '.join(paths)
+        else:
+            text = self.relative_if_possible(text)
+
         self.box.delete('0', last_index='end')
         self.box.insert('1', str(text))
 

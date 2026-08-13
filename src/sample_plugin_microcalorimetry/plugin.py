@@ -36,6 +36,8 @@ def primitive_types(
     y : np.array
         1 dimensional array of y-values
     """
+    if period is None:
+        period = np.random.random()
     x = np.linspace(0, np.pi * 2, 100)
     y = amplitude * np.sin(x / period)
     fig, ax = plt.subplots(1, 1)

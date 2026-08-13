@@ -26,8 +26,6 @@ class GUI(ctk.CTk):
     def __init__(
         self,
         package_name: str,
-        stdout_gui: bool = True,
-        stderr_gui: bool = True,
         icon_path: str = None,
         plots_toolbar: matplotlib.backends.backend_tkagg.NavigationToolbar2Tk = None,
         right_sidebar: ctk.CTkFrame = None,
@@ -39,10 +37,6 @@ class GUI(ctk.CTk):
         ----------
         package_name : str
             Name of the python-package your GUI is bundled with.
-        stdout_gui : bool, optional
-            If true, prints STDOUT to console, by default True
-        stderr_gui : bool, optional
-            If true, prints STDERR to console, by default True
         icon_path : str, optional
             Optional path to a custom bitmap icon, by default None
         plots_toolbar : matplotlib.backends.backend_tkagg.NavigationToolbar2Tk, optional
@@ -88,13 +82,15 @@ class GUI(ctk.CTk):
             row=0, column=0, padx=10, pady=(10, 0), sticky='new', columnspan=3
         )
 
+        self.plots_toolbar = plots_toolbar
+
         # set up working tabs
         self.moduletabs = _methodframes.ModuleTabs(master=self)
         self.moduletabs.grid(row=1, column=0, padx=10, pady=10, sticky='nswe')
         self.moduletabs.grid_columnconfigure(0, weight=1)
 
         # set up a graphics
-        self.graphicstabs = _graphicsframes.GraphicsTabs(master=self)
+        self.graphicsframe = _graphicsframes.PlotsFrame(master=self)
 
         # add a right sidebar if supplied(file navigator, or whatever)
         if right_sidebar:
@@ -109,12 +105,12 @@ class GUI(ctk.CTk):
             else:
                 self.right_sidebar.grid(**right_sidebar_grid)
 
-            self.graphicstabs.grid(
+            self.graphicsframe.grid(
                 row=1, column=1, padx=0, pady=(10, 10), sticky='nswe'
             )
         else:
             self.right_sidebar = None
-            self.graphicstabs.grid(
+            self.graphicsframe.grid(
                 row=1,
                 column=1,
                 padx=(0, 10),
@@ -122,11 +118,6 @@ class GUI(ctk.CTk):
                 sticky='nswe',
                 columnspan=2,
             )
-
-        if stdout_gui:
-            sys.stdout = self.graphicstabs.console
-        if stderr_gui:
-            sys.stderr = self.graphicstabs.console
 
     def update_header(self):
         self.title_name = self.package_name + self.version_num
