@@ -15,13 +15,14 @@ import microcalorimetry._gwex as _gwex
 import xarray as xr
 
 
-__all__ = ['make_correction_factor','gc_from_model','review_correction_factor']
+__all__ = ['make_correction_factor', 'gc_from_model', 'review_correction_factor']
+
 
 def gc_from_model(
     frequency: np.array,
     model: configs.PythonFunction,
     terms: int = 1,
-    )-> tuple[configs.GC, plt.Figure]:
+) -> tuple[configs.GCLike, plt.Figure]:
     """
     Supply a parsed RF sweep and a python function to generate a GC model.
 
@@ -42,7 +43,7 @@ def gc_from_model(
 
     Returns
     -------
-    gc : configs.GC
+    gc : configs.GCLike
         Correction factor object.
     fig : plt.Figure
         Plot of the generated GC.
@@ -51,41 +52,36 @@ def gc_from_model(
     if terms != 1:
         NotImplementedError('only term=1 is implemented currently.')
 
-
     frequency = np.unique(frequency)
     gc = model(frequency)
-
 
     # put into an RMEMeas with the expected format
 
     data = xr.DataArray(
-        gc.astype(float),
-        dims = ('frequency',),
-        coords = {'frequency':frequency}).expand_dims({'gc':[0]}, axis = -1)
+        gc.astype(float), dims=('frequency',), coords={'frequency': frequency}
+    ).expand_dims({'gc': [0]}, axis=-1)
 
     data = _gwex.as_format(data, _gwex.gc1)
 
-    data = RMEMeas.from_nom(f'gc{terms}',data)
+    data = RMEMeas.from_nom(f'gc{terms}', data)
 
-
-    fig,ax = plt.subplots(1,1)
-    ax.plot(frequency, data.nom[:,0],'o-')
-    ax.set_xlabel("Frequency (GHz)")
+    fig, ax = plt.subplots(1, 1)
+    ax.plot(frequency, data.nom[:, 0], 'o-')
+    ax.set_xlabel('Frequency (GHz)')
     ax.set_ylabel(f'gc model {model.__name__}')
 
     return data, fig
 
+
 def review_correction_factor(
-    gc: configs.GC,
-    units: str = '',
-    budget: bool = True
-    ) -> list[plt.Figure,...]:
+    gc: configs.GCLike, units: str = '', budget: bool = True
+) -> list[plt.Figure, ...]:
     """
     Review a correction factor model.
 
     Parameters
     ----------
-    gc : configs.GC
+    gc : configs.GCLike
         Correction factor model.
     units : str, optional
         Units string for y-axis. The default is ''.
@@ -98,22 +94,21 @@ def review_correction_factor(
         List of figures generated.
     """
 
-    w = configs.GC(gc).load()
-    gred = rmemeas_extras.categorize_by(w,'Origin')
+    w = configs.GCLike(gc).load()
+    gred = rmemeas_extras.categorize_by(w, 'Origin')
 
     nterms = int(max(w.nom.gc))
     # print(nterms)
     out_figs = []
 
     if units:
-        units = '( '+units + ' )'
+        units = '( ' + units + ' )'
     else:
         units = ''
 
-
-    for i in range(nterms+1):
+    for i in range(nterms + 1):
         # plot resultt
-        fig, ax = plt.subplots(1,1)
+        fig, ax = plt.subplots(1, 1)
 
         ax.plot(
             w.sel(gc=i).nom.frequency,
@@ -122,27 +117,26 @@ def review_correction_factor(
         )
         lb = w.sel(gc=i, drop=True).uncbounds(k=-2).cov
         ub = w.sel(gc=i, drop=True).uncbounds(k=2).cov
-        ax.fill_between(lb.frequency, lb, ub, alpha=0.2, label = 'k = 2')
+        ax.fill_between(lb.frequency, lb, ub, alpha=0.2, label='k = 2')
         ax.set_title(f'Correction Term ${{{i}}}$')
-        ax.set_ylabel(f'Correction Term ${{{i}}}$ '+ units)
-        ax.legend(loc = 'best')
+        ax.set_ylabel(f'Correction Term ${{{i}}}$ ' + units)
+        ax.legend(loc='best')
         ax.set_xlabel('Frequency (GHz)')
         fig.tight_layout()
 
         out_figs.append(fig)
 
-
         # plot uncertainties for term
         if budget:
-            fig, ax = plt.subplots(1,1)
-            wi = gred.sel(gc = i)
+            fig, ax = plt.subplots(1, 1)
+            wi = gred.sel(gc=i)
             for uid in wi.umech_id:
                 ax.plot(
                     wi.nom.frequency,
-                    wi.usel(umech_id = uid).stdunc().cov,
-                    label = uid,
-                    )
-            ax.plot(wi.nom.frequency, wi.stdunc(k=1).cov, color = 'k', label = 'Total')
+                    wi.usel(umech_id=uid).stdunc().cov,
+                    label=uid,
+                )
+            ax.plot(wi.nom.frequency, wi.stdunc(k=1).cov, color='k', label='Total')
             ax.set_xlabel('Frequency (GHz)')
             ax.set_ylabel('Contribution to Uncertainty (k=1)' + units)
             ax.set_title(f'Correction Term ${{{i}}}$')
@@ -150,6 +144,7 @@ def review_correction_factor(
             out_figs.append(fig)
 
     return out_figs
+
 
 def make_correction_factor(
     gc_regressor_rows: configs.CorrectionFactorModelInputs,
@@ -159,7 +154,7 @@ def make_correction_factor(
     nominals: bool = False,
     cache_s11: bool = True,
     freq_resolution: int = 4,
-) -> tuple[configs.GC, list[plt.Figure]]:
+) -> tuple[configs.GCLike, list[plt.Figure]]:
     """
     Calculate the correction factor for a given sensor model.
 
@@ -197,7 +192,7 @@ def make_correction_factor(
     inputs.pop('gc_regressor_rows')
 
     basic = RMEProp(sensitivity=not nominals)
-    
+
     calc_te_power = basic.propagate(rfpower.openloop_thermoelectric_power)
     calc_p_comp = basic.propagate(rfpower.p_comp)
     calc_row = basic.propagate(rfpower.gc_device_row)
@@ -224,65 +219,60 @@ def make_correction_factor(
         print('-------------------------------')
         parsed_standard = configs.ParsedRFSweep(gcr['standard']['parsed_calibration'])
         p3_fast_std = mean_unq(
-            configs.RFSweep(parsed_standard['p3_fast']).load(), 'frequency'
+            configs.RFSweepLike(parsed_standard['p3_fast']).load(), 'frequency'
         )
         p2_fast_std = mean_unq(
-            configs.RFSweep(parsed_standard['p2_fast']).load(), 'frequency'
+            configs.RFSweepLike(parsed_standard['p2_fast']).load(), 'frequency'
         )
         zeta_std = mean_unq(
-            configs.RFSweep(parsed_standard['zeta']).load(), 'frequency'
+            configs.RFSweepLike(parsed_standard['zeta']).load(), 'frequency'
         )
 
         parsed_special = configs.ParsedRFSweep(gcr['special']['parsed_calibration'])
         p3_fast_fs = mean_unq(
-            configs.RFSweep(parsed_special['p3_fast']).load(), 'frequency'
+            configs.RFSweepLike(parsed_special['p3_fast']).load(), 'frequency'
         )
-        
 
         e_off_fs = mean_unq(
-            configs.RFSweep(parsed_special['e_off']).load(), 'frequency'
+            configs.RFSweepLike(parsed_special['e_off']).load(), 'frequency'
         )
-        e_on_fs = mean_unq(configs.RFSweep(parsed_special['e_on']).load(), 'frequency')
-        
+        e_on_fs = mean_unq(
+            configs.RFSweepLike(parsed_special['e_on']).load(), 'frequency'
+        )
+
         e_off_std = mean_unq(
-            configs.RFSweep(parsed_standard['e_off']).load(), 'frequency'
+            configs.RFSweepLike(parsed_standard['e_off']).load(), 'frequency'
         )
-        
+
         e_on_std = mean_unq(
-            configs.RFSweep(parsed_standard['e_on']).load(), 'frequency'
+            configs.RFSweepLike(parsed_standard['e_on']).load(), 'frequency'
         )
         # try to read the slow dc power from special reflect
         # assume zero if it's not present
-        
+
         # get union of frequency grids
         f1 = p3_fast_std.nom.frequency
         f2 = p3_fast_fs.cov.frequency
-        union_f = np.intersect1d(f1,f2)
+        union_f = np.intersect1d(f1, f2)
 
         if 'p2dc_on' in parsed_special:
             p2dc_on_fs = mean_unq(
-                configs.RFSweep(parsed_special['p2dc_on']).load(), 'frequency'
-            ).sel(frequency = union_f)
+                configs.RFSweepLike(parsed_special['p2dc_on']).load(), 'frequency'
+            ).sel(frequency=union_f)
         else:
             p2dc_on_fs = 0
         if 'p2dc_on' in parsed_special:
             p2dc_off_slow_fs = mean_unq(
-                configs.RFSweep(parsed_special['p2dc_off_slow'].load(), 'frequency')
-            ).sel(frequency = union_f)
+                configs.RFSweepLike(parsed_special['p2dc_off_slow'].load(), 'frequency')
+            ).sel(frequency=union_f)
         else:
             p2dc_off_slow_fs = 0
 
-
         clrm_coeffs = {}
-        clrm_coeffs['fs'] = configs.ThermoelectricFitCoefficients(
-            gcr['special']['clrm_coeffs']
-        ).load()
+        clrm_coeffs['fs'] = configs.KDCLike(gcr['special']['clrm_coeffs']).load()
 
-        clrm_coeffs['std'] = configs.ThermoelectricFitCoefficients(
-            gcr['standard']['clrm_coeffs']
-        ).load()
+        clrm_coeffs['std'] = configs.KDCLike(gcr['standard']['clrm_coeffs']).load()
 
-        
         # down select frequencies on S1P files
         # interpolate if missing, tell user
         # I think its ok to interpolate on the S1P if
@@ -290,9 +280,9 @@ def make_correction_factor(
         # since we generally measure S1P files on relatively
         # dense grids
 
-        Gamma_G = configs.S11(gcr['splitter']).load()
-        Gamma_std = configs.S11(gcr['standard']['s11']).load()
-        Gamma_fs = configs.S11(gcr['special']['s11']).load()
+        Gamma_G = configs.S11Like(gcr['splitter']).load()
+        Gamma_std = configs.S11Like(gcr['standard']['s11']).load()
+        Gamma_fs = configs.S11Like(gcr['special']['s11']).load()
 
         # reduce down to the union of frequencies
         Gamma_G = try_sel(Gamma_G, f'{row_name}-gamma_g', union_f)
@@ -300,28 +290,28 @@ def make_correction_factor(
         Gamma_fs = try_sel(Gamma_fs, f'{row_name}-special s11', union_f)
 
         p_comp = calc_p_comp(
-            p2_fast_std.sel(frequency = union_f),
-            p3_fast_fs.sel(frequency = union_f),
-            p3_fast_std.sel(frequency = union_f),
+            p2_fast_std.sel(frequency=union_f),
+            p3_fast_fs.sel(frequency=union_f),
+            p3_fast_std.sel(frequency=union_f),
             Gamma_std,
             Gamma_fs,
-            Gamma_G
+            Gamma_G,
         )
-        
 
-        
         # i left this in because I wanted to check some numbers,
         # should be turned off normally.
         debug = False
         if debug:
-            p_comp_mismatch_term = (p_comp*p3_fast_std.sel(frequency = union_f))/(p2_fast_std.sel(frequency = union_f)*p3_fast_fs.sel(frequency = union_f))
-            
-            fig,ax = plt.subplots(1,1)
+            p_comp_mismatch_term = (p_comp * p3_fast_std.sel(frequency=union_f)) / (
+                p2_fast_std.sel(frequency=union_f) * p3_fast_fs.sel(frequency=union_f)
+            )
+
+            fig, ax = plt.subplots(1, 1)
             ax.plot(union_f, p_comp_mismatch_term.nom)
-            fig.suptitle("Mismatch Term on $P^{comp}$\n" + f"{row_name}")
+            fig.suptitle('Mismatch Term on $P^{comp}$\n' + f'{row_name}')
             fig.tight_layout()
-            ax.set_xlabel("Frequency (GHz)")
-            ax.set_ylabel("Mismatch Term")
+            ax.set_xlabel('Frequency (GHz)')
+            ax.set_ylabel('Mismatch Term')
             ...
 
         if correction_terms == 2:
@@ -340,55 +330,54 @@ def make_correction_factor(
         # calorimeter coefficients when
         # sensor fs (special) was measured
 
-
         # Force calorimeter coefficients to be linearized
         # (if they aren't already) and in units of V/W
         k = {}
         p_off_check = {}
-        
+
         # etimate what the power would be in the off state. If its
         # > 10 mW then the calorimeter is operating in a dc substitution mode
         # and the off measurement is a good estimate of sensitivity.
         # Otherwise, the off measurement is the time varying e0 estimate
         # and will need to be suvtracted from e_on to estimate k
-        off_check = {'fs':e_off_fs[0], 'std': e_off_std[0]}
-        e_ons = {'fs':e_on_fs, 'std':e_on_std}
-        e_offs = {'fs':e_off_fs, 'std':e_off_std}
+        off_check = {'fs': e_off_fs[0], 'std': e_off_std[0]}
+        e_ons = {'fs': e_on_fs, 'std': e_on_std}
+        e_offs = {'fs': e_off_fs, 'std': e_off_std}
         p_cal = {}
-        for sensor_type in ['fs','std']:
+        for sensor_type in ['fs', 'std']:
             # get the power estimated from the thermopile voltage in the off
             # state (as a float). This will tell us what operating mode the
             # microcalorimeter is in.
             p_off_check = calc_te_power(
                 clrm_coeffs[sensor_type],
                 off_check[sensor_type],
-                clrm_coeffs[sensor_type].attrs['p_of_e']
-                ).nom.values.tolist()
-        
+                clrm_coeffs[sensor_type].attrs['p_of_e'],
+            ).nom.values.tolist()
+
             # determine what e value to use for estimating sensitivity
             # if the off power estimate > 10 MW, dc substitution mode and
             # use the off values as the estimate of k
             if p_off_check > 0.01:
                 e_k_est = e_ons[sensor_type]
 
-            # other wise we are in an open loop mode and need to pick the 
+            # other wise we are in an open loop mode and need to pick the
             # right sensitivity on the curve
             else:
                 e_k_est = e_ons[sensor_type] - e_offs[sensor_type]
-                
+
             k[sensor_type] = polyval(clrm_coeffs[sensor_type], e_k_est)
             # k[sensor_type] = clrm_coeffs[sensor_type].sel(deg = 0, drop = True)
             # if k is units of W/V, then invert it
             if clrm_coeffs[sensor_type].attrs['p_of_e']:
-                k[sensor_type] = 1/k[sensor_type]
-                
+                k[sensor_type] = 1 / k[sensor_type]
+
             # calculate the p_cal for the flush short (special reflect)
             if sensor_type == 'fs':
                 p_cal['fs'] = calc_te_power(
                     clrm_coeffs['fs'],
                     e_ons['fs'] - e_offs['fs'],
-                    p_of_e = clrm_coeffs['fs'].attrs['p_of_e']
-                    )
+                    p_of_e=clrm_coeffs['fs'].attrs['p_of_e'],
+                )
                 # if in dc substitution mode, subtract off dc power
                 if p_off_check > 0.01:
                     p_cal['fs'] = p_cal['fs'] - (p2dc_on_fs - p2dc_off_slow_fs)
@@ -405,7 +394,7 @@ def make_correction_factor(
             # else:
             #     E = calc_te_power(clrm_coeffs[sensor_type],e_on_fs - e_off_fs, p_of_e = False)
             #     k[sensor_type] = polyval(derivative, E)
-        
+
         # if not asked to, calculate a traditional
         # correction factor, not krf
         if not calc_thermal_weights:
@@ -415,12 +404,12 @@ def make_correction_factor(
         row, solution = calc_row(
             p_comp,
             p_cal['fs'],
-            zeta_std.sel(frequency = union_f),
+            zeta_std.sel(frequency=union_f),
             Gamma_std,
             Gamma_fs,
-            k_s = k['std'],
-            k_x = k['fs'],
-            n_correction_terms = correction_terms
+            k_s=k['std'],
+            k_x=k['fs'],
+            n_correction_terms=correction_terms,
         )
         rows.append(row)
         solutions.append(solution)
@@ -439,11 +428,11 @@ def make_correction_factor(
     if len(all_union_freqs[0]) > 1:
         for fl in all_union_freqs[1:]:
             super_union = np.intersect1d(super_union, fl)
-    
-    gc = gc.sel(frequency = super_union)
-    print(gc.sel(gc = 0)[-1])
+
+    gc = gc.sel(frequency=super_union)
+    print(gc.sel(gc=0)[-1])
 
     if make_plots:
-        figures = review_correction_factor(gc, budget = True)
+        figures = review_correction_factor(gc, budget=True)
     # gc.assign_categories_to_all(Origin = 'Correction Factor')
     return gc, figures

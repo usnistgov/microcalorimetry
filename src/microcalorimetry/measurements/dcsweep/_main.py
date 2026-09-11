@@ -15,6 +15,7 @@ import json
 import time
 import microcalorimetry.measurements.dcsweep._analysis as staircase_analysis
 import click
+from microcalorimetry._helpers._collections import get_git_info, get_version
 from microcalorimetry._tkquick.gui_dtypes import Folder
 from typing import TYPE_CHECKING, Mapping
 from datetime import timedelta
@@ -305,6 +306,11 @@ def run(
     with ActiveRecord(
         columns, output_dir=output_dir + '//', **ep.config['record_settings']
     ) as dr:
+        # copy over any git metadata about this source code to the data record
+        microcalorimetry_git_info = get_git_info(__file__)
+        for k,v in microcalorimetry_git_info.items():
+            dr.metadata[k] = v
+        dr.metadata['microcalorimetry_version'] = get_version('microcalorimetry')
         # import instruments
         smu = importer.import_instrument(models['SMU'], 'SMUSourceSweep')
         smu = smu(addresses['SMU'])
@@ -522,12 +528,11 @@ def parse_v1(
     data_records: list[Folder],
     thermopile_monitor: str,
     heater: str,
-    on_min_wait_time: float = 0.0,
-    on_max_wait_time: float = 1e99,
-    off_min_wait_time: float = 0.0,
-    off_max_wait_time: float = 1e99,
+    on_min_wait: float = 1000,
+    on_window: list[float] = (-600,0),
+    off_min_wait: float = 1000,
+    off_window: list[float] = (-600,0),
     min_pwr_setting: float = 0.0,
-    throw_away_min_time: float = 0.0,
     thermometer_monitor: str = None,
     make_plots: bool = True,
 ) -> tuple[configs.ParsedDCSweep, list[plt.Figure]]:
@@ -543,18 +548,24 @@ def parse_v1(
         Name of thermopile monitor instrument.
     heater : str, optional
         Name of heater instrument.
-    on_min_wait_time : float, optional
-        Minimum time to wait before an on measurement should be included as
-        part of the fit.
-    on_max_wait_time : float, optional
-        Maximum time to wait before an on measurement should be included as
-        part of the fit.
-    off_min_wait_time : float, optional
-        Minimum time to wait before an off measurement should be included as
-        part of the fit.
-    off_max_wait_time : float, optional
-        Maximum time to wait before an off measurement should be included as
-        part of the fit.
+    on_min_wait : float, optional
+        Ignores data that hasn't waited this long for selecting on samples.
+    on_window : list[float], optional
+        positive numbers are relative to the beginning of the step,
+        negative numbers are relative to the end of the step.
+        [0, 100] = first 100 seconds of the step
+        [-100, 0], last 100 seconds of the step
+        [-100, -5], last 95 seconds of the step, ignoring last 5
+        [5, 100] from 5 to 100 seconds into the step.
+    off_min_wait : float, optional
+        Ignores data that hasn't waited this long for selecting off samples.
+    off_window : list[float], optional
+        positive numbers are relative to the beginning of the step,
+        negative numbers are relative to the end of the step.
+        [0, 100] = first 100 seconds of the step
+        [-100, 0], last 100 seconds of the step
+        [-100, -5], last 95 seconds of the step, ignoring last 5
+        [5, 100] from 5 to 100 seconds into the step.
     min_pwr_setting : float, optional
         Exclude and power levels below this value.
     throw_away_min_time : float, optional
@@ -585,11 +596,10 @@ def parse_v1(
         heater=heater,
         thermometer_monitor=thermometer_monitor,
         thermopile_monitor=thermopile_monitor,
-        throw_away_min_time=throw_away_min_time,
-        on_min_wait_time=on_min_wait_time,
-        on_max_wait_time=on_max_wait_time,
-        off_min_wait_time=off_min_wait_time,
-        off_max_wait_time=off_max_wait_time,
+        on_min_wait = on_min_wait,
+        on_window = on_window,
+        off_min_wait = off_min_wait,
+        off_window = off_window,
         min_pwr_setting=min_pwr_setting,
     )
 

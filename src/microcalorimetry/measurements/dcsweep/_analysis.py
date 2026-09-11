@@ -4,6 +4,7 @@ import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
 import microcalorimetry.configs as configs
+import importlib
 
 from rminstr.data_structures import ExistingRecord, ExptParameters, TimeSeries
 from pathlib import Path
@@ -558,6 +559,7 @@ def parse_v0(
 # %% Version 1 Stuff
 # These are functions and classes for parsing the version 1 of the experiment.
 
+
 def read_v1(
     runs: list[Path],
     thermopile_monitor: str,
@@ -693,7 +695,10 @@ def read_v1(
         )
     )
 
-    return data
+    return data, config
+
+
+
 
 
 def review_plot_v1(
@@ -748,58 +753,108 @@ def review_plot_v1(
     #     ax.set_xlim(0,zero(ons.time)[i])
     return fig
 
+def pick_window(x: DCCalibrationData, window: tuple[float, float]) -> DCCalibrationData:
+    """
+    Takes in a DCCalibrationDatase step and selects a time window.
+
+    Parameters
+    ----------
+    x : DCCalibrationData
+        DESCRIPTION.
+    window : tuple[float, float] | tuple[float]
+        positive numbers are relative to the beginning of the step,
+        negative numbers are relative to the end of the step.
+        [5, 100] = 5 to 100 seconds into the step
+        [-100, 0], last 100 seconds of the step
+        [-100, -5], last 95 seconds of the step.
+    Returns
+    -------
+    DCCalibrationData
+        indexed DCCalibrationData based on the time window.
+    """
+
+    # in case there are consecutive steps
+    # with the same power level, concat them to a single step
+    step_changes =  np.where(np.diff(x.adjust_time) < 0)[0]
+    x2 = x.copy()
+    for change in step_changes:
+        x2.adjust_time[change+1:]+= x2.adjust_time[change]
+
+    end = x.adjust_time.max()
+    min_wait_time = float(window[0])    
+
+    if min_wait_time < 0:
+        min_wait_time = end + min_wait_time
+
+    max_wait_time = float(window[1])
+    if max_wait_time <= 0:
+        max_wait_time = end + max_wait_time
+    
+
+    # print(float(min_wait_time), float(max_wait_time))
+
+
+    out = x.where(
+        (x.adjust_time >= min_wait_time) & \
+        (x.adjust_time <= max_wait_time),
+        drop = True
+    ) 
+
+    return  out
+
 def parse_v1(
     *args, 
     metadata: list[Path | str],
     thermometer_monitor: str,
     thermopile_monitor: str,
     heater: str,
-    throw_away_min_time: float,
-    on_min_wait_time:float,
-    on_max_wait_time: float,
-    off_min_wait_time: float,
-    off_max_wait_time: float, 
+    on_min_wait: float,
+    on_window: tuple[float, float] | tuple[float],
+    off_min_wait: float,
+    off_window: tuple[float, float] | tuple[float], 
     min_pwr_setting: float,
     ):
     """
+    Parse version 1 of the DC sweep experiment.
     """
-    off_min_wait_time = float(off_min_wait_time)
-    off_max_wait_time = float(off_max_wait_time)
-    on_min_wait_time = float(on_min_wait_time)
-    on_max_wait_time = float(on_max_wait_time)
+
+
     min_pwr_setting = float(min_pwr_setting)
    
-    data = read_v1(
+    data, config = read_v1(
         metadata, 
         heater = heater,
         thermopile_monitor = thermopile_monitor,
         thermometer_monitor = thermometer_monitor,
         )
 
-    # throw away bad data
-    data = data.where(data.adjust_time > throw_away_min_time, drop = True)
-
-    # pick on values
-    ons = data.where(
-        (data.pwr_setting > 0) & \
-        (data.adjust_time >= float(on_min_wait_time)) & \
-        (data.adjust_time <= float(on_max_wait_time)) & \
-        (data.pwr_setting >= float(min_pwr_setting)),
-        drop = True
-    )
 
 
+    # Index into on samples using the on time window
+    on_steps = data.where(
+       (data.pwr_setting > 0) & \
+       (data.pwr_setting >= float(min_pwr_setting)) & \
+       (data.adjust_time >= on_min_wait),
+       drop = True
+       )
+    ons = on_steps.groupby(on_steps.steps).map(pick_window, args = (on_window,))
+
+
+    # index into the off samples using the off time window
+    
     # pick off values and interpolate to the
     # on times
-    offs_samples = None
-    offs = None
-    offs_samples = data.where(
+    offs_steps = data.where(
         (data.pwr_setting == 0) & \
-        (data.adjust_time >= off_min_wait_time) & \
-        (data.adjust_time <= off_max_wait_time),
+        (data.adjust_time >= off_min_wait),
         drop =True
         )
-    
+    offs_samples = offs_steps.groupby(offs_steps.steps).map(pick_window, args = (off_window,))
+        
+
+
+
+
     # interpolate, use average value if not
     # enough zero measurements are available to interpolate.
     offs = ons.copy()
@@ -944,12 +999,39 @@ def parse_v1(
         figs.append(fig)
         
     # spec sheets
-    heater_i_specs = kspecs.DatasheetMeasureDCI('K2450',serial = 'xxx',suppress_warnings = True)
-    heater_v_specs = kspecs.DatasheetMeasureDCV('K2450',serial = 'xxx',suppress_warnings = True)
-    therm_i_specs = kspecs.DatasheetMeasureDCI('K2450',serial = 'xxx',suppress_warnings = True)
-    therm_v_specs = kspecs.DatasheetMeasureDCV('K2450',serial = 'xxx',suppress_warnings = True)
-    e_specs = nvmspecs.DatasheetDCV('HP34420A',serial = 'xxx',suppress_warnings = True)
+    def import_spec(name: str, class_name: str, fallback_model: str) -> type:
+        print(f'Initializing specs for {name}')
+        try:
+            model = config['instruments'][name]['model']
+            module = importlib.import_module( f"rminstr_specs.{model}")
+            print(f"  specsheet is {model}.{class_name}")
+        except (KeyError, ModuleNotFoundError) as e:
+            print(f"  Failed to get specs for error : {type(e).__name__} : {e}")
+            print(f"  Falling back to {fallback_model}")
+            module = importlib.import_module( f"rminstr_specs.{fallback_model}")
+        return getattr(module, class_name)
+        
+
+    heater_i_specs = import_spec(heater, 'DatasheetMeasureDCI', fallback_model = 'K2450')(
+        'heater_i',serial = 'xxx',suppress_warnings = True
+        )
+    heater_v_specs = import_spec(heater, 'DatasheetMeasureDCV', fallback_model = 'K2450')(
+        'heater_V',serial = 'xxx',suppress_warnings = True
+        )
+
+    e_specs = import_spec(thermopile_monitor, 'DatasheetDCV', fallback_model = 'HP34420A')(
+       'thermopile_monitor',serial = 'xxx',suppress_warnings = True
+       )
     
+    therm_i_specs = None
+    therm_v_specs = None
+    if thermometer_monitor:
+        therm_i_specs = import_spec(thermometer_monitor, 'DatasheetMeasureDCI', fallback_model = 'K2450')(
+            'thermometer_monitor_i',serial = 'xxx',suppress_warnings = True
+            )
+        therm_v_specs =  import_spec(thermometer_monitor, 'DatasheetMeasureDCV', fallback_model = 'K2450')(
+            'thermometer_monitor_v',serial = 'xxx',suppress_warnings = True
+            )
 
     # put on values in rme meas objects
     on_step_groups = ons.groupby(ons.steps)

@@ -7,6 +7,7 @@ from microcalorimetry.math import rfpower, fitting, rmemeas_extras
 from pathlib import Path
 import microcalorimetry._helpers._intf_tools as clitools
 import microcalorimetry.configs as configs
+import microcalorimetry.arrays as arrays
 import click
 
 __all__ = ['fit_thermoelectric']
@@ -72,7 +73,7 @@ def fit_thermoelectric(
     deg: int = 2,
     min_p: float = 0.001,
     make_plots: bool = True,
-) -> tuple[RMEMeas, plt.Figure]:
+) -> tuple[RMEMeas[arrays.KDCTemInd | arrays.KDCTempDep], plt.Figure]:
     r"""
     Fit sensitivity coefficients to a dcsweep measurement of a thermoelectric.
 
@@ -107,7 +108,7 @@ def fit_thermoelectric(
 
     Returns
     -------
-    sensitivity : RMEMeas
+    sensitivity : RMEMeas[arrays.KDCTemInd | arrays.KDCTempDep]
         Sensitivity coefficients
     figures : list[plt.Figure]
         List of figures generated (empty if not made). Fit and residuals.
@@ -120,9 +121,9 @@ def fit_thermoelectric(
         rfpower.temperature_corrected_thermoelectric_fit
     )
     parsed_dcsweep = configs.ParsedDCSweep(parsed_dcsweep)
-    v = configs.DCSweep(parsed_dcsweep.pop('heater_v')).load()
-    i = configs.DCSweep(parsed_dcsweep.pop('heater_i')).load()
-    e = configs.DCSweep(parsed_dcsweep['e']).load()
+    v = configs.DCSweepLike(parsed_dcsweep.pop('heater_v')).load()
+    i = configs.DCSweepLike(parsed_dcsweep.pop('heater_i')).load()
+    e = configs.DCSweepLike(parsed_dcsweep['e']).load()
 
     figures = []
 
@@ -134,8 +135,8 @@ def fit_thermoelectric(
 
     # use the thermometer corrected dataset
     if thermometer_corrected:
-        therm_v = configs.DCSweep(parsed_dcsweep.pop('therm_v')).load()
-        therm_i = configs.DCSweep(parsed_dcsweep.pop('therm_i')).load()
+        therm_v = configs.DCSweepLike(parsed_dcsweep.pop('therm_v')).load()
+        therm_i = configs.DCSweepLike(parsed_dcsweep.pop('therm_i')).load()
         therm_r = therm_v / therm_i
         therm_r_use = therm_r[ind.values]
         coeffs = temperature_corrected_thermoelectric_fit(p_use, therm_r_use, e_use)
@@ -426,7 +427,7 @@ def plot_coeffs(propagator, p, e, coeffs, p_of_e, temperature: RMEMeas | None):
         temperature_mean_vals = e_fit_vals * 0 + temperature.nom.mean().values
         temperature_mean = interp_by_nom(temperature, temperature_mean_vals)
         temperature_mean.make_umechs_unique()
-        temperature_mean.assign_categories_to_all(Origin='DC Metering')
+        temperature_mean.assign_categories_to_all(Origin='DC Metering (Hypothetical)')
 
         @propagator.propagate
         def reindex(x, dim):
@@ -444,6 +445,7 @@ def plot_coeffs(propagator, p, e, coeffs, p_of_e, temperature: RMEMeas | None):
         e_fit_vals = np.linspace(float(e.nom.min()), float(e.nom.max()))
         e_fit = interp_by_nom(e, e_fit_vals)
         e_fit.make_umechs_unique()
+        e_fit.assign_categories_to_all(Origin='DC Metering (Hypothetical)')
         p_check = get_openloop(coeffs, e_fit, p_of_e=coeffs.attrs['p_of_e'])
         title = None
 

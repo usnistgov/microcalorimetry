@@ -134,7 +134,8 @@ except Exception:
 extensions = [
     'autoapi.extension',
     # 'sphinx_gallery.gen_gallery',
-    'numpydoc',
+    'sphinx.ext.napoleon',
+    # 'numpydoc',
     'sphinx.ext.githubpages',
     'sphinx-jsonschema',
     'sphinx.ext.viewcode',
@@ -167,7 +168,7 @@ autoapi_python_class_content = 'both'
 
 autoapi_options = [
     'members',
-    'undoc-members',
+    # 'undoc-members',
     # 'private-members',
     'show-inheritance',
     'show-module-summary',

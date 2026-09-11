@@ -45,7 +45,7 @@ You could also provide a DataModelContainer itself.
 
 .. code-block:: python
 
-    fn(my_s11 = microcalorimetry.configs.S11('path/to/my/file.hdf5/group/inside/file'))
+    fn(my_s11 = microcalorimetry.configs.S11Like('path/to/my/file.hdf5/group/inside/file'))
 
 
 Inside the analysis function, the parameter ``my_s11`` can be cast into the correct container.
@@ -57,7 +57,7 @@ dataset is provided to the function, then the python garbage collector will keep
 .. code-block:: python
 
     # load in as needed
-    s11_data  = microcalorimetry.configs.S11(my_s11).load()
+    s11_data  = microcalorimetry.configs.S11Like(my_s11).load()
     # do something with s11_data
     new_value = some_other_operation(s11_data)
     # free up memory

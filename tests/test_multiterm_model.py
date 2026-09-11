@@ -17,7 +17,7 @@ def test_thermal_weights_test(make_plots: bool = False):
 
     # C24N118 calibration datas
     C24N118_data = {
-        's11': configs.S11(S1P_FILES / 'C24N118.dut').load(),
+        's11': configs.S11Like(S1P_FILES / 'C24N118.dut').load(),
         'parsed_calibration': configs.ParsedRFSweep(
             THINFILM_REF_DATA / 'C24N118' / 'rf_parsed'
         ),
@@ -26,7 +26,7 @@ def test_thermal_weights_test(make_plots: bool = False):
 
     # C24N118 calibration datas
     S24P02_data = {
-        's11': configs.S11(S1P_FILES / 'S24P02.dut').load(),
+        's11': configs.S11Like(S1P_FILES / 'S24P02.dut').load(),
         'parsed_calibration': configs.ParsedRFSweep(
             KSTE_REF_DATA / 'S24P02' / 'parsed_rf'
         ),
@@ -126,7 +126,6 @@ def test_thermal_weights_test(make_plots: bool = False):
         calc_thermal_weights=False,
     )
 
-
     kc1_thinfilm, figs = anl.make_correction_factor(
         gc_thinfilm_configs,
         correction_terms=1,
@@ -147,7 +146,6 @@ def test_thermal_weights_test(make_plots: bool = False):
         make_plots=make_plots,
         calc_thermal_weights=True,
     )
-
 
 
 if __name__ == '__main__':

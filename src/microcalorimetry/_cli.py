@@ -95,6 +95,7 @@ def _gui(last_cwd: bool = False):
         'export',
         functions={
             'as_doteff': export.as_doteff,
+            'as_dut_s11': export.as_dotdut_s11
         },
         output_group_saveable=[],
     )

@@ -59,6 +59,7 @@ import microcalorimetry.configs as configs
 import rminstr_specs.K2450 as k2450
 import rminstr_specs.HP3458A as HP3458A
 import rminstr_specs.HP34420A as HP34420A
+import rminstr_specs.K2401 as K2401
 from os.path import join, basename, dirname
 import abc
 import collections
@@ -111,16 +112,16 @@ INSTRUMENT_SPECS = {
     },
     'K2401': {
         'SMU_power_meter': {
-            'idc': k2450.DatasheetMeasureDCI,
-            'vdc': k2450.DatasheetMeasureDCV,
-            'therm_v': k2450.DatasheetMeasureDCV,
-            'therm_i': k2450.DatasheetMeasureDCI,
+            'idc': K2401.DatasheetMeasureDCI,
+            'vdc': K2401.DatasheetMeasureDCV,
+            'therm_v': K2401.DatasheetMeasureDCV,
+            'therm_i': K2401.DatasheetMeasureDCI,
         },
         'thermometer_monitor': {
-            'idc': k2450.DatasheetMeasureDCI,
-            'vdc': k2450.DatasheetMeasureDCV,
-            'therm_v': k2450.DatasheetMeasureDCV,
-            'therm_i': k2450.DatasheetMeasureDCI,
+            'idc': K2401.DatasheetMeasureDCI,
+            'vdc': K2401.DatasheetMeasureDCV,
+            'therm_v': K2401.DatasheetMeasureDCV,
+            'therm_i': K2401.DatasheetMeasureDCI,
         },
     },
 }
