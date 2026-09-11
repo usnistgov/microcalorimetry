@@ -301,7 +301,7 @@ def test_C24N118_from_scratch(
 
     # load in s-parameters
     # and configure a correction factor analysis
-    C24N118_s1p_config = configs.S11(Path(S1P_FILES / 'C24N118.dut'))
+    C24N118_s1p_config = configs.S11Like(Path(S1P_FILES / 'C24N118.dut'))
     gc_config = configs.CorrectionFactorModelInputs(
         {
             # specify a row

@@ -17,6 +17,7 @@ import matplotlib as mpl
 import sys
 import h5py
 import os.path
+
 from microcalorimetry._tkquick._gui._themes import console_font
 import microcalorimetry.math.vna as vna
 import microcalorimetry.math.trig as trig
@@ -65,6 +66,12 @@ class PlotsFrame(customtkinter.CTkFrame):
         self.export_menu.grid(row=0, column=1, padx=(0, 10), sticky='nwe', pady=10)
         self.export_menu.set('file')
 
+        # back button
+        self.back_button = ctk.CTkButton(
+            self.top_frame, text='<-', command=self.back_callback
+        )
+        self.back_button.grid(row=0, column=2, padx=(0, 10), sticky='', pady=10)
+
         # plot selector, spans the whole row
 
         self.sel_frame = ctk.CTkFrame(self, fg_color='transparent')
@@ -84,8 +91,20 @@ class PlotsFrame(customtkinter.CTkFrame):
         self._tabview: GraphicsTabs = GraphicsTabs(self)
         self._tabview.grid(row=2, column=0, sticky='nesw')
 
+        self.tab_history = []
+
     def selector_callback(self, choice):
+        self.tab_history.append(self._tabview.get())
         self._tabview.set(choice)
+
+    def back_callback(self):
+        if len(self.tab_history) < 1:
+            print('No plot history.')
+            return
+        new = self.tab_history.pop()
+        print(f'Switching back to {new}')
+        self.selector.set(new)
+        self.selector_callback(new)
 
     def add_plot_to_selector(self, name):
         old_values = self.selector.cget('values')
@@ -161,8 +180,9 @@ class PlotsFrame(customtkinter.CTkFrame):
             folder = Path(folder)
             frmt = text
             plots_dict = self._tabview.plots_dict
-            for name, fig in plots_dict.items():
-                fig.savefig(folder / f'{name}{frmt}')
+            for i, (name, fig) in enumerate(plots_dict.items()):
+                name = name.split('-')[0]
+                fig.savefig(folder / f'{name}_{i}{frmt}')
         else:
             print('no folder selected.')
 
@@ -180,8 +200,11 @@ class PlotsFrame(customtkinter.CTkFrame):
         if folder != '':
             folder = Path(folder)
             plots_dict = self._tabview.plots_dict
-            for name, fig in plots_dict.items():
-                with open(folder / f'{name}.pklfig', 'wb') as f:
+            for i, (name, fig) in enumerate(plots_dict.items()):
+                # everything before first dash should be the module/function path
+                # and that should follow python packagin conventions.
+                name = name.split('-')[0]
+                with open(folder / f'{name}_{i}.pklfig', 'wb') as f:
                     pickle.dump(fig, f)
         else:
             print('no folder selected.')
@@ -215,7 +238,6 @@ class GraphicsTabs(customtkinter.CTkTabview):
         # self.hdf5viewer = HDF5viewer(master=self.tab('HDF5'))
 
         # other stuff
-        self.last_opened_tab = None
         self.all_tabs = []  # , 'HDF5']
         self.plots_dict = {}
         self.parent = master
@@ -280,7 +302,7 @@ class GraphicsTabs(customtkinter.CTkTabview):
         count = 0
         new_name = name
         while self.tab_exists(new_name):
-            new_name = name + str(count)
+            new_name = f'{name}_rep{count}'
             count += 1
         name = new_name
         fig.set_label(name)
@@ -779,7 +801,7 @@ def review_s1p(file: str, group: str, plot_style: str = 'lin-mag-phase'):
     """
 
     with h5py.File(file, 'r') as f:
-        s1p = RMEMeas.from_h5(f[group])
+        s1p = load_object(f[group])
 
         k = 2
 

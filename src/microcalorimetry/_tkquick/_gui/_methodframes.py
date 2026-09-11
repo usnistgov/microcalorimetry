@@ -604,17 +604,37 @@ class ModuleToolBar(ctk.CTkFrame):
         filepath = parameters['output']
         kwargs = parameters['parameters']
 
-        plt_name = f'{self.module_name}.{opentab}'
+        def get_plot_name(fig: plt.Figure):
+            base = f'{self.module_name}.{opentab}'
+
+            suptitle = fig.get_suptitle()
+            try:
+                axes_title = fig.get_axes()[0].get_title()
+            except Exception as e:
+                print('Failed to get axes title for : {e}')
+                axes_title = None
+
+            if suptitle:
+                return f'{base}-{suptitle}'
+            elif axes_title:
+                return f'{base}-{axes_title}'
+
+            return base
+
         # add to history file
 
         def add_plots(item):
             print('adding plots')
             if isinstance(item, plt.Figure):
-                toolbar.parent.master.parent.graphicsframe.add_plot(item, plt_name)
+                toolbar.parent.master.parent.graphicsframe.add_plot(
+                    item, get_plot_name(item)
+                )
             elif isinstance(item, list):
                 for i in item:
                     if isinstance(i, plt.Figure):
-                        toolbar.parent.master.parent.graphicsframe.add_plot(i, plt_name)
+                        toolbar.parent.master.parent.graphicsframe.add_plot(
+                            i, get_plot_name(i)
+                        )
             elif isinstance(item, rmellipse.utils.GroupSaveable):
                 pass
 

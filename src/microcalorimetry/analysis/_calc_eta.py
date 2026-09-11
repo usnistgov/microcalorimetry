@@ -4,14 +4,15 @@ from rmellipse.uobjects import RMEMeas
 # local packages
 from microcalorimetry.math import rfpower, numbers, fitting, rmemeas_extras
 from microcalorimetry._helpers._collections import try_sel
-import matplotlib.patches as mpatches
 from pathlib import Path
+import matplotlib.patches as mpatches
 import microcalorimetry.configs as configs
 import microcalorimetry._gwex as _gwex
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
 import itertools
+import microcalorimetry.arrays as arrays
 
 __all__ = [
     'make_eta',
@@ -24,9 +25,9 @@ __all__ = [
 
 
 def review_eta(
-    eta: configs.Eta,
+    eta: configs.EtaLike,
     historical_data: configs.EtaHistorical = None,
-    repeatability_model: configs.Eta = None,
+    repeatability_model: configs.EtaLike = None,
     k: int = 2,
     frequency_precision: int = 4,
     max_hist_legend: int = None,
@@ -37,11 +38,11 @@ def review_eta(
 
     Parameters
     ----------
-    eta : configs.Eta
+    eta : configs.EtaLike
         Effective efficiency being reviewed.
     historical_data : configs.EtaHistorical
         Historical data to review against.
-    repeatability_model : configs.Eta
+    repeatability_model : configs.EtaLike
         Model of calorimeter's repeatability to plot.
     k : int, optional
         Expansion factor, by default 2
@@ -85,7 +86,7 @@ def review_eta(
     # so throw it awway
     del historical_data
 
-    eta = configs.Eta(eta).load()
+    eta = configs.EtaLike(eta).load()
     nom = eta.nom
     new_fgrid = nom.frequency
     lb = eta.uncbounds(k=-k).cov
@@ -148,7 +149,7 @@ def review_eta(
     # the new measurement
     if repeatability_model is not None:
         center = nom - ref.sel(frequency=nom.frequency)
-        repmodel = configs.Eta(repeatability_model).load()
+        repmodel = configs.EtaLike(repeatability_model).load()
         ub_rep = center + repmodel.stdunc(k=k).cov[:, 0].interp(frequency=nom.frequency)
         lb_rep = center + repmodel.stdunc(k=-k).cov[:, 0].interp(
             frequency=nom.frequency
@@ -256,7 +257,7 @@ def make_classical_eta_unc_model(
     u_type: str,
     correlate_frequencies: bool = True,
     make_plots: bool = True,
-) -> tuple[configs.Eta, plt.Figure]:
+) -> tuple[RMEMeas[arrays.Eta], plt.Figure]:
     """
     Generate a classical uncertainty model for an eta measurement.
 
@@ -285,7 +286,7 @@ def make_classical_eta_unc_model(
 
     Returns
     -------
-    eta_unc : configs.Eta
+    eta_unc : RMEMeas[arrays.Eta]
         Eta configuration object with zero nominal and uncertainties
         derived from uA_model and uB_model.
     fig : plt.Figure | None
@@ -354,7 +355,7 @@ def make_eta_repeatability_model(
     categories: dict = {'Type': 'A', 'Origin': 'Repeatability'},
     umech_id_basename: str = 'Repeatability',
     frequencies: np.array = None,
-) -> tuple[configs.Eta, list[plt.Figure], RMEMeas]:
+) -> tuple[RMEMeas[arrays.Eta], list[plt.Figure], RMEMeas]:
     """
     Generate a historical repeatability model from sensor data.
 
@@ -422,7 +423,7 @@ def make_eta_repeatability_model(
     zero_averaged_sensors = {}
     for i, (sensor_name, sensor_data) in enumerate(historical_data.items()):
         historical = configs.EtaHistorical(sensor_data)
-        sensor_noms = {k: configs.Eta(v).load().nom for k, v in historical.items()}
+        sensor_noms = {k: configs.EtaLike(v).load().nom for k, v in historical.items()}
         sensor_avg = numbers.greedy_average(*list(sensor_noms.values()))
         this_sensor_zero = {
             k: v - sensor_avg.sel(frequency=v.frequency) for k, v in sensor_noms.items()
@@ -466,7 +467,9 @@ def make_eta_repeatability_model(
     # assumes a uniform distribution
     elif dist == 'uniform':
         u = xr.concat(list(zero_averaged_sensors.values()), dim='new dim', join='inner')
+        u = u.where(u != 0, drop=True).dropna(dim='frequency')
         diff = u.max(dim='new dim') - u.min(dim='new dim')
+
         u = diff / np.sqrt(12) * coverage
     else:
         raise ValueError(f'Expect dist to be one of {valid_dists} not {dist}')
@@ -542,6 +545,21 @@ def make_eta_repeatability_model(
     )
     pretty_model_name = model_type.replace('_', ' ').title()
     ub = model.stdunc().cov[..., 0]
+    
+    
+    ax.plot(
+        u.frequency,
+        u*-100,
+        color = 'red',
+    )
+    ax.plot(
+        u.frequency,
+        u*100,
+        color = 'red',
+        label = f'${coverage}\sigma$ of {dist.title()}'
+    )
+        
+    
     ax.fill_between(
         model.nom.frequency,
         ub * 2 * 100,
@@ -551,6 +569,7 @@ def make_eta_repeatability_model(
         label=f'{pretty_model_name} Model (k=2)',
         zorder=1000,
     )
+
 
     h, l = ax.get_legend_handles_labels()
 
@@ -567,8 +586,8 @@ def make_eta_repeatability_model(
 
 
 def dc_lead_correction(
-    eta: configs.Eta, R_lead: float, R_bolo: float, R_lead_max: float = 0.14
-) -> tuple[configs.Eta]:
+    eta: configs.EtaLike, R_lead: float, R_bolo: float, R_lead_max: float = 0.14
+) -> tuple[RMEMeas[arrays.Eta]]:
     """
     Applies a dc lead correction.
 
@@ -579,7 +598,7 @@ def dc_lead_correction(
 
     Parameters
     ----------
-    eta : configs.Eta
+    eta : configs.EtaLike
         Path to an effective efficiency measurement to apply the correction to.
     R_lead : float
         Sum of resistance for Force and Sense leads of sensor.
@@ -596,12 +615,12 @@ def dc_lead_correction(
 
     Returns
     -------
-    eta
+    eta : RMEMeas[arrays.Eta]
         Corrected eta value
 
     """
 
-    eta = configs.Eta(eta).load()
+    eta = configs.EtaLike(eta).load()
 
     # set up the propagator
     linear = RMEProp(sensitivity=True)
@@ -626,33 +645,33 @@ def dc_lead_correction(
 
 
 def make_eta(
-    gc: configs.GC,
-    s11: configs.S11,
+    gc: configs.GCLike,
+    s11: configs.S11Like,
     parsed_rfsweep: configs.ParsedRFSweep,
-    clrm_sensitivity: configs.ThermoelectricFitCoefficients = None,
-    repeatability_model: configs.Eta = None,
+    clrm_sensitivity: configs.KDCLike = None,
+    repeatability_model: configs.EtaLike = None,
     extra_eta_uncertainties: list[Path] = None,
     historical_data: configs.EtaHistorical = None,
     legacy_uncertainties: bool = False,
     make_plots: bool = True,
-) -> tuple[list[plt.Figure] | None, configs.Eta]:
+) -> tuple[list[plt.Figure] | None, RMEMeas[arrays.Eta]]:
     """
     Make an effective efficiency measurement.
 
     Parameters
     ----------
-    gc : configs.GC
+    gc : configs.GCLike
         Calorimetric correction factor terms.
-    s11 : configs.S11
+    s11 : configs.S11Like
         Reflection coefficient of the sensor.
     parsed_rfsweep : configs.ParsedRFSweep
         Parsed RF sweep output.
-    clrm_sensitivity : configs.ThermoelectricFitCoefficients, optional
+    clrm_sensitivity : configs.KDCLike, optional
         If provided, assumes the correction factor is weighted by the
         calorimeters sensitivity and provide in units of (V/W).
         These coefficents will be used to calculate the dimensionless
         correction factor. The default is None.
-    repeatability_model : configs.Eta, optional
+    repeatability_model : configs.EtaLike, optional
         Supply a repeatability model of the microcalorimeter to apply as
         uncertainty mechanisms and use in review charts. The default is None.
     extra_eta_uncertainties : list[Path], optional
@@ -680,7 +699,7 @@ def make_eta(
 
     fig : List[plt.Figure] | None
         Any figures generated.
-    eta : RMEMeas
+    eta : RMEMeas[arrays.Eta]
         Effective efficiency.
 
 
@@ -703,16 +722,16 @@ def make_eta(
 
     # load the models into memory from the containers
     parsed_rfsweep = configs.ParsedRFSweep(parsed_rfsweep)
-    s11 = configs.S11(s11).load()
-    gc = configs.GC(gc).load()
-    zeta = configs.RFSweep(parsed_rfsweep['zeta']).load()
+    s11 = configs.S11Like(s11).load()
+    gc = configs.GCLike(gc).load()
+    zeta = configs.RFSweepLike(parsed_rfsweep['zeta']).load()
 
     # average repeats for a single connect, zeta repeatability
     # will be taken care of with historical repeatability
     # models, and there is unlikely to be enough frequency points
     # to make a claim about uncertainty at this point.
-    e_on = configs.RFSweep(parsed_rfsweep['e_on']).load()
-    e_off = configs.RFSweep(parsed_rfsweep['e_off']).load()
+    e_on = configs.RFSweepLike(parsed_rfsweep['e_on']).load()
+    e_off = configs.RFSweepLike(parsed_rfsweep['e_off']).load()
     zeta = mean_unique(zeta, dim='frequency')
     e_on = mean_unique(e_on, dim='frequency')
     e_off = mean_unique(e_off, dim='frequency')
@@ -723,7 +742,7 @@ def make_eta(
     gc = try_sel(gc, 'gc', fgrid)
 
     if clrm_sensitivity:
-        sense = configs.ThermoelectricFitCoefficients(clrm_sensitivity).load()
+        sense = configs.KDCLike(clrm_sensitivity).load()
         # # Old version from when coefficients were e as function of p estimate coefficients
         #
         # if k.attrs['p_of_e']:
@@ -783,8 +802,8 @@ def make_eta(
 
 
 def apply_uncertainty_model(
-    eta: configs.Eta, model: configs.Eta, make_unique: bool = False
-) -> configs.Eta:
+    eta: configs.EtaLike, model: configs.EtaLike, make_unique: bool = False
+) -> RMEMeas[arrays.Eta]:
     """
     Applies uncertainty models of effective efficiency measurements.
 
@@ -793,9 +812,9 @@ def apply_uncertainty_model(
 
     Parameters
     ----------
-    eta : configs.Eta
+    eta : configs.EtaLike
         Eta that will have unertainties applied.
-    model : configs.Eta
+    model : configs.EtaLike
         Model of uncertainties that will be applied to eta. Should be nominaly
         zero.
     make_unique : bool, optional
@@ -805,7 +824,7 @@ def apply_uncertainty_model(
 
     Returns
     -------
-    eta : configs.Eta
+    eta : RMEMeas[arrays.Eta]
         Same nominal as the input eta, but with new uncertainties.
 
     """
@@ -815,8 +834,8 @@ def apply_uncertainty_model(
     def add(x, y):
         return x + y
 
-    eta = configs.Eta(eta).load()
-    model = configs.Eta(model).load()
+    eta = configs.EtaLike(eta).load()
+    model = configs.EtaLike(model).load()
     model = model.interp(
         frequency=eta.nom.frequency,
         method='linear',

@@ -4,15 +4,15 @@ This module contains functions for exporting effective efficiency datasets.
 
 from __future__ import annotations
 import microcalorimetry.configs as configs
-from microcalorimetry.math import rmemeas_extras
+from microcalorimetry.math import rmemeas_extras, vna
 from microcalorimetry._tkquick.gui_dtypes import SaveAsPath
-from rmellipse.uobjects import RMEMeas
+from rmellipse import RMEProp, RMEMeas
 import numpy as np
 import warnings
 from pathlib import Path
 from datetime import datetime
 
-__all__ = ['as_doteff']
+__all__ = ['as_doteff', 'as_dotdut_s11']
 
 
 def group_typed_uncertainties(params: RMEMeas) -> RMEMeas:
@@ -56,13 +56,114 @@ def group_typed_uncertainties(params: RMEMeas) -> RMEMeas:
     return grouped
 
 
+def as_dotdut_s11(
+    s11: configs.S11Like,
+    path: SaveAsPath,
+    device: str,
+    expansion_factor: float = 2.0,
+    ):
+    """
+    Export a device to a .dut file for 1 port s-parameters.
+    
+    This is a cal services 
+
+
+    Parameters
+    ----------
+    s11 : configs.S11Like
+        Path to output file.
+    path : SaveAsPath
+        RMEMeas measurement s1p_c data.
+    device : str
+        Name of device.
+    expansion_factor : float, optional
+        If >1 will use the provided expansion factor. 
+        If < 1, will calculate the confidence interval 
+        (i,e 0.95 will calculate the 95% confidence interval.
+
+    Returns
+    -------
+    Path
+        Path to exported DUT file.
+    """
+    data = configs.S11Like(s11).load()
+
+    # assign everythin got type B as default
+    data.create_empty_categories(['Type'])
+    data.covcats.loc[:, 'Type'] = 'B'
+
+    # assign type a inherted from primary standards
+    a_markers = ['Drift', 'trace', 'cables', 'cable', 'Cable', 'PCA', 'additive']
+    type_a_umechs = data.cov.umech_id[
+        [False] + [any([am in oi for am in a_markers]) for oi in data.umech_id]
+    ]
+    data.covcats.loc[type_a_umechs, 'Type'] = 'A'
+
+    # propagate to real/imaginary
+    prop = RMEProp(sensitivity=True)
+    get_mag = prop.propagate(vna.linmag)
+    get_phs = prop.propagate(vna.phase)
+
+    # calculate mag and phase, than 
+    mag = group_typed_uncertainties(get_mag(data)).sel(s='S11')
+    phs = group_typed_uncertainties(get_phs(data)).sel(s='S11') * 180 / np.pi
+    assert 'uncategorized' not in mag.umech_id
+
+    if expansion_factor < 1:
+        mag_expansion = max(
+            (mag.confint(expansion_factor, rad=True)[1] - mag.nom) / mag.stdunc(rad=True).cov
+        )
+        phase_expansion = max(
+            (phs.confint(expansion_factor, rad=True)[1] - phs.nom) / phs.stdunc(rad=True).cov
+        )
+        expansion_factor = float(np.round(mag_expansion, 2))
+        print(f'{device} .dut export using expansion factor {expansion_factor}')
+
+    # calculate phase and magnitude uncertainties
+    utot_mag = mag.stdunc(k=expansion_factor).cov
+    ua_mag = mag.usel(umech_id=['A']).stdunc(k=1).cov
+    ub_mag = mag.usel(umech_id=['B']).stdunc(k=1).cov
+    uc_mag = ub_mag * 0
+
+    utot_phs = phs.stdunc(k=expansion_factor, deg=True).cov
+    ua_phs = phs.usel(umech_id=['A']).stdunc(k=1, deg=True).cov
+    ub_phs = phs.usel(umech_id=['B']).stdunc(k=1, deg=True).cov
+    uc_phs = ub_mag * 0
+
+    with open(path, 'w') as f:
+        now = datetime.today().strftime('%d %b %Y')
+        f.write(f'! {device}    {now}\n')
+        f.write(f'! Utot expansion factor = {expansion_factor}\n')
+        f.write(f'! ')
+        f.write(
+            '! Freq, |Gamma|, Arg(Gamma), Ub|G|, Un|G|, Uc|G|, Utot|G|, UbA(G), UnA(G), UcA(G), UtotA(G)\n'
+        )
+        fmt = '{:9.6f} {:7.5f} {:8.3f} {:7.5f} {:7.5f} {:7.5f} {:7.5f} {:8.3f} {:8.3f} {:8.3f} {:8.3f}\n'
+        for freq in mag.nom.frequency:
+            f.write(
+                fmt.format(
+                    freq,
+                    mag.nom.sel(frequency=freq),
+                    phs.nom.sel(frequency=freq),
+                    ub_mag.sel(frequency=freq),
+                    ua_mag.sel(frequency=freq),
+                    uc_mag.sel(frequency=freq),
+                    utot_mag.sel(frequency=freq),
+                    ub_phs.sel(frequency=freq),
+                    ua_phs.sel(frequency=freq),
+                    uc_phs.sel(frequency=freq),
+                    utot_phs.sel(frequency=freq),
+                )
+            )
+
+
 def as_doteff(
     output_path: SaveAsPath,
-    eta: configs.Eta,
-    s11: configs.S11,
+    eta: configs.EtaLike,
+    s11: configs.S11Like,
     sensor_name: str = None,
     connect_number: int = None,
-    expansion_factor: int | float = 2,
+    expansion_factor: float = 2,
     frequency_decimals: int = 2,
     eta_decimals: int = 4,
     s11_abs_decimals: int = 4,
@@ -85,9 +186,9 @@ def as_doteff(
     ----------
     output_path : SaveAsPath
         File path to save to.
-    eta : configs.Eta
+    eta : configs.EtaLike
         Effective efficiency of the sensor.
-    s11 : configs.S11
+    s11 : configs.S11Like
         S11 data of the sensor.
     sensor_name : str
         Name of the sensor. If not provided, won't be included
@@ -112,8 +213,8 @@ def as_doteff(
         Number of columns in the eff file. By default 7.
     """
 
-    eta_dat = configs.Eta(eta).load()
-    s11_dat = configs.S11(s11).load()
+    eta_dat = configs.EtaLike(eta).load()
+    s11_dat = configs.S11Like(s11).load()
 
     flist = eta_dat.cov.frequency
     try:

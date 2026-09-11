@@ -21,8 +21,8 @@ def return_two():
     return 2
 
 
-def test_DataModelPointer():
-    DMP = configs.DataModelContainer
+def test_meas_like_pointer():
+    DMP = configs.MeasLike
     DMP('my-path1')
     DMP('my-path2.h5/my-group2')
     DMP('my-path2.hdf5/my-group2')

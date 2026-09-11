@@ -265,7 +265,7 @@ def parse(
     dataframe_results: SaveAsPath = None,
     linear_bolo_eff: bool = False,
     include_time_std: bool = True,
-    extra_configs: configs.SerialDictionary = None,
+    extra_configs: configs.DictLike = None,
     monitor_power_analysis: dict = None,
     RF_source_power_analysis: dict = None,
 ) -> tuple[dict[RMEMeas], list[plt.Figure]]:
@@ -432,7 +432,7 @@ def parse(
     if extra_configs is None:
         analysis_config = {}
     else:
-        analysis_config = configs.load_config(analysis_config)
+        analysis_config = configs.load_config(extra_configs)
 
     def overload_analysis_config_from_fvalues(signame, d):
         if d is None:
@@ -621,7 +621,7 @@ def parse(
                     print(
                         f'Encountered error plotting signal {signal}:{ins} std \n {type(e)}: {e}'
                     )
-                plt.show()
+                # plt.show()
                 fig, ax = plt.subplots(2, 1)
                 try:
                     column = sconfig[ins]['column']
@@ -696,9 +696,7 @@ def parse(
     print('----------------------------')
     outputs = {}
 
-    cal_coeffs = configs.ThermoelectricFitCoefficients(
-        signal_config['calorimeter_power']['coeffs']
-    ).load()
+    cal_coeffs = configs.KDCLike(signal_config['calorimeter_power']['coeffs']).load()
 
     try:
         p_of_e_calorimeter = cal_coeffs.attrs['p_of_e']
@@ -841,9 +839,7 @@ def parse(
     elif signal_config['DUT_power']['type'] == 'thermoelectric':
         # get sensor coefficients
         # and the calorimeter coefficients
-        s_coeffs = configs.ThermoelectricFitCoefficients(
-            signal_config['DUT_power']['coeffs']
-        ).load()
+        s_coeffs = configs.KDCLike(signal_config['DUT_power']['coeffs']).load()
         dut_signals = signal_config['DUT_power']
         s_e_col = dut_signals['e']['column']
 

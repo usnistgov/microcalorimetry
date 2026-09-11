@@ -7,11 +7,12 @@ import pyvisa as visa
 import numpy as np
 
 from pathlib import Path
-from datetime import timedelta
+from datetime import timedelta, datetime
 from rmellipse.uobjects import RMEMeas
 
 import microcalorimetry.configs as configs
 from microcalorimetry._helpers._intf_tools import ConsoleManager
+from microcalorimetry._helpers._collections import get_git_info, get_version
 
 # import any instrument that you might want here.
 from rminstr.instruments.Anritsu_MG362x1A import SignalGenerator as Anritsu_MG362x1A
@@ -344,6 +345,16 @@ class MicrocalorimeterRunner:
         # validate mount resistance
         self._validate_sensor_settings()
 
+        # stats window needs to be < minimum wait if not using traditional stats
+        # so that it doesn't creep into more than 1 step when you go to do 
+        # analysis
+        traditional_stats = self.parameters['stats_settings']['use_traditional_stats']
+        stats_window = self.parameters['stats_settings']['stats_window']
+        min_wait = self.parameters['stats_settings']['minimum_wait']
+        if not traditional_stats and stats_window >= min_wait:
+            raise ValueError("stats_window must be less than minimum_wait if not use_traditional_stats.")
+
+
         # initializes an active data record
         self.record = ActiveRecord(
             self.record_columns,
@@ -369,6 +380,14 @@ class MicrocalorimeterRunner:
 
         self.record.metadata['config_file'] = config_file
         self.record.metadata['settings_file'] = settings_file
+        self.record.metadata['microcalorimetry_version'] = get_version('microcalorimetry')
+        
+        # add any git infor available about the
+        # repository the source code lives in
+        microcalorimetry_git_info = get_git_info(__file__)
+        for k,v in microcalorimetry_git_info.items():
+            self.record.metadata[k] = v
+        
 
         self.parameters.save_config(config_file)
         self.parameters.save_run_settings(settings_file)
@@ -549,7 +568,7 @@ class MicrocalorimeterRunner:
                     } should be formatted (min,max), first item <= second item.'
                 )
 
-            coeffs = configs.ThermoelectricFitCoefficients(
+            coeffs = configs.KDCLike(
                 self.parameters[SIGNAL_CONFIG_KEY][port_name]['coeffs']
             ).load()
 
@@ -713,6 +732,9 @@ class MicrocalorimeterRunner:
 
         except KeyError:
             instrument.initial_setup()
+        except visa.errors.VisaIOError as e:
+            msg = f"Failed to setup {name} which is a {model}, caught VisaIOError: {str(e)}"
+            raise Exception(msg) from e
 
         # some instruments have special names
         if role == 'SMU_power_meter':
@@ -762,18 +784,18 @@ class MicrocalorimeterRunner:
         # this block needs to go here so the instruments
         # have a chance to initialize properly into their roles
         # if they don't respond well to an IDN string query
-        auto_validated_count = 0
-        total = len(self.instruments)
+        failed = 0
         for i, name in enumerate(names):
-            visa_address = self.parameters['instruments'][name]['GPIB_address']
-            rm = visa.ResourceManager()
             print('')
             print(f'Validating Instrument *IDN? : {name}')
             print(f'    serial : {self.parameters["instruments"][name]["serial"]}')
             try:
                 expected = self.parameters['instruments'][name]['*IDN?']
             except KeyError:
-                expected = 'Not specified'
+                print('    No *IDN? specified. Skipping validation.')
+                continue
+            visa_address = self.parameters['instruments'][name]['GPIB_address']
+            rm = visa.ResourceManager()
             try:
                 connection = rm.open_resource(visa_address)
                 idn = str(connection.query('*IDN?')).strip()
@@ -784,14 +806,14 @@ class MicrocalorimeterRunner:
             print(f'     *IDN? : {idn}')
             if idn != expected:
                 print('    match? : No')
+                failed += 1
             else:
                 print('    match? : Yes')
-                auto_validated_count += 1
 
-        if auto_validated_count < total and not self.no_confirm:
+        if failed > 0 and not self.no_confirm:
             print('-------------------------------------------------------------')
             input(
-                'WARNING: Some *IDN? dont match the expected value. \n press anything to continue >>'
+                'WARNING: Some *IDN? dont match the expected value. \n press anything to continue or ctrl + c to cancel.>>'
             )
 
         # Initialize instruments into their correct interfaces
@@ -991,7 +1013,7 @@ class MicrocalorimeterRunner:
             )
 
         print('')
-
+        # something to estaimte the end time of the experiment should go here
         print(format_column('min time left in point', step_time_left))
         for cname in TIME_STATUS_COLUMNS:
             unreported.pop(unreported.index(cname))
@@ -1030,11 +1052,13 @@ class MicrocalorimeterRunner:
             dvm_volts_present = False
             print('DVM_volts not present or failed to read.')
 
-        te, e = self.record.get_time_series(
-            'NVM_volts', t_max=current_time, t_min=current_time - short_plot_window
-        )
+
 
         try:
+            te, e = self.record.get_time_series(
+                'NVM_volts', t_max=current_time, t_min=current_time - short_plot_window
+            )
+            
             font = {'size': 10}
 
             plt.rc('font', **font)
@@ -1064,6 +1088,8 @@ class MicrocalorimeterRunner:
 
         except FileNotFoundError:
             print('Tried to output graph, file path not valid')
+        except KeyError:
+            print("No NVM Volts column, not plotting.")
         plt.close('all')
 
         self.record['last_plot_update_time'] = current_time
@@ -1147,13 +1173,17 @@ class MicrocalorimeterRunner:
             for sensor in SENSOR_PORTS:
                 sensor_type = self.parameters['signal_config'][sensor]['type']
                 if sensor_type == 'bolometer':
-                    tV, V = self.record.get_time_series(
-                        self.signal_configs[sensor][APPLIED_VOLTAGE_CMMKEY]['column'],
-                        delta_t=measurement_interval,
-                        t_max=current_time,
-                        t_min=current_time - stats_window,
-                    )
-                    V_mean = np.mean(V)
+                    # THIS NEEDS TO MAKE SURE ITS ONLY USING SAMPLES FROM THE CURRENT
+                    # STEP
+                    column =  self.signal_configs[sensor][APPLIED_VOLTAGE_CMMKEY]['column']
+                    # tV, V = self.record.get_time_series(
+                    #     column,
+                    #     delta_t=measurement_interval,
+                    #     t_max=current_time,
+                    #     t_min=current_time - stats_window,
+                    # )
+                    # V_mean = np.mean(V)
+                    V_mean = self.record[column]
                     V_big_enough = (
                         V_mean > self.parameters['levelling_settings']['V_off_slow_min']
                     )

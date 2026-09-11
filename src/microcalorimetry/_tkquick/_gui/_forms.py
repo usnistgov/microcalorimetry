@@ -34,14 +34,14 @@ npdoc_typedict = {
     'list[configs.EtaHistorical]': list[Path],
     'RFSweepParserConfig': Path,
     'RFSweepSignalConfig': Path,
-    'configs.Eta': Path,
+    'configs.EtaLike': Path,
     'configs.EtaHistorical': Path,
-    'configs.GC': Path,
-    'configs.S11': Path,
+    'configs.GCLike': Path,
+    'configs.S11Like': Path,
     'microcalorimetry.configs.ParsedDCSweep': Path,
     'configs.ParsedRFSweep': Path,
-    'configs.RFSweep': Path,
-    'configs.ThermoelectricFitCoefficients': Path,
+    'configs.RFSweepLike': Path,
+    'configs.KDCLike': Path,
 }
 
 npdoc_defaults = {k: k for k in npdoc_typedict}
