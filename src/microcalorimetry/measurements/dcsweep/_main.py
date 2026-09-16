@@ -308,7 +308,7 @@ def run(
     ) as dr:
         # copy over any git metadata about this source code to the data record
         microcalorimetry_git_info = get_git_info(__file__)
-        for k,v in microcalorimetry_git_info.items():
+        for k, v in microcalorimetry_git_info.items():
             dr.metadata[k] = v
         dr.metadata['microcalorimetry_version'] = get_version('microcalorimetry')
         # import instruments
@@ -529,9 +529,9 @@ def parse_v1(
     thermopile_monitor: str,
     heater: str,
     on_min_wait: float = 1000,
-    on_window: list[float] = (-600,0),
+    on_window: list[float] = (-600, 0),
     off_min_wait: float = 1000,
-    off_window: list[float] = (-600,0),
+    off_window: list[float] = (-600, 0),
     min_pwr_setting: float = 0.0,
     thermometer_monitor: str = None,
     make_plots: bool = True,
@@ -568,8 +568,6 @@ def parse_v1(
         [5, 100] from 5 to 100 seconds into the step.
     min_pwr_setting : float, optional
         Exclude and power levels below this value.
-    throw_away_min_time : float, optional
-        Throw away samples taken before this time since source adjustment.
     thermometer_monitor : str, optional, optional
         Name of instrument in the thermometer_monitor role. The default
         is None.
@@ -596,10 +594,10 @@ def parse_v1(
         heater=heater,
         thermometer_monitor=thermometer_monitor,
         thermopile_monitor=thermopile_monitor,
-        on_min_wait = on_min_wait,
-        on_window = on_window,
-        off_min_wait = off_min_wait,
-        off_window = off_window,
+        on_min_wait=on_min_wait,
+        on_window=on_window,
+        off_min_wait=off_min_wait,
+        off_window=off_window,
         min_pwr_setting=min_pwr_setting,
     )
 
