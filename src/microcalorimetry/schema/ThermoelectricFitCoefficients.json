@@ -1,6 +1,6 @@
 {
     "definitions": {
-        "ThermoelectricFitCoefficients":{
+        "KDCLike":{
             "description": "File, HDF5Group, or in memory representation of a ThermoelectricFitCoefficients.",
             "$ref$":"DataModel.json#/definitions/DataModel",
             "examples":["path/to/data.hdf5/path/to/coeffs"],

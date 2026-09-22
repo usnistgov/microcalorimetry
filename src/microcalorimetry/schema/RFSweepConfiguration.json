@@ -18,9 +18,9 @@
             "$ref": "RFSweepStatsSettings.json#/definitions/RFSweepStatsSettings",
             "description": "Describes statistical tests used for determining if the thermopile element is level."
         },
-        "column_model_mapping": {
-            "$ref": "RFSweepColumnModelMapping.json",
-            "description": "Maps the columns of the data-record file to a model of the sensor."
+        "signal_config": {
+            "$ref": "RFSweepSignalConfig.json",
+            "description": "Maps instruments to a type of signal during a measurement."
         },
         "run_settings_columns": {
             "$ref": "RFSweepRunSettingsColumns.json#/definitions/RFSweepRunSettingsColumns",

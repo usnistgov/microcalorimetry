@@ -1,5 +1,7 @@
 """
-This script performs a voltage staircase.
+This submodule provides the main functions interacted with by the API for the DC sweep submodule.
+
+Functions from the _parsers and _runners are called.
 
 """
 
@@ -13,7 +15,7 @@ import matplotlib.pyplot as plt
 import shutil
 import json
 import time
-import microcalorimetry.measurements.dcsweep._analysis as staircase_analysis
+import microcalorimetry.measurements.dcsweep._parsers as staircase_analysis
 import click
 from microcalorimetry._helpers._collections import get_git_info, get_version
 from microcalorimetry._tkquick.gui_dtypes import Folder

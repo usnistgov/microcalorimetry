@@ -572,7 +572,7 @@ def parse(
                                 figures += new_figures
 
     # use the last signal config
-    signal_config = configs.RFSweepSignalConfig(runs[-1].parsed_config['signal_config'])
+    signal_config = runs[-1].parsed_config['signal_config']
 
     # format data output into rmellipse objects
     c = microparser.Campaign(runs, Path.cwd(), 'rfsweep')

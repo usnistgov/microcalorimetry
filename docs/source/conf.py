@@ -135,11 +135,12 @@ extensions = [
     'autoapi.extension',
     # 'sphinx_gallery.gen_gallery',
     'sphinx.ext.napoleon',
-    # 'numpydoc',
+    'numpydoc',
     'sphinx.ext.githubpages',
     'sphinx-jsonschema',
     'sphinx.ext.viewcode',
     'sphinx_click',
+    'myst_parser',
 ]
 if multiversioned is not None:
     extensions.append('sphinx_multiversion')
@@ -151,7 +152,7 @@ if multiversioned is not None:
 templates_path = ['_templates']
 
 
-autoapi_dirs = ['../../src']
+autoapi_dirs = ['../../src/microcalorimetry']
 autoapi_ignore = [
     '*migrations*',
     '*_archive*',
@@ -176,6 +177,7 @@ autoapi_options = [
     'imported-members',
 ]
 
+autoapi_add_toctree_entry = True
 
 # -- SPHINX GALLERY OPTIONS --
 sphinx_gallery_conf = {
@@ -197,6 +199,14 @@ exclude_patterns = []
 
 
 spelling_word_list_filename = ['docs/source/spelling_wordlist.txt']
+
+# %% MYST settings
+# 2. Add "alert" to your MyST enabled extensions
+myst_enable_extensions = [
+    'alert',
+    # "colon_fence", (optional, but recommended for advanced blocks)
+]
+
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for

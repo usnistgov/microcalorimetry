@@ -34,7 +34,7 @@ def view(
     relative_time: bool = False,
 ) -> tuple[plt.Figure]:
     """
-    Generic plot columns in a data record.
+    Generic functio that plots columns in a data record.
 
     Parameters
     ----------

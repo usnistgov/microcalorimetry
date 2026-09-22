@@ -1,3 +1,7 @@
+"""
+Top level module for the microcalorimetry Python package.
+"""
+
 import matplotlib.pyplot as _plt
 import matplotlib as _mpl
 
