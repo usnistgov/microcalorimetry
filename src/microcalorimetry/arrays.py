@@ -11,7 +11,7 @@ frequency_coord = CoordinateSchema(dtype=float, units='GHz')
 
 def as_annotated(
     meas: RMEMeas, Annotation: type[AnnotatedArray], validate: bool = True
-) -> RMEMeas[[AnnotatedArray]]:
+) -> RMEMeas[AnnotatedArray]:
     """Cast the underlying DataArray of an RMEMeas as an annotated array."""
     new_cov = meas.cov
     if new_cov is not None:
@@ -35,7 +35,7 @@ def as_annotated(
 
 
 class RFSweep(AnnotatedArray):
-    """Series of values swept by frequency"""
+    """Series of values swept by frequency."""
 
     schema = ArraySchema(
         shape=(..., 'N'),
@@ -49,9 +49,7 @@ class RFSweep(AnnotatedArray):
 
 class DCSweep(AnnotatedArray):
     """
-    Series of values swept by DC
-
-
+    Series of values swept by DC power.
     """
 
     schema = ArraySchema(
@@ -67,7 +65,7 @@ class DCSweep(AnnotatedArray):
 
 class Eta(AnnotatedArray):
     """
-    Effect efficiency of a power sensor.
+    Effective efficiency of a power sensor.
 
     'eta' is a singular dimension.
     """
@@ -98,9 +96,10 @@ class S11(AnnotatedArray):
 
 class GC(AnnotatedArray):
     """
-    Correction factor.
+    Correction factor data for a microcalorimeter.
 
-    The gc dimension describes the index correction term.
+    The gc dimension describes the index correction term, is usually of length 1 - 4
+    depending on the type of model.
     """
 
     schema = ArraySchema(
@@ -112,14 +111,14 @@ class GC(AnnotatedArray):
 
 
 class KDCFitMeta(BaseModel):
-    """MetdataRequired for temperature independent thermoelectric sensitivities."""
+    """Metdata required for temperature independent thermoelectric sensitivities."""
 
     """If True, means fit is in W/V, otherwise in V/W."""
     p_of_e: bool
 
 
 class KDCTempDep(AnnotatedArray):
-    "Temperature independent polynomial fit coefficients."
+    "Temperature independent polynomial fit coefficients  thermoelectric."
 
     schema = ArraySchema(
         shape=(..., 'N'),
@@ -131,7 +130,7 @@ class KDCTempDep(AnnotatedArray):
 
 
 class KDCTemInd(AnnotatedArray):
-    "Temperature dependent polynomial fit coefficients."
+    "Temperature dependent polynomial fit coefficients of thermoelectric."
 
     schema = ArraySchema(
         shape=(..., 10),

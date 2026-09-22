@@ -1,48 +1,7 @@
 {
-    "definitions": {
-        "BolometerParserSettings": {
-            "title":"Bolometer Parser Settings",
-            "description": "RF sweep parser settings specific to a bolometer sensor.",
-            "type": "object",
-            "properties": {
-                "V_off_delay": {
-                    "type": "number",
-                    "description": "What time should be fit to when determining 'off' point when fitting the fast off.",
-                    "examples": [0.37]
-                },
-                "V_off_function": {
-                    "type": "string",
-                    "enum": [
-                        "single_sample",
-                        "lin_plus_exp",
-                        "linear"
-                    ],
-                    "description": "What type of fit function to use when fitting to the fast off voltage of the sensor.",
-                    "examples": ["linear"]
-                },
-                "V_off_fit_time_window": {
-                    "description": "The time window - relative to when power was turned off - to fit the data to. Should be large enough to capture the curve.",
-                    "type": "array",
-                    "minItems": 2,
-                    "maxItems": 2,
-                    "items": {
-                        "type": "number"
-                    },
-                    "examples": [[1,20]]
-                },
-                "dependentRequired": {
-                    "V_off_delay": ["V_off_delay","V_off_function","V_off_fit_time_window"]
-                }
-            },
-            "ThermoelectricSensorParserSettings": {
-                "description": "Analysis settings specific to a thermoelectric sensor.",
-                "additionalProperties": false
-            }
-        }
-    },
     "title": "RFSweepParserConfig",
     "type": "object",
-    "description": "Settings needed to parsed an RFsweep for a sensor, not specific to any type of sensor.",
+    "description": "Settings needed to parsed an RFsweep. ",
     "properties": {
         "analysis_config": {
             "type": "object",
@@ -53,11 +12,36 @@
                 },
                 "stats_window_override": {
                     "type": "number",
-                    "description": "Override the stats window (in seconds) to average over when evaluating long timescale RF off values."
+                    "description": "Override the stats window (in seconds) to average over when evaluating long timescale RF off values. If not provided will use the stats_window size in the measurement configuration."
                 },
                 "fast_off_analysis": {
+                    "type": "boolean",
+                    "description": "Enables performance of fast off analysis for thermoelectric sensors. Usually only DUTs, if provided must provided V_off settings."
+                },
+                "V_off_delay": {
                     "type": "number",
-                    "description": "Performs fast off analysis for thermoelectric sensors."
+                    "description": "What time should be used when evaluating the V_off fit to find the off value, time is relative to when power is switched off. Only needed for DUTs",
+                    "examples": [0.37]
+                },
+                "V_off_function": {
+                    "type": "string",
+                    "enum": [
+                        "single_sample",
+                        "lin_plus_exp",
+                        "linear"
+                    ],
+                    "description": "What type of fit function to use when fitting to the fast off voltage of the sensor. Only needed for DUTs",
+                    "examples": ["linear"]
+                },
+                "V_off_fit_time_window": {
+                    "description": "The time window - relative to when power was turned off - to fit the data to. Should be large enough to capture the curve. Only needed for DUTs.",
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {
+                        "type": "number"
+                    },
+                    "examples": [[1,20]]
                 }
             },
             "required":[]

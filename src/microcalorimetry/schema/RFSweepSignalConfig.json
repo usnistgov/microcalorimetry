@@ -231,7 +231,7 @@
     },
     "RF_source_power": {
       "description": "Mapping of sensor models and columns for the rfsource outside the calorimeter",
-      "$ref:": "#/definitions/RFSourceSignal"
+      "$ref": "#/definitions/RFSourceSignal"
     },
     "monitor_power": {
       "description": "Mapping of sensor models and columns for the monitor outside the calorimeter",

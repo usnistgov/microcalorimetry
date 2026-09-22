@@ -1,8 +1,8 @@
 {
     "definitions": {
-        "GC": {
+        "GCLike": {
             "description": "File, HDF5Group, or in memory representaion of a microcalorimeter correction factor.",
-            "$ref$":"DataModelContainer.json#/definitions/DataModelContainer",
+            "$ref$":"DataModelContainer.json#/definitions/MeasLike",
             "examples":["data.h5/gc_group"],
             "additionalProperties": false
         }

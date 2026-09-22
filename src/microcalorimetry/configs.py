@@ -1,20 +1,16 @@
 """
 Module for defining configuration objects.
 
-Configuration objects are either:
+Configuration objects include MeasLike objects, which are objects that can be any of:
 
-* Objects that inherit from DataModelContainer, and hold either a datset itsself or a file pointer to the dataset
-* Objects that inherit from DictLike, which JSON compatable dictionary objects that can be instantiate from a file pointer or the dictionary itself.
+1. An RMEMeas of a particular type of array (e.g. complex 1 port S-parameters)
+2. A file path pointing to a supported file format for that type of array
 
-Supported serialization formats are:
+All MeasLike objects have a load() method, so if you have a function input that is
+mean to be S11Like (should be either the S11 data or a file containing that data)
+you can cast it as an S11Like thing and call load() in order to get out the data.
 
-* JSON
-* YAML (restricted to a JSON compatable subset using pyyaml's safe_load method)
-* ExperimentParameters (spreadsheet editable JSON like object defined in Rocky Mountain Instruments)
-* HDF5 Group Saveable Dictionaries (A generic object serialization format defined in Rocky Mountain Ellipse)
 
-Each configuration object has a corresponding JSON schema that can be used to provide
-validation.
 
 """
 

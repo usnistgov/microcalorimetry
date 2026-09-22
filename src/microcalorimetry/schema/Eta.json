@@ -1,8 +1,8 @@
 {
     "definitions": {
-        "Eta": {
+        "EtaLike": {
             "description": "File, HDF5Group, or in memory representation of effective efficiency.",
-            "$ref$":"DataModelContainer.json#/definitions/DataModelContainer",
+            "$ref$":"DataModelContainer.json#/definitions/MeasLike",
             "examples":["eta_file.eff","data.h5/eff_group"],
             "additionalProperties": false
         }

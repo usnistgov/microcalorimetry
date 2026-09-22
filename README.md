@@ -53,26 +53,45 @@ import microcalorimetry.measurements.dcsweep as dcsweep
 import microcalorimetry.measurements.rfsweep as rfsweep
 ```
 
-Analysis functions that take in parsed data and generate new data sets with uncertainties (like the effective efficiency of  power sensors) are provided in the ``microcalorimetry.analysis`` submodule.
+Analysis procedures are in the ``microcalorimetry.analysis`` submodule.
 
 ```Python
 import microcalorimetry.analysis as analysis
 ```
 
+Mathematical operations compatable with ([RMEMeas](https://pages.nist.gov/rmellipse-ipages/stable/index.html)) objects are stored in the ``microcalorimetry.math`` submodule.
+These are the mathematical models used in the analysis procedures.
 
-Configuration objects for measurements and analysis scripts are provided in a ``microcalorimetry.configs`` module.
+```Python
+import microcalorimetry.math as mcmath
+```
+
+Configuration objects for measurements and analysis procedures are provided in a ``microcalorimetry.configs`` submodule.
 ```Python
 import microcalorimetry.configs as configs
 ```
 
-Mathematical operations compatable with ([RMEMeas](https://pages.nist.gov/rmellipse-ipages/stable/index.html)) objects are stored in the ``microcalorimetry.math`` submodule.
+Definitions of array structures used throughout the package are in the ``microcalorimetry.arrays`` submodule.
+```Python
+import microcalorimetry.arrays as arrays
+```
+
+This package nativley works with [RMEllipse](https://pages.nist.gov/rmellipse-ipages/stable/index.html)  data types and file formats, but includes functions for exporting into
+other file formats.
+```Python
+import microcalorimetry.export as export
+```
+
+The GUI supports a plugin system for adding extra function interfaces. Special data types for adding GUI functions are provided in the ``microcalorimetry.gui_dtypes`` submodule.
 
 ```Python
-import microcalorimetry.math as mcmath
+import microcalorimetry.gui_dtypes as gui_dtypes
 ```
 
 ## Authors
 
 Contributors names and contact info
 
-Daniel C. Gray, Zenn C. Roberts, Aaron M. Hagerstrom
+Daniel C. Gray
+Zenn C. Roberts
+Aaron M. Hagerstrom

@@ -7,7 +7,7 @@
             "description": "All properties are dictionaries that describe each dataset",
             "properties":{
                 "datamodel":{
-                    "$ref": "Eta.json#/definitions/Eta"
+                    "$ref": "Eta.json#/definitions/EtaLike"
                 }
             },
             "required":["datamodel"]

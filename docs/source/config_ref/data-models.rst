@@ -1,11 +1,10 @@
-Data Model Containers
-=====================
-This page contains definitions for schemas used to reference Data Model Container objects
-as being part of different configuration schema. A `DataModelContainer` holds file path in the
-context of a configuration file, but could hold the actual in-memory representation of that
-dataset in the context of a python script.
+MeasLike Objects
+================
+This page contains config Schema's used to defin MeasLike objects as part of configuration files.
+A `MeasLike` is something that could be a measurmeent - either a file path that contains the measurment
+data or the in memory data itself.
 
-.. jsonschema:: ../../../src/microcalorimetry/schema/DataModelContainer.json#/definitions/DataModelContainer
+.. jsonschema:: ../../../src/microcalorimetry/schema/DataModelContainer.json#/definitions/MeasLike
     :lift_description:
     :lift_definitions:
     :lift_title:
