@@ -29,6 +29,10 @@ convention = "numpy"
 # fall back in case the build version fails
 fallback_version = "0.0.0"
 
+[tool.bandit]
+targets = ["src/microcalorimetry"]
+tests = ["B201", "B301"]
+skips = ["B101", "B601"]
 
 [project]
 name = "microcalorimetry"
@@ -64,7 +68,7 @@ dependencies = [
   "rminstr>=0.6.6",
   "rmellipse>=0.5.1",
   "customtkinter>=5.2.2,<6",
-
+  "bandit[toml]>=1.9.4",
 ]
 
 [project.scripts]
@@ -85,4 +89,5 @@ dev = [
     "sphinx-multiversion>=0.2.4",
     "spyder-kernels==3.1.*",
     "myst-parser<5",
+    "pip-audit>=2.10.1",
 ]
