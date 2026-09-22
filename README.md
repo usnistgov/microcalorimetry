@@ -10,8 +10,8 @@
 This package provides a library of data acquisition and analysis tools for RF power calibrations using microcalorimeters. Included in
 this package is:
 
-* A Python scripting API
-* A User Inteface (CLI and GUI) for data acquisition and analysis.
+* A Python scripting API.
+* A GUI for data acquisition and analysis.
 
 This package is built using Rocky Mountain Ellipse ([RME](https://github.com/usnistgov/rmellipse)), a project to develop tools for digital traceability at NIST.
 
@@ -27,7 +27,7 @@ pip install microcalorimetry
 
 ### CLI
 
-The command line interface is can be accessed with the `ucal` command:
+The command line interface can be accessed with the `ucal` command.
 
 ```console
 ucal --help
@@ -35,7 +35,7 @@ ucal --help
 
 ### GUI
 
-The GUI is launched via the command line interface
+The GUI is launched via the command line interface.
 
 ```console
 ucal gui
@@ -43,7 +43,7 @@ ucal gui
 
 ### Python API
 
-The Python API provides a functional interface for performing measurements and data analysis.
+The Python API provides a programmable interface for performing data acquisition and analysis.
 
 The ``microcalorimetry.measurements`` submodule provides an interface into RF sweep and DC sweep measurement procedures, as well as tools to parse the raw data.
 
