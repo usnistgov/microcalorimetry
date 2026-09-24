@@ -787,7 +787,7 @@ def make_eta(
 
     if extra_eta_uncertainties:
         for eu in extra_eta_uncertainties:
-            eta_new = apply_uncertainty_model(eta_new, eu, make_unique=True)
+            eta_new = apply_uncertainty_model(eta_new, eu, make_unique=False)
 
     # cast as a DataModelContainer and maybe
     # generate review plots
