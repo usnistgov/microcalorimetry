@@ -16,6 +16,10 @@ __all__ = ['categorize_by', 'DEFAULT_ORIGIN_FILTER']
 DEFAULT_ORIGIN_FILTER = {
     '*DC*Trace*': 'DC Measurement Accuracy',
     '*DC*Datasheet*': 'DC Measurement Accuracy',
+    'Datasheet':'DC Measurement Accuracy',
+    '*[rR]epeat*':'Repeatability',
+    'Type IV':'DC Measurement Accuracy',
+    'Eff':'Calibration Standard Eff Definition',
     '*DC*Noise*': 'DC Measurement Noise',
     '*DC*Repeat*': 'DC Measurement Noise',
     '*Noise*': 'DC Measurement Noise',
@@ -23,6 +27,7 @@ DEFAULT_ORIGIN_FILTER = {
     '*Cable Bend*': 'S-Parameters',
     '*Airline*': 'S-Parameters',
     '*VNA*': 'S-Parameters',
+    'uncategorized':'Other'
     # '*Correction*': 'Correction Factor',
 }
 
