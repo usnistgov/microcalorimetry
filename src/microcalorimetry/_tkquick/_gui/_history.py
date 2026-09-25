@@ -117,7 +117,7 @@ class HistoryTopLevel(ctk.CTkFrame):
 
     @property
     def default_glob(self) -> str:
-        return f'*{today()}*'
+        return f'*'
 
     @property
     def glob(self) -> str:
