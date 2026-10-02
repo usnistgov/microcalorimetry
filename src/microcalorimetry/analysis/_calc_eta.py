@@ -545,21 +545,16 @@ def make_eta_repeatability_model(
     )
     pretty_model_name = model_type.replace('_', ' ').title()
     ub = model.stdunc().cov[..., 0]
-    
-    
+
     ax.plot(
         u.frequency,
-        u*-100,
-        color = 'red',
+        u * -100,
+        color='red',
     )
     ax.plot(
-        u.frequency,
-        u*100,
-        color = 'red',
-        label = f'${coverage}\sigma$ of {dist.title()}'
+        u.frequency, u * 100, color='red', label=f'${coverage}\sigma$ of {dist.title()}'
     )
-        
-    
+
     ax.fill_between(
         model.nom.frequency,
         ub * 2 * 100,
@@ -569,7 +564,6 @@ def make_eta_repeatability_model(
         label=f'{pretty_model_name} Model (k=2)',
         zorder=1000,
     )
-
 
     h, l = ax.get_legend_handles_labels()
 
@@ -586,7 +580,10 @@ def make_eta_repeatability_model(
 
 
 def dc_lead_correction(
-    eta: configs.EtaLike, R_lead: float, R_bolo: float, R_lead_max: float = 0.14
+    eta: configs.EtaLike,
+    R_lead: float,
+    R_bolo: float,
+    R_lead_min_coverage: float = 0.14,
 ) -> tuple[RMEMeas[arrays.Eta]]:
     """
     Applies a dc lead correction.
@@ -601,17 +598,14 @@ def dc_lead_correction(
     eta : configs.EtaLike
         Path to an effective efficiency measurement to apply the correction to.
     R_lead : float
-        Sum of resistance for Force and Sense leads of sensor.
+        Sum of resistance for Force and Sense leads of sensor, positive and negative sides.
     R_bolo : float
         Bolometer resistance, usually 200 ohms for bolometer sensors.
-    R_lead_max : float
-        This is the maximum allowed resistance for force and sense leads of the sensor.
-        Uncertainty is only applied for R_lead > R_lead_max, and only excess uncertainty
-        is applied. It is assumed uncertainty
-        associated with lead resitances less than or equal to R_lead_max have
-        already been accounted for. Set to zero to count all the uncertainty associated
-        with your lead resistance. The default value is 0.14 Ohms, which is the typical
-        allowable value for CN mounts in NIST's Type N microcalorimeter.
+    R_lead_min_coverage : float, optional
+        Uncertainties applied as a result of the dc lead correction will cover a minimun
+        lead resistance of this value. If the lead resistance is greater than this value,
+        then the associated uncertainty will be calculated useing the provided R_lead.
+        The default value is 0.14 Ohms.
 
     Returns
     -------
@@ -628,18 +622,21 @@ def dc_lead_correction(
     bias_correct = linear.propagate(rfpower.dcbias_eta_correction)
     corrected = bias_correct(eta, R_lead, R_bolo)
 
-    if R_lead_max < R_lead:
-        print('Excess lead resistance, adding uncertainty')
-        assumed_u_already = R_lead_max / 400 / np.sqrt(3)
-        total_u = R_lead / 400 / np.sqrt(3)
-        extra = np.sqrt(total_u**2 - assumed_u_already**2)
-        corrected.add_umech(
-            name='eta_dclead_excess',
-            value=corrected.nom + extra,
-            dof=np.inf,
-            category={'Type': 'B', 'Origin': 'Excess DC Lead Resistance'},
-            add_uid=True,
-        )
+    use_value = R_lead_min_coverage
+    if R_lead_min_coverage < R_lead:
+        use_value = R_lead
+
+    uncertainty = use_value / 2 / R_bolo / np.sqrt(3)
+    corrected.add_umech(
+        name='eta_dclead_excess',
+        value=corrected.nom + uncertainty,
+        dof=np.inf,
+        category={
+            'Type': 'A',
+            'Origin': 'DC Lead Resistance',
+        },  # classified as Type A for hisorical reasons
+        add_uid=True,
+    )
 
     return corrected
 
