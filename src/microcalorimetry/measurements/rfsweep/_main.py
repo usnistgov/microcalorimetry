@@ -4,206 +4,48 @@ from rminstr.utilities.path import new_dir
 from microcalorimetry.math import rfpower
 from rmellipse.uobjects import RMEMeas
 from rmellipse.propagators import RMEProp
-from rminstr.data_structures import ExistingRecord, ExptParameters
+
+# from rminstr.data_structures import ExistingRecord, ExptParameters
 from pathlib import Path
-from os.path import join, dirname, basename
+
+# from os.path import join, dirname, basename
 import microcalorimetry.measurements.rfsweep._parser as microparser
 import microcalorimetry.measurements.rfsweep._runner as microrunner
 import microcalorimetry.configs as configs
 import microcalorimetry._helpers._intf_tools as clitools
-from microcalorimetry._tkquick.dtypes import Folder
+from microcalorimetry._tkquick.gui_dtypes import Folder, SaveAsPath
 import matplotlib.pyplot as plt
-import os
+
+# import os
 import numpy as np
 import pandas as pd
 import json
 import click
-from itertools import cycle
-from decimal import Decimal
-from fnmatch import fnmatch
+import time
 
-__all__ = ['run', 'parse', 'view', 'generate_settled_runlist', 'runlist_from_loss']
+# from itertools import cycle
+# from decimal import Decimal
+# from fnmatch import fnmatch
+# from microcalorimetry.math.numbers import mean_unique_values
+from matplotlib.cm import ScalarMappable
 
-
-def view(
-    metadata: Path,
-    signal_config: configs.RFSweepSignalConfig = None,
-    time_window: list[float] = None,
-    plot_p_est: bool = True,
-    plot_sensor_raw: bool = True,
-    down_sample_n: int = 1,
-    power_units: str = 'W',
-    time_units: str = 'hrs',
-) -> tuple[plt.Figure]:
-    """
-    View an ongoing rfsweep experiment.
-
-    Parameters
-    ----------
-    metadata : Path
-        Path to the metadata file of an active experiment
-    signal_config : RFSweepSignalConfig, optional
-        Path to a signal configuration of the measurement.
-        Will attempt to read the signal config from the measurement
-        files if not provided, if provided will overide what is in
-        the metadata files.
-    time_window : list[float], optional
-        Time window to look at (in units of time_units),
-        as [min, max]. If
-        not provided will plot entire time series. by default None
-    plot_p_est : bool, optional
-        Plots the estimate of each power signal, by default True
-    plot_sensor_raw : bool, optional
-        Plots the raw data that composes each signal, by default True
-    down_sample_n : int, optional
-        Down sample time series by n, by default 1
-    power_units : str, optional
-        Plot units for power, by default 'W'
-    time_units : str, optional
-        Plot units for time, by default 'hrs'
-
-    Returns
-    -------
-    figures : tuple[Figure]
-        Tuple of output figures.
-    """
-
-    def down_sample(ts, n=down_sample_n):
-        index = np.arange(0, len(ts[0]), down_sample_n)
-        t = ts[0][index]
-        y = ts[1][index]
-        return t, y
-
-    def zero_hour(ts, t0=None):
-        return ts / 3600
-
-    def punit(vals, origin: str = 'W'):
-        if origin == power_units:
-            return vals
-        if origin == 'W':
-            if power_units == 'mW':
-                return vals * 1000
-            elif power_units == 'dBm':
-                return 10 * np.log10(vals) + 30
-        elif origin == 'dBm':
-            if power_units == 'mW':
-                return 10 ** (vals / 10)
-            elif power_units == 'W':
-                return 10 ** (vals / 10) / 1000
-
-    # check that powerlevelling is functioning properly
-    # this is just for debugging inline
-
-    # mpl.use('tkagg')
-    # plt.close('all')
-    # metadata = r"O:\67201\Power\24Calor\rawdata\C24N129\040\cstd_run_0_incomplete\20250115_metadata.csv"
-    # it will break the app if run normally
-
-    # if a folder is pointed to, use a filed with _metadata.csv
-    # in the name as the metadata file, so folders can be pointed to
-    # adjusted_metadata = []
-    # for md in [metadata]:
-    #     md = Path(md)
-    #     if not md.exists():
-    #         raise FileExistsError(f'{md} doesnt exist')
-    #     elif md.is_file():
-    #         adjusted_metadata.append(md)
-    #     # assume folders contain a single run
-    #     # 1 metadata file
-    #     elif md.is_dir():
-    #         new_md = [f for f in md.glob('*_metadata.csv')]
-    #         if len(new_md) == 1:
-    #             adjusted_metadata.append(new_md[0])
-    #         else:
-    #             raise ValueError(f'{md} must contain exactly 1 *_metadata files to be pointed to by parser.')
-    # metadata = adjusted_metadata[0]
-
-    # if power levelling is happening, plot a summary of that
-
-    dr = ExistingRecord(metadata)
-
-    d_full = dr.batch_read()
-
-    try:
-        ep = ExptParameters(dr.metadata['config_file'], dr.metadata['settings_file'])
-
-    except FileNotFoundError:
-        newdir = dirname(metadata)
-        _config_file = join(newdir, basename(dr.metadata['config_file']))
-        _run_settings_file = join(newdir, basename(dr.metadata['settings_file']))
-        ep = ExptParameters(_config_file, _run_settings_file)
-
-    if time_window is not None:
-        raise NotImplementedError(
-            "Haven't added time windowing, zoom in to full plot for now."
-        )
-
-    cmm = signal_config
-    if cmm is None:
-        cmm = ep.config['signal_config']
-
-    time_coeffs = {'hrs': 1 / 3600, 'min': 1 / 60, 's': 1}
-    tcoeff = time_coeffs[time_units]
-
-    fig_ts = None
-    if plot_p_est:
-        fig_ts, ax_ts = plt.subplots(1, 1)
-        for ai, sensor in enumerate(dict(cmm)):
-            try:
-                # the e mapping corresponds to the thermopile voltage, it
-                # doesnt have a power estimate
-                pest = d_full[microrunner.format_pmeter_est_column((sensor))]
-                ax_ts.plot(
-                    pest.t * tcoeff, punit(pest.values, origin='W'), 'o-', label=sensor
-                )
-            except KeyError:
-                print(
-                    f'Missing Estimated Signal power from {sensor}. Possibly from an older version of the runner.'
-                )
-        ax_ts.set_ylabel(f'Estimated Metered Power {power_units}')
-        ax_ts.set_xlabel('Time (' + time_units + ')')
-        ax_ts.legend(loc='best')
-        fig_ts.suptitle('Estimated Metered Power of Sensors')
-        fig_ts.tight_layout()
-    # otherwise, plot each sensors raw time series in a seperate window
-    sensor_figs = []
-    if plot_sensor_raw:
-        for ai, sensor in enumerate(dict(cmm)):
-            sensor_map = cmm[sensor]
-            sensor_cols = {}
-            for k, v in dict(sensor_map).items():
-                try:
-                    sensor_cols.update({k: v['column']})
-                except (TypeError, KeyError):
-                    pass
-            N = len(sensor_cols)
-            fig_i, axs_i = plt.subplots(N, 1, sharex=True)
-            if N == 1:
-                axs_i = [axs_i]
-            fig_i.suptitle(f'{sensor} Raw Data')
-            for i, sc in enumerate(sensor_cols):
-                try:
-                    ts = d_full[sensor_cols[sc]]
-                    axs_i[i].plot(ts.t * tcoeff, ts.values, 'o-', ds='steps-post')
-                    axs_i[i].set_ylabel(sensor_cols[sc])
-                except KeyError as e:
-                    msg = f'{sensor_cols[sc]} not in data record, are the input_signals for {sensor} correct? maybe one of {list(d_full.keys())}'
-                    raise KeyError(msg) from e
-            axs_i[-1].set_xlabel('Time (' + time_units + ')')
-            sensor_figs.append(fig_i)
-
-    return fig_ts, *sensor_figs
+__all__ = [
+    'run',
+    'parse',
+    'reduce_initial_power',
+    'reorder_runlist',
+    'review_runlist',
+]
 
 
 def run_gui(
     output_dir: Folder,
     configs: list[Path],
-    settings: list[Path],
+    settings: Path,
     sensor_master_list: Path,
     name: str = 'rfsweep',
     no_confirm: bool = False,
     dry_run: bool = False,
-    repeats: int = 1,
 ):
     """
     RF Sweep GUI runner.
@@ -211,12 +53,11 @@ def run_gui(
     Parameters
     ----------
     output_dir : Folder
-        Directory to output from. The default is the current working directory.
+        Directory to output data to.
     configs : list[Path]
-        Configuration powers to set up instruments and other measurement
-        settings.
+        List of configuration files use to setup the measurement.
     settings : list[Path]
-        Settings file(s) for frequency points and power levels.
+        RFSweep run list.
     sensor_master_list : Path
         Master list of sensor information for sanity checking, should conform
         to RFSensorMasterList spec.
@@ -226,8 +67,6 @@ def run_gui(
         Skip confirming instrument ID strings. The default is False.
     dry_run : bool, optional
         Try to load the settings, and do some validation. The default is False.
-    repeats : int, optional
-        Number of repeats to perform on all settings files. The default is 1.
 
     Returns
     -------
@@ -255,14 +94,11 @@ def run_gui(
     if dry_run:
         commands.append('--dry-run')
 
-    commands += ['--repeats', f'{repeats}']
-
     clitools.ucal_cli(commands)
 
 
 @click.command(name='run')
 @click.argument('output_dir', type=Path)
-@click.option('--repeats', type=int, default=1)
 @click.option('--configs', '-c', type=Path, required=True, multiple=True)
 @click.option('--settings', '-s', type=Path, required=True, multiple=True)
 @click.option('--sensor-master-list', '-m', type=Path, required=True)
@@ -284,23 +120,21 @@ def _run_cli(*args, **kwargs):
 
 def run(
     output_dir: str,
-    repeats: int,
     configs: list[Path],
     settings: list[Path],
     sensor_master_list: configs.RFSensorMasterList,
     name: str = 'rf_sweep',
     no_confirm: bool = False,
     dry_run: bool = False,
+    validate: bool = True,
 ):
     """
     Run a microcalorimetry RF Sweep experiment.
 
     Parameters
     ----------
-    output_directory : Path, optional
+    output_directory : Path
         Directory to output from. The default is None.
-    repeats : int, optional
-        Number of repeats to perform on all settings files. The default is None.
     configs : list[Path], optional
         Config files for experiment settings / instruments. The default is None.
     settings : list[Path], optional
@@ -318,42 +152,47 @@ def run(
         If true, will try to load the configurations without actually running
         anything to do a dry-check - can be used to validate some basic type validation
         of the configuration.
+    validate : bool, optional
+        If true, attempts to validate configuration files. The default is True.
     """
     priority = [0] * len(configs)
     if isinstance(settings, str) or isinstance(settings, Path):
         settings = [settings]
 
-    for i in range(repeats):
-        for setting in settings:
-            if not dry_run:
-                output_dir = new_dir(output_dir, name) + r'//'
-                with microrunner.MicrocalorimeterRunner(
-                    configs,
-                    setting,
-                    output_dir,
-                    sensor_master_list,
-                    priority,
-                    no_confirm=no_confirm,
-                ) as runner:
-                    # opens visa resources for every instrument
-                    runner.initialize_instruments()
-                    runner.start_monitor_mode()
-                    while not runner.done:
-                        runner.iterate()
-                        # print(time.time() - time_0)
-                        runner.output()
-            # for dry run, just try to initialize all the config files.
-            # and don't do anythin with them.
-            else:
-                output_dir = new_dir(output_dir, name) + r'//'
-                microrunner.MicrocalorimeterRunner(
-                    configs,
-                    setting,
-                    output_dir,
-                    sensor_master_list,
-                    priority,
-                    dry_run=True,
-                )
+    if len(settings) > 1:
+        raise NotImplementedError('Only on runlist can be supplied at a time.')
+    for setting in settings:
+        if not dry_run:
+            output_dir = new_dir(output_dir, name) + r'//'
+            with microrunner.MicrocalorimeterRunner(
+                configs,
+                setting,
+                output_dir,
+                sensor_master_list,
+                priority,
+                no_confirm=no_confirm,
+                validate=validate,
+            ) as runner:
+                # opens visa resources for every instrument
+                runner.initialize_instruments()
+                runner.start_monitor_mode()
+                while not runner.done:
+                    runner.iterate()
+                    # print(time.time() - time_0)
+                    runner.output()
+        # for dry run, just try to initialize all the config files.
+        # and don't do anythin with them.
+        else:
+            output_dir = new_dir(output_dir, name) + r'//'
+            microrunner.MicrocalorimeterRunner(
+                configs,
+                setting,
+                output_dir,
+                sensor_master_list,
+                priority,
+                dry_run=True,
+                validate=validate,
+            )
 
 
 _run_cli = clitools.format_from_npdoc(run)(_run_cli)
@@ -417,46 +256,167 @@ def _parse_cli(
 
 
 def parse(
-    metadata: list[Path],
-    analysis_config: configs.RFSweepParserConfig = None,
-    verbose: bool = False,
-    make_plots: bool = False,
-    plot_segments_analysis: list[int] = [0, -1],
+    data_records: list[Folder],
+    DUT_power_analysis: dict,
+    calorimeter_power_analysis: dict,
+    make_plots: bool = True,
+    plot_segments_indexes: list[int] = [0, -1],
     plot_all_segments_analysis: bool = False,
-    dataframe_results: Path = None,
-    format_matlab: Path = None,
+    dataframe_results: SaveAsPath = None,
+    linear_bolo_eff: bool = False,
+    include_time_std: bool = True,
+    extra_configs: configs.DictLike = None,
+    monitor_power_analysis: dict = None,
+    RF_source_power_analysis: dict = None,
 ) -> tuple[dict[RMEMeas], list[plt.Figure]]:
     """
-    Parse a microccalorimeter run to produce data with uncertainties.
+    Parse an RF sweep.
 
     Parameters
     ----------
-    metadata : list[Path]
-        Path to metadata file for experient. Can be multiples.
-    analysis_config : RFSweepParserConfig, optional
-        Path to sensor configuration file, overrides any sensor configuration in the metadata if provided.
-    verbose : bool, optional
-        If True, prints info about the analysis. Default is True
+    data_records : list[Folder]
+        Path(s) to metadata files (or directories their directories) containing rfsweep runs.
+    DUT_power_analysis : dict, optional
+        Set the analysis settings for the DUT.
+        Format
+        ------
+        {
+        instr_timing_tolerance : float
+            Max expected misalignment of instrument's time column to determine
+            when RF is turned off. Default is 5.
+        stats_window_override : float
+            Override the defined stats window to change the window of samples
+            averaged over to determine off/on values. The default is None.
+        fast_off_analysis : bool
+            Whether or not to use fast analysis. Only matters for thermoelectric
+            sensors power sensors (which may or may not use the fast off
+            analysis). The default is False.
+        coeffs : Path
+            Provided a path to thermoelectric fit coefficients you want to use.
+            Must be provided for thermoelectric power sensors. Overrides the coefficients
+            defined in the signal config of the measurement.
+        V_off_delay : float
+            Relative time from RF being turned off to on to use for the V off
+            measurement. Only relevant if fast analysis is being used.
+        V_off_function : str
+            What V Off fit function to use, only required if doing a fast fit.
+            Options Format
+            --------------
+            {
+            lin_plus_exp
+                Fit fast off measurements to a line + an exponential.
+            linear
+                Fit fast off measurements to a line.
+            single_sample
+                Treat all fast off measurements in window as realizations of the same measurement and average over them.
+            }
+        V_off_fit_time_window : list[float]
+            Relative time window from RF being turned on to fit to. For example,
+            [1, 2] would fit between 1 and 2 seconds after RF power is turned
+            off.
+        }
+    calorimeter_power_analysis : dict
+        Set the analysis settings for the calorimeter.
+        Format
+        ------
+        {
+        instr_timing_tolerance : float
+            Max expected misalignment of instrument's time column to determine
+            when RF is turned off. Default is 5.
+        stats_window_override : float
+            Override the defined stats window to change the window of samples
+            averaged over to determine off/on values. The default is None.
+        coeffs : Path
+            Provided a path to thermoelectric fit coefficients you want to use.
+            Must be provided for thermoelectric power sensors. Overrides the coefficients
+            defined in the signal config of the measurement.
+        }
     make_plots : bool, optional
-        Makes plots if True.
-    plot_segments_analysis : list[int]
-        What segment of each run to plot.
+        Makes review plots if True. The default is True.
+    plot_segments_indexes : list[int]
+        What segment of each run to plot. Each interger represents the index
+        of every segment for every run in order of runs. For example,
+        index 0 is the first segment of the first run Index -1 is the last
+        segment of the last run. The default is [0, -1].
     plot_all_segments_analysis : bool
-        If True, when making plots plot every segments
-        analysis.
-    dataframe_results : Path, optional
-        If provided, saves a csv of intermediate calculated values.
-    format_matlab : Path, optional
-        If provided, saves a matlab version of the output results.
+        If True, plot every single segment's review charts and ignore
+        plot_segment_indexes.
+    dataframe_results : SaveAsPath, optional
+        If provided, saves a csv of intermediate calculated values to the
+        specified path.
+    linear_bolo_eff : bool, optional
+        If true, will utilize the lineraized version of the effective efficiency
+        of a bolometer sensor regardless of whether or not a microcalorimeter's
+        sensitivity model is present.
+    include_time_std : bool, optional
+        It True, includes standard deviation of stable samples used to
+        calculate the value of a particular column as an uncertainty mechanism.
+        The default is True.
+    extra_configs : Path, optional
+        Path to a .csv file that can be used to overload fields in an existing config file.
+    monitor_power_analysis : dict, optional
+        Set the analysis settings for the monitor.
+        Format
+        ------
+        {
+        instr_timing_tolerance : float
+            Max expected misalignment of instrument's time column to determine
+            when RF is turned off. Default is 5.
+        stats_window_override : float
+            Override the defined stats window to change the window of samples
+            averaged over to determine off/on values. The default is None.
+        fast_off_analysis : bool
+            Whether or not to use fast analysis. Only matters for thermoelectric
+            sensors power sensors (which may or may not use the fast off
+            analysis). The default is False.
+        coeffs : Path
+            Provided a path to thermoelectric fit coefficients you want to use.
+            Must be provided for thermoelectric power sensors. Overrides the coefficients
+            defined in the signal config of the measurement.
+        V_off_delay : float
+            Relative time from RF being turned off to on to use for the V off
+            measurement. Only relevant if fast analysis is being used.
+        V_off_function : str
+            What V Off fit function to use, only required if doing a fast fit.
+            Options Format
+            --------------
+            {
+            lin_plus_exp
+                Fit fast off measurements to a line + an exponential.
+            linear
+                Fit fast off measurements to a line.
+            single_sample
+                Treat all fast off measurements in window as realizations of the same measurement and average over them.
+            }
+        V_off_fit_time_window : list[float]
+            Relative time window from RF being turned on to fit to. For example,
+            [1, 2] would fit between 1 and 2 seconds after RF power is turned
+            off.
+        }
+    RF_source_power_analysis : dict, optional
+        Set the analysis settings for the RF Source.
+        Format
+        ------
+        {
+        instr_timing_tolerance : float
+            Max expected misalignment of instrument's time column to determine
+            when RF is turned off. Default is 5.
+        stats_window_override : float
+            Override the defined stats window to change the window of samples
+            averaged over to determine off/on values. The default is None.
+        }
+
 
     Returns
     -------
     parsed_rf : dict[RMEMeas]
-        Dictionairy of RFSweep datasets in a parsed RF sweep configuration.
+        Dictionary of RFSweep datasets in a parsed RF sweep configuration.
     figures : list[plt.Figure]
-        Dictionairy of RFSweep datasets in a parsed RF sweep configuration.
+        Dictionary of RFSweep datasets in a parsed RF sweep configuration.
 
     """
+    verbose = False
+    metadata = data_records
     # wrap propagator around functions
     basicprop = RMEProp(
         sensitivity=True,
@@ -467,10 +427,59 @@ def parse(
     zeta_general = basicprop.propagate(rfpower.zeta_general)
     dc_sub = basicprop.propagate(rfpower.dc_substituted_power)
     openloope_te_power = basicprop.propagate(rfpower.openloop_thermoelectric_power)
-    if analysis_config is None:
+
+    # if an analysis config fils is provided, load that
+    if extra_configs is None:
         analysis_config = {}
     else:
-        analysis_config = configs.load_config(analysis_config)
+        analysis_config = configs.load_config(extra_configs)
+
+    def overload_analysis_config_from_fvalues(signame, d):
+        if d is None:
+            return
+        # pre fill dictionairys that might be missing
+        if 'analysis_config' not in analysis_config:
+            analysis_config['analysis_config'] = {}
+
+        if signame not in analysis_config['analysis_config']:
+            analysis_config['analysis_config'][signame] = {}
+
+        # over load values that aren't None
+        for ckey, value in d.items():
+            # there fit coeffs were specified, put those in the
+            # right place.
+            if ckey == 'coeffs' and value is not None:
+                if 'signal_config' not in analysis_config:
+                    analysis_config['signal_config'] = {}
+
+                if signame not in analysis_config['signal_config']:
+                    analysis_config['signal_config'][signame] = {}
+
+                analysis_config['signal_config'][signame]['coeffs'] = value
+
+            # other rise pass it in
+            elif value is not None:
+                analysis_config['analysis_config'][signame][ckey] = value
+
+    # use any dictionaries passed in directly to modify the
+    # configuration file at run time. This provides the GUI an
+    # easier way to modify these config values.
+    overload_analysis_config_from_fvalues('DUT_power', DUT_power_analysis)
+    overload_analysis_config_from_fvalues(
+        'calorimeter_power', calorimeter_power_analysis
+    )
+    overload_analysis_config_from_fvalues('monitor_power', monitor_power_analysis)
+    overload_analysis_config_from_fvalues('RF_source_power', RF_source_power_analysis)
+
+    # import json
+    # print(json.dumps(analysis_config, indent = True))
+
+    # DUT, RF_source, and calorimeter_power should always be there
+    for always_present in ['DUT_power', 'calorimeter_power', 'RF_source_power']:
+        if always_present not in analysis_config['analysis_config']:
+            analysis_config['analysis_config'][always_present] = {}
+
+    # print(analysis_config)
 
     # set up parser
     metadata_dict = {}
@@ -501,19 +510,35 @@ def parse(
     metadata = adjusted_metadata
 
     runs = []
+    # print(metadata)
+    ts = time.time()
     for metadata_path in metadata:
         run_dir = Path(metadata_path).parent
         run_file = Path(metadata_path).name
+        # fill path to metadata
+        run_name = Path(run_file).resolve().as_posix()
+        print('run_name', run_name)
         run = microparser.NewTypeRun(
-            str(run_dir) + '/', run_dir / run_file, run_file, **analysis_config
+            working_folder=str(run_dir) + '/',
+            data_file=run_dir / run_file,
+            name=run_file,
+            **analysis_config,
         )
 
         run.load()
         run.analyze()
         metadata_dict.update({str(k): v for k, v in run.expt.config.items()})
 
-        # make detailed analysis plots
-        if make_plots:
+        runs.append(run)
+
+    print('\n parse time = ', time.time() - ts)
+    print(' Making Noise Plots...')
+    print(' ---------------------')
+    # make detailed analysis plots
+    # there are so many
+    ts = time.time()
+    if make_plots:
+        for run in runs:
             for signal, analyzer in run.analyzers.items():
                 try:
                     analyzer.plot_analysis
@@ -521,22 +546,33 @@ def parse(
                     print(f'{signal} {analyzer} has no plot analysis method. Skipping')
                     continue
                 for si, segment in enumerate(run.segments):
-                    called_out = si in plot_segments_analysis
+                    called_out = si in plot_segments_indexes
                     is_end = si == len(run.segments) - 1 and (
-                        -1 in plot_segments_analysis
+                        -1 in plot_segments_indexes
                     )
                     if called_out or is_end or plot_all_segments_analysis:
                         # plot the analysis for a single step
-                        figure = analyzer.plot_analysis(segment)
-                        figure.suptitle(
-                            f'{signal} signal \n run {Path(metadata_path).parent.name} ; segment {si}'
+                        # may get multiple plots for step
+                        print(
+                            f'Making review figure segment: {si} : {signal} : {type(analyzer)}'
                         )
-                        figures.append(figure)
+                        new_figures = None
+                        try:
+                            new_figures = analyzer.plot_analysis(segment)
+                        except NotImplementedError:
+                            print('  Not implemented')
 
-        runs.append(run)
+                        if not isinstance(new_figures, list):
+                            new_figures = [new_figures]
+                        for figure in new_figures:
+                            if figure is not None:
+                                figure.suptitle(
+                                    f'{signal} signal \n run {Path(metadata_path).parent.name} ; segment {si}'
+                                )
+                                figures += new_figures
 
     # use the last signal config
-    signal_config = configs.RFSweepSignalConfig(runs[-1].parsed_config['signal_config'])
+    signal_config = runs[-1].parsed_config['signal_config']
 
     # format data output into rmellipse objects
     c = microparser.Campaign(runs, Path.cwd(), 'rfsweep')
@@ -546,6 +582,12 @@ def parse(
         # if make_plots:
         data_df = c.output_segments(fmt_for='pandas')
         for signal, sconfig in signal_config.items():
+            # don't make noise plots for RF Source power
+            # because it doesn't make sense
+            if signal == 'RF_source_power':
+                continue
+            if sconfig['type'] == 'special':
+                continue
             input_signals = sconfig['input_signals']
             if isinstance(input_signals, str):
                 input_signals = [input_signals]
@@ -556,28 +598,34 @@ def parse(
                 try:
                     column = sconfig[ins]['column']
                     fig.suptitle(f'{column} RF On standard deviation')
-
+                    cmap = plt.get_cmap('viridis')
+                    norm = plt.Normalize(0, len(data_df))
                     for mode in ['on']:
+                        freq = data_df['frequency']
+                        points = np.arange(len(freq))
                         dev = data_df[f'{column}_{mode}_dev']
                         mean = data_df[f'{column}_{mode}']
                         ppm = dev / mean * 1e6
-                        ax[0].plot(dev, 'o')
-                        ax[1].set_xlabel('Step Number')
-                        ax[1].plot(ppm, 'o')
+                        sc = ax[0].scatter(freq, dev, marker='o', c=points)
+                        ax[1].set_xlabel('Frequency (GHz)')
+                        ax[1].scatter(freq, ppm, marker='o', c=points)
                         ax[0].set_ylabel(f'Column RF On std ({sconfig[ins]["units"]})')
                         ax[1].set_ylabel('Column RF On std (ppm)')
+                    sm = ScalarMappable(norm=norm, cmap=cmap)
+                    sm.set_array([])
+                    cbar = fig.colorbar(sm, ax=ax)
+                    cbar.ax.set_title('Point Number')
                     figures.append(fig)
                 except Exception as e:
                     plt.close(fig)
-                    if verbose:
-                        print(
-                            f'Encountered error plotting signal {signal}:{ins} std \n {type(e)}: {e}'
-                        )
-
-                fig, ax = plt.subplots(2, 1, figsize=(8, 8))
+                    print(
+                        f'Encountered error plotting signal {signal}:{ins} std \n {type(e)}: {e}'
+                    )
+                # plt.show()
+                fig, ax = plt.subplots(2, 1)
                 try:
                     column = sconfig[ins]['column']
-                    fig.suptitle(f'{signal} \n {column} standard deviation')
+                    fig.suptitle(f'{signal} \n {column} RF Off standard deviation')
                     ax[1].set_xlabel('Before (left) and After (right)')
                     ax[0].set_ylabel(f'STD of {ins} ({sconfig[ins]["units"]})')
                     ax[1].set_ylabel(f'STD of {ins} (ppm)')
@@ -587,7 +635,17 @@ def parse(
                             f_off = segment.results[f'{column}_off_f']
                             i_off_dev = segment.results[f'{column}_off_i_dev']
                             f_off_dev = segment.results[f'{column}_off_f_dev']
-                            label = f'{run.name} : segment {iseg}'
+                            rname = Path(run.working_folder)
+                            # label relative to the CWD if possible,
+                            # otherwise use the full path
+                            try:
+                                rname = (
+                                    rname.absolute().relative_to(Path.cwd()).as_posix()
+                                )
+                                rname = './' + rname
+                            except ValueError:
+                                rname = '...' + rname.as_posix()[-15:]
+                            label = f'{rname} : segment {iseg}'
                             ax[0].plot(
                                 [0, 1], [i_off_dev, f_off_dev], 'o--', label=label
                             )
@@ -603,125 +661,53 @@ def parse(
                     figures.append(fig)
                 except Exception as e:
                     plt.close(fig)
-                    if verbose:
-                        print(
-                            f'Encountered error plotting  {signal}:{ins} segment off \n {type(e)}: {e}'
-                        )
+                    print(
+                        f'Encountered error plotting  {signal}:{ins} segment off \n {type(e)}: {e}'
+                    )
 
-        # Plot if the source think it is in
-        # compression
-
-        compression = {}
-        freq = np.array([])
-        try:
-            for run in c.run_list:
-                for segment in run.segments:
-                    if segment.results['complete']:
-                        for step in segment.steps:
-                            signals = [
-                                k
-                                for k in step.raw_data.keys()
-                                if fnmatch(k, '*power_signal*')
-                                and 'timestamp' not in k
-                                and 'calorimeter' not in k
-                            ]
-                            source = step.raw_data['RF_source_power_signal (W)']
-                            source = source[2:].astype(float)
-                            pow_signals = {
-                                s: step.raw_data[s]
-                                for s in signals
-                                if 'source' not in s
-                            }
-
-                            # calculate compression
-                            good_freq = False
-                            for k, sig in pow_signals.items():
-                                sig = sig[2:].astype(float)
-                                max_i = np.argmax(sig)
-                                sig_dB_change = 10 * np.log10(sig[max_i] / sig)
-
-                                # closest to 1dB of change
-                                sig_1dB_closest_i = np.argmin(abs(sig_dB_change - 1))
-                                sig_1dB_closest = sig_dB_change[sig_1dB_closest_i]
-
-                                # if the smalles changes was < 0.4, skip it
-                                # is that a good number? idk
-                                if sig_1dB_closest < 0.5:
-                                    continue
-
-                                # estimate the compression
-                                max_source = source[max_i]
-                                source_1dB_closest = source[sig_1dB_closest_i]
-                                compress_i = sig_1dB_closest - 10 * np.log10(
-                                    max_source / source_1dB_closest
-                                )
-                                # print(k.split('_power_signal')[0], sig_1dB_closest)
-                                try:
-                                    compression[k] = np.append(
-                                        compression[k], compress_i
-                                    )
-                                except KeyError:
-                                    compression[k] = np.array([compress_i])
-
-                                good_freq = True
-                            if good_freq:
-                                freq = np.append(freq, step.frequency)
-                            # print(k, step.frequency, compress_i)
-            fig, ax = plt.subplots(1, 1)
-            for k in compression:
-                ax.plot(
-                    freq,
-                    compression[k],
-                    'o',
-                    label=f'Measured By: {k.split("_power_signal")[0]} Est.',
-                )
-
-            ax.axhline(0.4, color='r', ls='--', lw=3, label='Limit')
-            ax.legend(loc='best')
-            ax.set_xlabel('Frequency (GHz)')
-            ax.set_ylabel('Compression (dB)')
-            ax.set_title('Source Compression Check')
-            # plt.show()
-            figures.append(fig)
-        except Exception as e:
-            print(f"Warning: Couldn't estimate compression for : {e}")
-
-        ...
+    print('plot time = ', time.time() - ts)
 
     # output a the dataframe results
+    df = c.output_dataframe()
     if dataframe_results:
-        df = c.output_dataframe()
+        print(' Outputing intermediate csv results')
+        print(' ----------------------------------')
         df.to_csv(dataframe_results)
 
     # format fata for rmellipse calculataions
-    data = c.output_segments(fmt_for='rmellipse', include_specs=True)
+    print('generating RMEMeas of raw data...')
+    print('---------------------------------')
+    ts = time.time()
+    data = c.output_segments(
+        fmt_for='rmellipse', include_specs=True, include_time_std=include_time_std
+    )
 
     ep = run.expt.config
+    print('rme time = ', time.time() - ts)
 
     # variablize the column names to make it a bit easier
     assert signal_config['calorimeter_power']['type'] == 'thermoelectric'
     e_col = signal_config['calorimeter_power']['e']['column']
+    source_col = signal_config['RF_source_power']['power']['column']
 
     # do a little bit of post processing to calculate power
     # This calculates the inferred power flowing through the thermopile
+    print('calculating sensor powers...')
+    print('----------------------------')
     outputs = {}
 
-    cal_coeffs = configs.ThermoelectricFitCoefficients(
-        signal_config['calorimeter_power']['coeffs']
-    ).load()
+    cal_coeffs = configs.KDCLike(signal_config['calorimeter_power']['coeffs']).load()
 
     try:
         p_of_e_calorimeter = cal_coeffs.attrs['p_of_e']
 
-        E_on = openloope_te_power(
-            cal_coeffs, data.sel(col=e_col + '_on'), p_of_e=p_of_e_calorimeter
+        E = openloope_te_power(
+            cal_coeffs,
+            data.sel(col=e_col + '_on') - data.sel(col=e_col + '_off_slow'),
+            p_of_e=p_of_e_calorimeter,
         )
 
-        E_off = openloope_te_power(
-            cal_coeffs, data.sel(col=e_col + '_off'), p_of_e=p_of_e_calorimeter
-        )
-
-        outputs.update({'E_on': E_on, 'E_off': E_off})
+        outputs.update({'E': E})
 
     except AttributeError:
         print(
@@ -729,8 +715,13 @@ def parse(
         )
 
     outputs.update(
-        {'e_on': data.sel(col=e_col + '_on'), 'e_off': data.sel(col=e_col + '_off')}
+        {
+            'e_on': data.sel(col=e_col + '_on'),
+            'e_off': data.sel(col=e_col + '_off_slow'),
+        }
     )
+
+    outputs.update({'RF_source_on': data.sel(col=source_col + '_on')})
 
     # this part of the code is trying to turn the voltage/current
     # measurements into power measurements of the sensor inside
@@ -738,13 +729,14 @@ def parse(
 
     # this should be a class insttead of a bunch of if statements
 
-    # if there is a voltage column and no thermoelectric column
-    # it's a dc substitution sensor inside the calorimeter (port 2)
-    # so use that.
-
+    # analysis follows the type of power sensor being used.
     if signal_config['DUT_power']['type'] == 'bolometer':
         # possible no current was provided if measured on a type 4
+
         s_v_col = signal_config['DUT_power']['vdc']['column']
+
+        # If a current column is present, use that to calculate
+        # the dc powers
         if 'idc' in signal_config['DUT_power']:
             s_i_col = signal_config['DUT_power']['idc']['column']
             I_on = (data.sel(col=s_i_col + '_on'),)
@@ -753,14 +745,34 @@ def parse(
             p2dc_on = data.sel(col=s_v_col + '_on') * I_on
             p2dc_off_slow = data.sel(col=s_v_col + '_off_slow') * I_off_slow
             p2dc_off_fast = data.sel(col=s_v_col + '_off_fast') * I_off_fast
+        # if no current column was specified, estimate the off DC power using
+        # calorimeter sensitivity and
+        # use that to calculate the dc power in the ON states.
         else:
             s_resistance = signal_config['DUT_power']['resistance']
             I_on = None
             I_off_slow = None
             I_off_fast = None
+
+            try:
+                E_off = openloope_te_power(
+                    cal_coeffs,
+                    data.sel(col=e_col + '_off_slow'),
+                    cal_coeffs.attrs['p_of_e'],
+                )
+                s_resistance = data.sel(col=s_v_col + '_off_slow') ** 2 / E_off
+            except AttributeError as e:
+                print(
+                    'failed to estimate microcalorimeter power in off state for :\n{e}'
+                )
+                print(
+                    f'Using provided value of the setpoint resitance instead of calcuating setpoint resistance ({s_resistance} Ohms)'
+                )
+
             p2dc_on = data.sel(col=s_v_col + '_on') ** 2 / s_resistance
             p2dc_off_slow = data.sel(col=s_v_col + '_off_slow') ** 2 / s_resistance
             p2dc_off_fast = data.sel(col=s_v_col + '_off_fast') ** 2 / s_resistance
+            outputs.update({'s_resistance': s_resistance})
 
         p2_fast = dc_sub(
             data.sel(col=s_v_col + '_on'),
@@ -778,16 +790,39 @@ def parse(
             R=s_resistance,
         )
 
-        zeta = zeta_dcsub(
-            data.sel(col=e_col + '_on'),
-            data.sel(col=e_col + '_off'),
-            data.sel(col=s_v_col + '_on'),
-            data.sel(col=s_v_col + '_off_fast'),
-            data.sel(col=s_v_col + '_off_slow'),
-            I_on,
-            I_off_fast,
-            I_off_slow,
-        )
+        # linearized approximation of effective efficiency
+        # for bolometer sensors
+        if linear_bolo_eff:
+            zeta = zeta_dcsub(
+                data.sel(col=e_col + '_on'),
+                data.sel(col=e_col + '_off_slow'),
+                data.sel(col=s_v_col + '_on'),
+                data.sel(col=s_v_col + '_off_fast'),
+                data.sel(col=s_v_col + '_off_slow'),
+                I_on,
+                I_off_fast,
+                I_off_slow,
+            )
+        # non linear corrected effective efficiency
+        else:
+            try:
+                zeta = zeta_general(
+                    e_on=data.sel(col=e_col + '_on'),
+                    e_off=data.sel(col=e_col + '_off_slow'),
+                    e_0=0,
+                    cal_k=cal_coeffs,
+                    p_of_e=cal_coeffs.attrs['p_of_e'],
+                    P2=p2_fast,
+                    P_dc_on_slow=p2dc_on,
+                    P_dc_off_slow=p2dc_off_fast,
+                )
+            except AttributeError as e:
+                msg = f'''
+                Failed to calculate uncorrected eta for "{e}". Failed to access sensitivity
+                coefficients of the microcaloriemter. Either provide coeffs to the microcalorimeter
+                power signal or use the linear_bolo_eff flag of the parser.'''
+                msg = ' '.join([f.strip() for f in msg.splitlines() if f != ''])
+                raise ValueError(msg)
 
         outputs.update(
             {
@@ -804,62 +839,106 @@ def parse(
     elif signal_config['DUT_power']['type'] == 'thermoelectric':
         # get sensor coefficients
         # and the calorimeter coefficients
-        s_coeffs = configs.ThermoelectricFitCoefficients(
-            signal_config['DUT_power']['coeffs']
-        ).load()
-        s_e_col = signal_config['DUT_power']['e']['column']
+        s_coeffs = configs.KDCLike(signal_config['DUT_power']['coeffs']).load()
+        dut_signals = signal_config['DUT_power']
+        s_e_col = dut_signals['e']['column']
 
-        # check if the slope of the sensor equals the slope of the
+        # thermometer model do a temperature correction
+        if 'therm_v' in dut_signals and 'col' in s_coeffs.dims:
+            s_e_const = 1.0
+            therm_v_col = dut_signals['therm_v']['column']
+            therm_i_col = dut_signals['therm_i']['column']
+            therm_v = data.sel(col=therm_v_col + '_on')
+            therm_i = data.sel(col=therm_i_col + '_on')
+            temperature = therm_v / therm_i
+            p2dc_on = therm_v * therm_i
+            outputs.update({'temperature_p2': temperature})
+            outputs.update({'p2dc_on': p2dc_on})
+            sensor_p_of_e = None
+
+        # this is a polyomial fit
+        # check if the slope of the sensors measured voltage
+        # equals the slope of the sensitivity
         # coefficients, if not then the thermoelectric sensor's RF
-        # side has a negative polarity to the srf side and the voltage
-        # measured needs to be multiplied by -1.
+        # side has a negative polarity to the dc side and the voltage
+        # measured needs to be multiplied by -1.\
+        else:
+            temperature = None
+            p2dc_on = 0
+            s_e_const = 1.0
+            measured_slope_sign = np.sign(data.nom.sel(col=s_e_col + '_on')[0])
+            coeff_sign = np.sign(s_coeffs.nom.sel(deg=0))
+            sensor_p_of_e = s_coeffs.attrs['p_of_e']
+            if measured_slope_sign != coeff_sign:
+                s_e_const = -1.0
 
-        s_e_const = 1.0
-        measured_slope_sign = np.sign(data.nom.sel(col=s_e_col + '_on')[0])
-        coeff_sign = np.sign(s_coeffs.nom.sel(deg=1))
-        if measured_slope_sign != coeff_sign:
-            s_e_const = -1.0
-
-        p2_on = openloope_te_power(
+        p2_slow = openloope_te_power(
             s_coeffs,
-            s_e_const * data.sel(col=s_e_col + '_on'),
-            p_of_e=s_coeffs.attrs['p_of_e'],
+            s_e_const
+            * (data.sel(col=s_e_col + '_on') - data.sel(col=s_e_col + '_off_slow')),
+            p_of_e=sensor_p_of_e,
+            temperature=temperature,
         )
 
-        p2_off = openloope_te_power(
-            s_coeffs,
-            data.sel(col=s_e_col + '_off'),
-            p_of_e=cal_coeffs.attrs['p_of_e'],
-        )
+        # if a fast off is available, use that
+        # using the thermometer in this calculation was causing me problems, why?
+        # Edit from Cole:
+        # It was because the thermometer is already implicitly accounted for in the
+        # dc fit of k_dc (it is subtrated off by the e_0) so it doesn't
+        # need to be subtracted off again.
+        try:
+            p2_fast = openloope_te_power(
+                s_coeffs,
+                s_e_const
+                * (data.sel(col=s_e_col + '_on') - data.sel(col=s_e_col + '_off_fast')),
+                p_of_e=sensor_p_of_e,
+                temperature=temperature,
+            )
+            outputs.update({'e_p2_off_fast': data.sel(col=s_e_col + '_off_fast')})
+            zeta = zeta_general(
+                e_on=data.sel(col=e_col + '_on'),
+                e_0=data.sel(col=e_col + '_off_slow'),
+                e_off=None,
+                cal_k=cal_coeffs,
+                p_of_e=cal_coeffs.attrs['p_of_e'],
+                P2=p2_fast,
+                # P_dc_on_slow = p2dc_on
+            )
 
-        p2_slow = p2_on - p2_off
-
-        zeta = zeta_general(
-            data.sel(col=e_col + '_on'),
-            data.sel(col=e_col + '_off'),
-            cal_coeffs,
-            cal_coeffs.attrs['p_of_e'],
-            p2_slow,
-        )
+        except KeyError:
+            print('No fast off analysis for DUT_power, equating to slow off')
+            p2_fast = p2_slow
+            outputs.update({'e_p2_off_fast': data.sel(col=s_e_col + '_off_slow')})
+            zeta = zeta_general(
+                e_on=data.sel(col=e_col + '_on'),
+                e_0=data.sel(col=e_col + '_off_slow'),
+                e_off=None,
+                cal_k=cal_coeffs,
+                p_of_e=cal_coeffs.attrs['p_of_e'],
+                P2=p2_slow,
+                # P_dc_on_slow = p2dc_on
+            )
 
         outputs.update(
             {
-                'e_p2_off': data.sel(col=s_e_col + '_off'),
                 'e_p2_on': data.sel(col=s_e_col + '_on'),
-                'p2_fast': p2_slow,
+                'e_p2_off_slow': data.sel(col=s_e_col + '_off_slow'),
+                'p2_fast': p2_fast,
                 'p2_slow': p2_slow,
                 'zeta': zeta,
             }
         )
-    # dummy sensors don't do anything
+    # dummy sensors don't do anything, skip em
     elif signal_config['DUT_power']['type'] == 'special':
         pass
+
+    # sensor type, bail out
     else:
         msg = f'{signal_config["DUT_power"]["type"]} not recognized'
         raise ValueError(msg)
 
     # now calculate the relevant powers for the sidearm
-    # it may n ot be peresent, check for it in the signal config
+    # it may n ot be present, check for it in the signal config
     # first.
     try:
         signal_config['monitor_power']
@@ -925,16 +1004,26 @@ def parse(
         msg = f'{signal_config["monitor_power"]["type"]} not recognized'
         raise ValueError(msg)
 
-    # plot parsed components
+    # plot uncorrected effective efficiency if it  was calculated
     if make_plots:
         plot_outputs = {k: v for k, v in outputs.items() if k in ['zeta']}
         for k, v in plot_outputs.items():
             fig, ax = plt.subplots(1, 1)
-            unc = v.stdunc().cov
-            ax.errorbar(v.nom.frequency, v.nom, yerr=unc, capsize=3, label='k=1', ls='')
-            ax.set_ylabel(k.replace('zeta', 'Uncorrected Eta'))
+            unc = v.stdunc(k=2).cov
+            ax.errorbar(
+                v.nom.frequency,
+                v.nom,
+                yerr=unc,
+                capsize=3,
+                label=r'Nominal $\pm$ Uncertainty (k=2)',
+                ls='',
+                elinewidth=1.5,
+                marker='o',
+                mfc='k',
+            )
+            ax.set_ylabel(k.replace('zeta', r'$\eta^{\left(unc\right)}$'))
             ax.set_xlabel('Frequency (GHz)')
-
+            ax.legend(loc='best')
             sidearm_name = None
             try:
                 sidearm_name = ep['measurement_description']['sidearm_name']
@@ -943,11 +1032,11 @@ def parse(
 
             try:
                 fig.suptitle(
-                    f'Internal mount: {ep["measurement_description"]["mount_name"]}, external mount: {sidearm_name} \n {k}'
+                    rf'Internal mount: {ep["measurement_description"]["mount_name"]}, external mount: {sidearm_name} \n Uncorrected $\eta$'
                 )
 
             except KeyError:
-                fig.suptitle(f'Parsed RF Sweep:  {k}')
+                fig.suptitle(r'Parsed RF Sweep:  Uncorrected $\eta$')
             fig.tight_layout()
             figures.append(fig)
 
@@ -969,256 +1058,171 @@ def mean_last_of_point_dBm(signal, points, i: int, n_samples: int):
     return 10 * np.log10(avg) + 30
 
 
-def runlist_from_loss(
-    metadata: Path,
-    output_dir: Path = Path('.'),
-    level_to: str = 'DUT_power',
-    DUT_power_max_dBm: float = 10,
-    monitor_power_max_dBm: float = 0,
-    max_source_dBm: float = 15,
-    output_name: str = 'runlist.csv',
-    n_samples: int = 1,
-    frequencies: np.ndarray[float] = None,
-    segment_size: int = 10,
-    off_step_length: int = 2,
-    safety_backoff_dBm: float = 3,
-) -> list[plt.Figure]:
+def reduce_initial_power(
+    runlist: Path, output_path: SaveAsPath, reduce_by_dB: float, decimals: int = 4
+):
     """
-    Generate a runlist from the approximate RF Loss of measurement signals.
+    Reduce a runlist's initial power setting.
 
     Parameters
     ----------
-    metadata : Path
-        Path to measurement metadata.
-    output_dir : Path, optional
-        Directory to output runfiles. The default is Path('.').
-    level_to : str, optional
-        Which signal to level to. The default is 'DUT_power'.
-    DUT_power_max_dBm : float, optional
-        Maximum DUT power in dBm. The default is 10.
-    monitor_power_max_dBm : float, optional
-        Maxmium monitor power in dBm. The default is 0.
-    max_source_dBm : float, optional
-        Maxmimum allowed source value in dBm . The default is None.
-    output_name : str, optional
-        Name to output the file as The default is 'runlist.csv'.
-    n_samples : int, optional
-        Number of samples to average over for calculations. The default is 1.
-    frequencies : np.ndarray[float], optional
-        Frequency list to interpolate the RF loss values too and produce
-        the runlist. If None, uses the frequencies in the provided
-        measurement. The default is None.
+    runlist : Path
+        Path to runlist to modify.
+    reduce_by_dB : float
+        How much to reduce the initial power by. Negative
+        values will increase the initial power.
+    output_path : SaveAsPath, optional
+        If None, uses the same name as input file with
+        '_min{num}dB.csv'
+    decimals : int, optional
+        Number of decimals to use for frequency points. Default is 4.
+    """
+    runlist = Path(runlist)
+    data = pd.read_csv(runlist)
+    ind = data.Frequency_GHz > 0
+    new_init = data.Initial_source_power_dBm[ind] - reduce_by_dB
+    data.loc[ind, 'Initial_source_power_dBm'] = np.round(new_init, decimals)
+    if output_path is None:
+        output_path = runlist.parent / (runlist.stem + f'_min{reduce_by_dB}dB.csv')
+    data.to_csv(output_path, index=False)
+
+
+def reorder_runlist(
+    runlist: Path,
+    output_path: SaveAsPath,
+    segment_size: int = 10,
+    off_step_length: int = 2,
+    freq_ordering: str = 'interleave',
+    make_plots: bool = True,
+):
+    """
+    Reorder a runlist.
+
+    Can modify the number of and size of segments, and reorder frequencies.
+
+    Parameters
+    ----------
+    runlist : Path
+        Frequency list to reorder.
+    output_path : SaveAsPath, optional
+        Directory to output runfile. The default is the same path as the input
+        file with '_reordered' appended to the name.
     segment_size : int, optional
-        Number of frequencie points per segment. The default is 5.
+        Number of steps per segment (maximum). The default is 10.
     off_step_length : int, optional
         How many steps each off period should be. Typically 2, the default
-        it 2.
-    safety_backoff_dBm : float, optional
-        Back off the start value by this amount to avoid over sourcing.
-        The levelling feature will converge to the correct value during a
-        measurement. The default is 3.0.
+        is 2.
+    freq_ordering : str, optional
+        Determines how frequencies are sorted before being split into segments.
+        Options Format
+        --------------
+        {
+        monotonic_increasing
+            Sort frequencies monitonically increasing (e.g. 1,2,3,5,6).
+        interleave_increasing
+            Sort frequencies into 2 monitonically increasing, interleaved lists. For example: 1,2,3,4,5,6 becomes 1,3,5,2,4,6.
+        }
+    make_plots : bool, optional
+        Generate review plots of runlist. The default is True.
+
+    """
+
+    # get runlist,  remove off points, sort by
+    # frequency
+    runlist = Path(runlist)
+    if output_path is None:
+        output_path = runlist.parent / (runlist.stem + '_reordered.csv')
+    data = pd.read_csv(runlist)
+    ind = data.Frequency_GHz > 0
+    new = data[ind].sort_values('Frequency_GHz')
+
+    # seperate out columns
+    frequency = new['Frequency_GHz']
+    starting_powers = new['Initial_source_power_dBm']
+    target_power = new['Target_source_power_dBm']
+    limit_powers = new['Source_power_limit_dBm']
+
+    # interleave if asked to
+    match freq_ordering:
+        case 'monotonic_increasing':
+            initial_source = starting_powers.values.copy()
+            frequencies = frequency.values.copy()
+            targets = target_power.values.copy()
+            limits = limit_powers.values.copy()
+        case 'interleave_increasing':
+            initial_source = _interleave(starting_powers.values)
+            frequencies = _interleave(frequency.values)
+            targets = _interleave(target_power.values)
+            limits = _interleave(limit_powers.values)
+        case _:
+            raise ValueError('freq_ordering not a recognized value')
+
+    output_df = {
+        'Frequency_GHz': [],
+        'Initial_source_power_dBm': [],
+        'Target_source_power_dBm': [],
+        'Source_power_limit_dBm': [],
+    }
+
+    for i, fi in enumerate(frequencies):
+        # insert zero rows
+        if i % segment_size == 0:
+            for n in output_df:
+                output_df[n] += [0] * off_step_length
+        output_df['Frequency_GHz'].append(fi)
+        output_df['Initial_source_power_dBm'].append(initial_source[i])
+        output_df['Target_source_power_dBm'].append(targets[i])
+        output_df['Source_power_limit_dBm'].append(limits[i])
+
+    # append with a zero row
+    for n in output_df:
+        output_df[n] += [0] * off_step_length
+    output_df = pd.DataFrame(output_df)
+    output_df.to_csv(output_path, index=False)
+    figures = []
+    if make_plots:
+        figures = review_runlist(output_path)
+    return figures
+
+
+def review_runlist(runlist: Path) -> list[plt.Figure]:
+    """
+    Review a runlist for an rf sweep measurement.
+
+    Parameters
+    ----------
+    runlist : Path
+        Path to runlist.
 
     Returns
     -------
-    figures : list[plt.Figure]
-        List of generated figures.
+    plots : list[plt.Figures]
+        List of review charts.
+
     """
-    dr = ExistingRecord(metadata)
+    runlist = Path(runlist)
+    data = pd.read_csv(runlist)
+    # srtd with 0 rows removed
+    ind_on = data.Frequency_GHz > 0
+    ind_off = data.Frequency_GHz == 0
+    srtd = data[ind_on].sort_values('Frequency_GHz')
 
-    frequencies = np.sort(frequencies)
-
-    # PARSE THE MEASURMENT
-    max_powers = {
-        'DUT_power_signal (W)': DUT_power_max_dBm,
-        'monitor_power_signal (W)': monitor_power_max_dBm,
-        'RF_source_power_signal (W)': max_source_dBm,
-    }
-    signal_columns = ['DUT_power_signal (W)']
-
-    if 'monitor_power_signal (W)' in dr.columns:
-        signal_columns.append('monitor_power_signal (W)')
-
-    print('Present signals ', signal_columns)
-
-    d_full = dr.batch_read(
-        ['frequency', 'power_on', 'point_counter', 'RF_source_power_signal (W)']
-        + signal_columns
-    )
-
-    src = d_full['RF_source_power_signal (W)']
-    points_dr = d_full['point_counter']
-
-    def frmt(*args):
-        args = [float(a) for a in args]
-        return '{:6.3f} | {:6.3f} | {:6.3f} | {:6.3f}'.format(*args)
-
-    # read in settings file
-    try:
-        settings = pd.read_csv(dr.metadata['settings_file'])
-    except FileNotFoundError:
-        try_file = Path(metadata).parent / Path(dr.metadata['settings_file']).name
-        settings = pd.read_csv(try_file)
-
-    # the data record counts the initial warm up as a point.
-    # experiment needs to be finished for this
-    if len(settings) + 1 != len(points_dr[1]):
-        print(
-            'Incomplete measurement passed to metadata. Meas list may be incomplete or have bad source settings on last frequency.'
-        )
-
-    # for each completed measurment
-    # change the initial source to the final source
-    points = (points_dr[0][1:], points_dr[1][1:])
-    new_list = {c: [] for c in settings.columns}
-    read_frequencies = np.array([], float)
-    losses = {s: np.array([], float) for s in signal_columns}
-
-    # build an RF loss table
-    for i, (tp, p) in enumerate(zip(points[0], points[1])):
-        # copy row
-        fset = settings.iloc[i]
-        this_avg = {}
-        this_loss = {}
-        # leave the zero rows alone, otherwise update initial source
-        if not all([fs == 0 for fs in fset]):
-            # go up a point to find end of source
-            if i < len(points[0]):
-                # go up a point to find end of source
-                src = mean_last_of_point_dBm(
-                    d_full['RF_source_power_signal (W)'], points, i, n_samples
-                )
-                # this is silly, but finds the start of the next point
-                # with nearest, then looks for where the source changes state
-                # closest to that point, and averages the previous 7 samples
-                # to get the source value right before the fast off
-                # happened.
-                for signal_name in signal_columns:
-                    this_avg[signal_name] = mean_last_of_point_dBm(
-                        d_full[signal_name], points, i, n_samples
-                    )
-                    this_loss[signal_name] = src - this_avg[signal_name]
-                    losses[signal_name] = np.append(
-                        losses[signal_name], this_loss[signal_name]
-                    )
-                read_frequencies = np.append(read_frequencies, fset.Frequency_GHz)
-
-    # interpolate losses to the reqeusted frequency grid
-    # use the measured frequencies by default
-    if frequencies is None:
-        frequencies = read_frequencies
-
-    interp_losses = {}
-
-    for signal_name in signal_columns:
-        interp_losses[signal_name] = _smallest_neighbour(
-            frequencies, read_frequencies, losses[signal_name]
-        )
-
-    figs = []
-
-    # make some plots
-    fig, ax = plt.subplots()
-    figs.append(fig)
-    ax.set_xlabel('Frequency (GHz)')
-    ax.set_ylabel('RF Loss (dBm)')
-    colors = cycle(['b', 'C1', 'm'])
-    for signal_name in signal_columns:
-        color = next(colors)
-        print(signal_name, interp_losses[signal_name])
-        ax.plot(
-            read_frequencies,
-            losses[signal_name],
-            'o',
-            color=color,
-            label=signal_name.replace('(W)', 'Measured'),
-        )
-        ax.plot(
-            frequencies,
-            interp_losses[signal_name],
-            '-',
-            color=color,
-            label=signal_name.replace('(W)', 'Interpolated'),
-        )
+    fig1, ax = plt.subplots(1, 1)
+    ax.plot(srtd.Frequency_GHz, srtd.Initial_source_power_dBm, label='Initial')
+    ax.plot(srtd.Frequency_GHz, srtd.Target_source_power_dBm, label='Target')
+    ax.plot(srtd.Frequency_GHz, srtd.Source_power_limit_dBm, label='Limit')
+    ax.set_xlabel('Frequency GHz')
+    ax.set_ylabel('Power (dBm)')
+    ax.set_title(f'Runlist Review: \n {str(runlist)}')
     ax.legend(loc='best')
 
-    # calculate source power to achieve target power
-    for s in signal_columns:
-        if level_to in s:
-            level_to = s
-    initial_source = interp_losses[level_to] + max_powers[level_to] - safety_backoff_dBm
-
-    # calculate expected powers
-    expected_powers = {'RF_source_power_signal (W)': initial_source}
-    for signal_name in signal_columns:
-        expected_powers[signal_name] = initial_source - interp_losses[signal_name]
-
-    # plot the expected power levels
-    fig, ax = plt.subplots()
-    figs.append(fig)
-    ax.set_xlabel('Frequency (GHz)')
-    ax.set_ylabel('Expected Initial Power (dBm)')
-    for signal_name in signal_columns + ['RF_source_power_signal (W)']:
-        color = next(colors)
-        ax.plot(
-            frequencies,
-            expected_powers[signal_name],
-            color=color,
-            label=signal_name.replace('(W)', 'expected'),
-        )
-        ax.axhline(
-            max_powers[signal_name],
-            color=color,
-            ls='--',
-            label=signal_name.replace('(W)', 'limit'),
-        )
-
-    # signal_name = 'RF_source_power_signal (W)'
-    # color = next(colors)
-    # ax.plot(frequencies, initial_source, color = color, label = signal_name.replace('(W)','expected'))
-    # ax.axhline(max_powers[signal_name], color = color,ls = '--', label = signal_name.replace('(W)','limit'))
-    ax.legend(loc='best')
-
-    # check no maximums are exceeded
-    no_maximums = True
-    for signal_name in signal_columns + ['RF_source_power_signal (W)']:
-        if (expected_powers[signal_name] > max_powers[signal_name]).any():
-            no_maximums = False
-            print(
-                f'Maximum power exceeded for {signal_name}, no runlist will be generated'
-            )
-
-    # if no maximums hit, build a run list
-    # interleave the frequency points
-    initial_source = _interleave(initial_source)
-    frequencies = _interleave(frequencies)
-
-    if no_maximums:
-        output_df = {
-            'Frequency_GHz': [],
-            'Initial_source_power_dBm': [],
-            'Target_source_power_dBm': [],
-            'Source_power_limit_dBm': [],
-        }
-
-        for i, fi in enumerate(frequencies):
-            # insert zero rows
-            if i % segment_size == 0:
-                for n in output_df:
-                    output_df[n] += [0] * off_step_length
-            output_df['Frequency_GHz'].append(fi)
-            output_df['Initial_source_power_dBm'].append(initial_source[i])
-            output_df['Target_source_power_dBm'].append(max_powers[level_to])
-            output_df['Source_power_limit_dBm'].append(
-                max_powers['RF_source_power_signal (W)']
-            )
-
-        # append with a zero row
-        for n in output_df:
-            output_df[n] += [0] * off_step_length
-        output_df = pd.DataFrame(output_df)
-        output_df.to_csv(Path(output_dir) / output_name, index=False)
-
-    return figs
+    fig2, ax = plt.subplots(1, 1)
+    ax.plot(data.Frequency_GHz[ind_on], 'o', label='Power On')
+    ax.plot(data.Frequency_GHz[ind_off], 'o', label='Power Off')
+    ax.set_xlabel('Step Number')
+    ax.set_ylabel('Frequency (GHz)')
+    ax.set_title(f'Runlist Review: \n {str(runlist)}')
+    return [fig1, fig2]
 
 
 def _interleave(a):
@@ -1254,110 +1258,3 @@ def _smallest_neighbour(x_interp: np.array, x: np.array, y: np.array):
             ytest_2 = np.inf
         out[i] = min(ytest_1, ytest_2)
     return out
-
-
-def generate_settled_runlist(
-    metadata: Path,
-    analysis_config: configs.RFSweepParserConfig = None,
-    output_dir: Path = Path('.'),
-    output_name: str = None,
-    n_samples: int = 7,
-):
-    """
-    Generate a run list with settled source powers.
-
-    Copies the run settings (frequency list, target power, initial source
-    power, and source limit) and replaces the initial source power
-    with the settled value from the provided run.
-
-    This function does NOT check if the source was actually
-    settled, it just assumes it was right before power was turned off.
-    Check that your self by inspecting the dashboard.
-
-    Unfinshed runs can be provided, but they may provide bad settings for
-    the final points if the experiment never actually settled, and the
-    frequency list may be incomplete.
-
-    Parameters
-    ----------
-    metadata : Path
-        Metadata file of output.
-    output_dir : Path, optional
-        Folder to output new file in. The default is the current directory.
-    output_name : str, optional
-        What to name new file. The default is the provided metadata name
-        + '_settled_runlist.csv'
-    n_samples : int, optiona;
-        Number of samples to average for final source value.
-    """
-    dr = ExistingRecord(metadata)
-
-    d_full = dr.batch_read(
-        ['rf_power_setting', 'frequency', 'power_on', 'point_counter']
-    )
-
-    # get columns I care about
-    src = d_full['rf_power_setting']
-    points_dr = d_full['point_counter']
-
-    def frmt(*args):
-        args = [float(a) for a in args]
-        return '{:6.3f} | {:6.3f} | {:6.3f} | {:6.3f}'.format(*args)
-
-    # read in settings file
-    try:
-        settings = pd.read_csv(dr.metadata['settings_file'])
-    except FileNotFoundError:
-        try_file = Path(metadata).parent / Path(dr.metadata['settings_file']).name
-        settings = pd.read_csv(try_file)
-
-    # the data record counts the initial warm up as a point.
-    # experiment needs to be finished for this
-    if len(settings) + 1 != len(points_dr[1]):
-        print(
-            'Incomplete measurement passed to metadata. Meas list may be incomplete or have bad source settings on last frequency.'
-        )
-
-    # for each completed measurment
-    # change the initial source to the final source
-    points = (points_dr[0][1:], points_dr[1][1:])
-    new_list = {c: [] for c in settings.columns}
-
-    for i, (tp, p) in enumerate(zip(points[0], points[1])):
-        # copy row
-        fset = settings.iloc[i]
-        for c in settings.columns:
-            new_list[c].append(fset[c])
-        # leave the zero rows alone, otherwise update initial source
-        if not all([fs == 0 for fs in fset]):
-            # go up a point to find end of source
-            if i < len(points[0]):
-                # go up a point to find end of source
-                nearest = np.searchsorted(src[0], points[0][i])
-                # this is silly, but finds the start of the next point
-                # with nearest, then looks for where the source changes state
-                # closest to that point, and averages the previous 7 samples
-                # to get the source value right before the fast off
-                # happened.
-                new = float(
-                    np.mean(
-                        src[1][:nearest][
-                            abs(np.diff(src[1][:nearest], append=src[1][-1])) > 0
-                        ][-n_samples]
-                    )
-                )
-
-                new_list['Initial_source_power_dBm'][-1] = new
-            pass
-        line = frmt(*[fs[-1] for fs in new_list.values()])
-        print(line)
-        print('-' * len(line))
-
-    # save new dataframe
-    df = pd.DataFrame(new_list)
-    output_dir = Path(output_dir)
-
-    if output_name is None:
-        output_name = os.path.basename(dr.metadata['settings_file']).split('.')[0]
-        output_name += '_settled.csv'
-    df.to_csv(output_dir / output_name, index=False)

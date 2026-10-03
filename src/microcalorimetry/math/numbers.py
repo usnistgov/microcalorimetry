@@ -4,6 +4,16 @@ Generic numerical methods.
 
 import xarray as xr
 
+def mean_unique_values(arr: xr.DataArray, dim: str):
+    """
+    Average duplicate values across a dimension.
+    """
+    old_coords = {k: v for k, v in arr.coords.items() if k != dim}
+    out = arr.groupby(dim).mean(dim)
+    # copy over coordinates from the old array
+    # don't include the dimension that was grouped and averaged
+    out = out.assign_coords(old_coords)
+    return out
 
 def greedy_average(*arrays: xr.DataArray) -> xr.DataArray:
     """

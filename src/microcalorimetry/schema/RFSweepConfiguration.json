@@ -8,7 +8,7 @@
         },
         "output_settings": {
             "$ref": "RFSweepOutputSettings.json#/definitions/RFSweepOutputSettings",
-            "description": "Describes data ouput settings for the data-record."
+            "description": "Describes data output settings for the data-record."
         },
         "levelling_settings": {
             "$ref": "RFSweepLevellingSettings.json#/definitions/RFSweepLevellingSettings",
@@ -18,9 +18,9 @@
             "$ref": "RFSweepStatsSettings.json#/definitions/RFSweepStatsSettings",
             "description": "Describes statistical tests used for determining if the thermopile element is level."
         },
-        "column_model_mapping": {
-            "$ref": "RFSweepColumnModelMapping.json",
-            "description": "Maps the columns of the data-record file to a model of the sensor."
+        "signal_config": {
+            "$ref": "RFSweepSignalConfig.json",
+            "description": "Maps instruments to a type of signal during a measurement."
         },
         "run_settings_columns": {
             "$ref": "RFSweepRunSettingsColumns.json#/definitions/RFSweepRunSettingsColumns",
@@ -41,7 +41,7 @@
                 }
             },
             "additionalProperties": {
-                "$ref": "RFSweepInstrumentRoles.json#/definitions/RFSweepInstrumentRole",
+                "$ref": "InstrumentRoles.json#/definitions/InstrumentRole",
                 "description": "Additional properties are all instrument roles."
             }
         }

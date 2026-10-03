@@ -1,8 +1,7 @@
-Command Line Interface
-======================
+CLI Reference
+=============
 
-Documentation for using the command line interface, which provides
-CLI tools to run, view, parse, and analyze data sets.
+Reference for using the command line interface.
 
 .. click:: microcalorimetry._cli:_main
    :prog: ucal

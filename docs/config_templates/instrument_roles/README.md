@@ -1,0 +1,1 @@
+This folder contains sample templates of instruments configured for different roles.

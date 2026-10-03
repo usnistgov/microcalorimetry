@@ -4,14 +4,14 @@
             "type": "object",
             "properties": {
                 "v": {
-                    "$ref": "DCSweep.json#/definitions/DCSweep"
+                    "$ref": "DCSweep.json#/definitions/DCSweepLike"
                 },
                 "i": {
-                    "$ref": "DCSweep.json#/definitions/DCSweep"
+                    "$ref": "DCSweep.json#/definitions/DCSweepLike"
                 }
             },
             "additionalProperties": {
-                "$ref": "DCSweep.json#/definitions/DCSweep"
+                "$ref": "DCSweep.json#/definitions/DCSweepLike"
             }
         }
     }

@@ -14,4 +14,4 @@ instruments,RF_source,initial_settings,AM,TRUE,bool,turn amplitude modulation on
 instruments,RF_source,initial_settings,AM_ext_port,1,int,external input for DC signal that modulates the signal
 instruments,RF_source,initial_settings,AM_ext_sensitivity_percent_per_volt,10,float,linear sensitivity (percent per volt) of the modulated signal to the dc input
 instruments,RF_source,serial,,SERIAL,str,serial number
-measurement_description,RF_source_type,,,signal_generator,str,"options are: signal_generator, VNA"
+

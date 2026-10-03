@@ -1,0 +1,11 @@
+﻿key_0,key_1,value,type,comment
+# These are settings for the data record,,,,
+record_settings,maxlen,5000,int,max length of data record
+record_settings,minlen,0,int,min length of data record
+# other run settings,,,,
+step_duration,,2,float,length of time per step. In seconds.
+first_sample_delay,,0,float,Delay between source adjusting and first sample.
+off_duration,,2,float,Duration of off measurements between samples. Set to zero to turn off.
+# bath settings,,,,
+t_bath_c,,23.5,float,temperature of bath in Celcius (approximate
+r_heater_ohms,,520,float,resistance of heater in ohms (approximate)

@@ -32,7 +32,7 @@
         },
         "THIN_FILM_MOUNTS": {
             "type": "array",
-            "description": "Names of thinfilm mounts that require a PTC feedback loop.",
+            "description": "Names of thin film mounts that require a PTC feedback loop.",
             "items": {
                 "type": "string"
             }

@@ -1,9 +1,14 @@
 # ignoring plots made by the microcapp app
 *PLOTS_*
+bandit-report.json
+gl-sbom-python.cdx.json
 
 # ignoring any hdf5 files with test marker, to save space. They are massive
 *_test.hdf5
 htmlcov/
+uv.lock
+.microcalorimetry
+.ruff_cache
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

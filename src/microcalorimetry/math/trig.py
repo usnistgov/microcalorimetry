@@ -3,6 +3,8 @@
 import xarray as xr
 import numpy as np
 
+__all__ = ['angle_diff']
+
 
 def angle_diff(phase1: xr.DataArray, phase2: xr.DataArray, deg=False) -> xr.DataArray:
     """

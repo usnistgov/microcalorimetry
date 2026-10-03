@@ -4,52 +4,24 @@
             "description": "Describes the settings used for an arbitrary instrument",
             "anyOf": [
                 {
-                    "$ref": "#/definitions/HP34420A Voltmeter"
+                    "$ref": "#/definitions/Voltmeter"
                 },
                 {
-                    "$ref": "#/definitions/HP3458A Voltmeter"
+                    "$ref": "#/definitions/RF Source"
                 },
                 {
-                    "$ref": "#/definitions/KS_E8257D RF Source"
+                    "$ref": "#/definitions/Voltage Source"
                 },
                 {
-                    "$ref": "#/definitions/DP8200 Voltage Source"
+                    "$ref": "#/definitions/Commercial Power Meter"
                 },
                 {
-                    "$ref": "#/definitions/RS_NRP75TWG Power Meter"
+                    "$ref": "#/definitions/SMU"
                 }
             ]
         },
-        "HP34420A Voltmeter": {
-            "description": "Possible settings to use for the HP34420A Nanovoltmeter acting as a Voltmeter.",
-            "type": "object",
-            "properties": {
-                "v_range": {
-                    "anyof": [
-                        {
-                            "type": "str",
-                            "enum": [
-                                "auto"
-                            ]
-                        },
-                        {
-                            "type": "number",
-                            "minimum": 0
-                        }
-                    ]
-                },
-                "nplc": {
-                    "type": "number",
-                    "description": "Number of power line cycles "
-                },
-                "num_readings": {
-                    "type": "integer",
-                    "description": "Number of readings to take for each poll"
-                }
-            }
-        },
-        "HP3458A Voltmeter": {
-            "description": "Possible settings to use for the HP3458A DMM acting as a Voltmeter.",
+        "Voltmeter": {
+            "description": "Possible  voltmeter settings.",
             "type": "object",
             "properties": {
                 "v_range": {
@@ -76,16 +48,16 @@
                 },
                 "timer": {
                     "type": "number",
-                    "description": "How long to wait between concurrent readings."
+                    "description": "How long to wait between concurrent readings. Only applicable to HP34420A"
                 },
                 "timeout": {
-                    "type": "integer",
+                    "type": "number",
                     "description": "How long to wait before throwing an error while waiting for data to come back."
                 }
             }
         },
-        "KS_E8257D RF Source": {
-            "description": "Possible settings to use for the HP3458A DMM acting as a Source.",
+        "RF Source": {
+            "description": "Possible RF source instrument settings.",
             "type": "object",
             "properties": {
                 "f_GHz": {
@@ -106,8 +78,8 @@
                 }
             }
         },
-        "DP8200 Voltage Source": {
-            "description": "Possible settings to use for the DP8200 acting as a voltage source.",
+        "Voltage Source": {
+            "description": "Possible settings for a voltage source.",
             "type": "object",
             "properties": {
                 "v_range": {
@@ -120,13 +92,13 @@
                 }
             }
         },
-        "RS_NRP75TWG Power Meter": {
-            "description": "Possible settings to use for the RS NRP75TWG Power Meter.",
+        "Commercial Power Meter": {
+            "description": "Possible settings to use for a commercial power meter.",
             "type": "object",
             "properties": {
                 "read_units": {
                     "type": "string",
-                    "description": "Read units, restriced to Watts for compatability.",
+                    "description": "Read units, restricted to Watts for compatibility.",
                     "enum": [
                         "W"
                     ]
@@ -139,7 +111,7 @@
                 },
                 "zero_once": {
                     "type": "boolean",
-                    "description": "Forces a zeroing measurment to calibrate instrument, freezes the runner while it happens."
+                    "description": "Forces a zeroing measurement to calibrate instrument, freezes the runner while it happens."
                 },
                 "timeout": {
                     "type": "number",
@@ -152,6 +124,84 @@
                         "ON",
                         "OFF"
                     ]
+                }
+            }
+        },
+        "SMU": {
+            "description": "Possible settings for a Source Measure Unit (SMU).",
+            "type": "object",
+            "properties": {
+                "wiring": {
+                    "type": "string",
+                    "description": "What kind of wiring to use.",
+                    "enum": [
+                        "4W",
+                        "2W"
+                    ]
+                },
+                "source_measure": {
+                    "type": "string",
+                    "description": "What to source and measure (V or I)",
+                    "enum": [
+                        "SVMI",
+                        "SVMV",
+                        "SIMV",
+                        "SIMI"
+                    ]
+                },
+                "panel": {
+                    "type": "string",
+                    "description": "What to panel to use on the SMU",
+                    "enum": [
+                        "front",
+                        "rear"
+                    ]
+                },
+                "measure_for_duration_or_count": {
+                    "type": "string",
+                    "description": "Sets the K2450 to always measure for count. K2450 only.",
+                    "enum": [
+                        "count"
+                    ]
+                },
+                "source_level": {
+                    "type": "number",
+                    "description": "Sets the source value in units of Volts or Amps (depending on source_measure setting)."
+                },
+                "source_on": {
+                    "type": "string",
+                    "description": "Sets the source output to on or off.",
+                    "enum": [
+                        "on",
+                        "off"
+                    ]
+                },
+                "source_range": {
+                    "type": [
+                        "string",
+                        "number"
+                    ],
+                    "description": "'auto' or number, sets the source range."
+                },
+                "source_readback": {
+                    "type": "boolean",
+                    "description": "Sets the source to measure its output and report that value."
+                },
+                "measure_autozero": {
+                    "type": "boolean",
+                    "description": "Autozero the measurement values."
+                },
+                "source_delay": {
+                    "type": ["string","number"],
+                    "description": "'auto' or a number. Sets the delay between source adjustment and measurement read back."
+                },
+                "count_per_level": {
+                    "type": ["number"],
+                    "description": "Sets the number of readings per trigger. Typically 1."
+                },
+                "nplc": {
+                    "type": ["number"],
+                    "description": "Integration time in power line cycles."
                 }
             }
         }

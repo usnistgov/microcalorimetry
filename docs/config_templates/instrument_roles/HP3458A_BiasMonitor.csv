@@ -1,0 +1,18 @@
+key_0,key_1,key_2,key_3,value,type,comment
+output_settings,columns,,,DVM_volts,str,Name of output column in record. Only columns that are not in the defaut set need to be declared. 
+instruments,names,,,DVM1,str,human-readable name (arbitrary and unique)
+,,,,,,
+instruments,DVM1,model,,HP3458A,str,make and model of instrument; used to determine which commands to use
+instruments,DVM1,serial,,1186,str,last 4 digits of serial number
+instruments,DVM1,GPIB_address,,GPIB0::22::INSTR,str,GPIB address
+instruments,DVM1,role,,bias_monitor,str,an instrument's role is its specific use in the context of this measurement 
+instruments,DVM1,output_column,,DVM_volts,str,For the bias monitor the output column is DVM_volts
+instruments,DVM1,initial_settings,v_range,10,float,settings for this instrument in monitor mode
+instruments,DVM1,monitor_mode_settings,nplc,100,float,settings for this instrument in monitor mode
+instruments,DVM1,monitor_mode_settings,num_readings,1,int,settings for this instrument in monitor mode
+instruments,DVM1,monitor_mode_settings,timer,0,float,settings for this instrument in monitor mode
+instruments,DVM1,monitor_mode_settings,timeout,5,float,timeout for wait_until_data_available (seconds)
+instruments,DVM1,fast_off_mode_settings,nplc,1,float,the state of the instrument for fast_off measurements
+instruments,DVM1,fast_off_mode_settings,num_readings,300,int,the state of the instrument for fast_off measurements
+instruments,DVM1,fast_off_mode_settings,timer,0.05,float,the state of the instrument for fast_off measurements
+instruments,DVM1,fast_off_mode_settings,timeout,100,float,timeout for wait_until_data_available (seconds)

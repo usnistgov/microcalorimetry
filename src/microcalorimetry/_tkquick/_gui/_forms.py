@@ -1,12 +1,15 @@
 from numpydoc.docscrape import NumpyDocString
 from pathlib import Path
 from collections import namedtuple
+from functools import partial
 import numpy as np
 import customtkinter as ctk
 import inspect
 import os
 import pandas as pd
-import microcalorimetry._tkquick.dtypes as dtypes
+import microcalorimetry._tkquick.gui_dtypes as dtypes
+import microcalorimetry._tkquick._gui._tooltip as _tooltip
+from customtkinter import ThemeManager
 
 customtkinter = ctk
 
@@ -21,6 +24,8 @@ npdoc_typedict = {
     'ndarray[float]': np.ndarray[float],
     'np.ndarray[float]': np.ndarray[float],
     'configs.PythonFunction': str,
+    'SaveAsPath': dtypes.SaveAsPath,
+    'list[Folder]': list[dtypes.Folder],
     'list[Path]': list[Path],
     'Folder': dtypes.Folder,
     'list[int]': list[int],
@@ -29,45 +34,52 @@ npdoc_typedict = {
     'list[configs.EtaHistorical]': list[Path],
     'RFSweepParserConfig': Path,
     'RFSweepSignalConfig': Path,
-    'configs.Eta': Path,
+    'configs.EtaLike': Path,
     'configs.EtaHistorical': Path,
-    'configs.GC': Path,
-    'configs.S11': Path,
+    'configs.GCLike': Path,
+    'configs.S11Like': Path,
     'microcalorimetry.configs.ParsedDCSweep': Path,
     'configs.ParsedRFSweep': Path,
-    'configs.ThermoelectricFitCoefficients': Path,
+    'configs.RFSweepLike': Path,
+    'configs.KDCLike': Path,
 }
 
-npdoc_defaults = {
-    'str': 'string',
-    'float': 'float',
-    'int': 'int',
-    'bool': False,
-    'dict': None,
-    'tuple': '0, 0',
-    'list': '0, 0',
-    'configs.PythonFunction': 'module:function or file.py:function',
-    'ndarray[float]': '0.0, 1.0',
-    'np.ndarray[float]': '0.0, 1.0',
-    'Path': 'Path/To/Thing.ext',
-    'RFSweepSignalConfig': 'path.(yml,json,csv)',
-    'microcalorimetry.configs.ParsedDCSweep': 'path.(yml,json,csv,h5)',
-    'RFSweepParserConfig': 'path.(yml,json,csv)',
-    'configs.Eta': 'path.(eff,h5)',
-    'configs.EtaHistorical': 'path.(eff,h5)',
-    'configs.GC': 'path.(h5)',
-    'configs.S11': 'path.(h5,dut)',
-    'configs.ParsedRFSweep': 'path.(h5)',
-    'configs.ThermoelectricFitCoefficients': 'path.(h5)',
-    'list[Path]': 'paths/to/thing.ext, path/to/thing2.ext',
-    'list[configs.EtaHistorical]': 'paths/to/thing.yml, path/to/thing.yml',
-    'Folder': 'path/to/folder',
-    'list[int]': '0, 1, 2, 3',
-    'list[str]': 'item1, item2, item3',
-    'list[float]': '1.0, 2.0, 3.0',
-}
+npdoc_defaults = {k: k for k in npdoc_typedict}
+#     'str': 'string',
+#     'float': 'float',
+#     'int': 'int',
+#     'bool': False,
+#     'dict': None,
+#     'tuple': '0, 0',
+#     'list': '0, 0',
+#     'list[Folder]': 'path/to/folder, path/to/folder_2',
+#     'configs.PythonFunction': 'module:function or file.py:function',
+#     'SaveAsPath': 'path/to/file.ext',
+#     'ndarray[float]': '0.0, 1.0',
+#     'np.ndarray[float]': '0.0, 1.0',
+#     'Path': 'Path/To/Thing.ext',
+#     'RFSweepSignalConfig': 'path.(yml,json,csv)',
+#     'microcalorimetry.configs.ParsedDCSweep': 'path.(yml,json,csv,h5)',
+#     'RFSweepParserConfig': 'path.(yml,json,csv)',
+#     'configs.Eta': 'path.(eff,h5)',
+#     'configs.EtaHistorical': 'path.(eff,h5)',
+#     'configs.GC': 'path.(h5)',
+#     'configs.S11': 'path.(h5,dut)',
+#     'configs.ParsedRFSweep': 'path.(h5)',
+#     'configs.RFSweep': 'file.h5/group',
+#     'configs.ThermoelectricFitCoefficients': 'path.(h5)',
+#     'list[Path]': 'paths/to/thing.ext, path/to/thing2.ext',
+#     'list[configs.EtaHistorical]': 'paths/to/thing.yml, path/to/thing.yml',
+#     'Folder': 'path/to/folder',
+#     'list[int]': '0, 1, 2, 3',
+#     'list[str]': 'item1, item2, item3',
+#     'list[float]': '1.0, 2.0, 3.0',
+# }
 
 dummy_npparam = namedtuple('dummy_doc', 'name type desc')
+text_colors = ThemeManager.theme['CTkLabel']['text_color']
+light_mode_text_color = text_colors[0]
+dark_mode_text_color = text_colors[1]
 
 
 def get_default_args(func):
@@ -79,7 +91,32 @@ def get_default_args(func):
     }
 
 
-def get_form_field(master, row, npparam, default, level=0):
+def toggle_field(switch, field, on=None):
+    if on is None:
+        on = switch.get()
+    if on:
+        # print("toggled on")
+        for child in field.winfo_children():
+            try:
+                child.configure(state='normal')
+            except:
+                # Skips widgets (like standard Labels or Frames) that do not support a state option
+                pass
+            # if isinstance(child, ctk.CTkLabel):
+            #     child.configure(text_color = dark_mode_text_color)
+    else:
+        # print("toggled off")
+        for child in field.winfo_children():
+            try:
+                child.configure(state='disabled')
+            except:
+                # Skips widgets (like standard Labels or Frames) that do not support a state option
+                pass
+            # if isinstance(child, ctk.CTkLabel):
+            #     child.configure(text_color = light_mode_text_color)
+
+
+def get_form_field(master, row, npparam, default, level=0, is_keyword=False):
     p = npparam
     try:
         fieldname = p.name
@@ -89,10 +126,28 @@ def get_form_field(master, row, npparam, default, level=0):
         print(npparam)
         raise (e)
 
+    # if a keyword argument, make a subframe so I can make room for a switch
+    # that turns keyword arguments on / off
+    # if is_keyword:
+    #     # print(is_keyword)
+    #     subframe = ctk.CTkFrame(master)
+    #     subframe.grid(row=row, column=1, padx=(0, 0), pady=0, sticky='ew', columnspan = 2)
+    #     subframe.grid_columnconfigure(1, weight=1)
+    #     subframe.grid_columnconfigure(1, weight=1)
+    #     subframe.grid_columnconfigure(0, weight=0)
+
+    #     # add a switch
+    #     switch = ctk.CTkSwitch(master, text = '', width = 100, onvalue=True, offvalue=False)
+    #     switch.grid(row = row, column = 0, sticky = 'w')
+
+    #     # subframe.column
+    #     master = subframe
+    #     row = 0
     # print(fieldname, type_str, dtype)
 
+    # build the entry form
     if dtype is str or dtype is float or dtype is int:
-        if 'Options Format' in p.desc and '-' * 14 in p.desc:
+        if 'Options Format' in ' '.join(p.desc) and '-' * 14 in ' '.join(p.desc):
             field = DropDownBox(master, row, npparam, default)
 
         else:
@@ -109,7 +164,7 @@ def get_form_field(master, row, npparam, default, level=0):
         or 'Folder' in type_str
         or 'list[configs.EtaHistorical]' in type_str
     ):
-        print(type_str, dtype)
+        # print(type_str, dtype)
         field = PathBox(master, row, fieldname, p.type, default)
 
     elif dtype is dict:
@@ -129,7 +184,74 @@ def get_form_field(master, row, npparam, default, level=0):
     else:
         raise Exception('datatype not recognized')
 
+    # attatche a tool tip
+    name = npparam.name
+    param_type = npparam.type
+    desc = '\n'.join(npparam.desc)
+
+    # Customize your output string format here
+    header = f'{name} : {param_type}'
+    header += '\n' + len(header) * '=' + '\n'
+    formatted = header + f'{desc}'
+    _tooltip.CTkToolTip(
+        field.label, message=formatted, justify='left', x_offset=0, anchor='w'
+    )
+
+    # set the switch toggle button
+
+    # if is_keyword:
+    #     switch.configure(command = partial(toggle_field, switch, subframe))
+    #     toggle_field(switch, subframe, on = False)
+    #     field = OptionalField(field, switch)
+    # else:
+    field = RequiredField(field)
+
     return field
+
+
+class RequiredField:
+    """
+    Wrapper around a Field class that alawya returns True
+
+    (i.e. positional arguments are always "active")
+    """
+
+    def __init__(self, field: object):
+        self.field = field
+
+    def __getattr__(self, o):
+        return getattr(self.field, o)
+
+    def is_active(self):
+        return True
+
+
+class OptionalField:
+    """
+    Wrapper around an optional field that can be inactive.
+
+    These are fields with defaults that will use that default if switched
+    off regardless of whats in the input box.
+
+    (i.e. positional arguments are always "active")
+    """
+
+    def __init__(self, field: object, switch: ctk.CTkSwitch):
+        self.field = field
+        self.switch = switch
+
+    def __getattr__(self, o):
+        return getattr(self.field, o)
+
+    def is_active(self):
+        return self.switch.get()
+
+    # setting a field also activates the optional argument
+    def setfield(self, text):
+        self.field.setfield(text)
+        # if the switch isn't on, toggle it
+        if not self.switch.get():
+            self.switch.toggle()
 
 
 class PathBox:
@@ -158,20 +280,37 @@ class PathBox:
             self.setfield(default)
 
     def fetch_paths(self):
-        print(self.dtype)
+        # print(self.dtype)
         if 'Path' == self.dtype:
             filename = ctk.filedialog.askopenfilename(
-                title='Pick File(s)', multiple=False
+                initialdir=str(Path.cwd()),
+                title=f'Pick file for {self.label.cget("text")}',
+                multiple=False,
             )
             if filename != '':
                 self.setfield(filename)
                 # print(filename)
             else:
-                print('no file selected.')
+                pass
+                # print('no file selected.')
+
+        elif 'SaveAsPath' == self.dtype:
+            filename = ctk.filedialog.asksaveasfilename(
+                initialdir=str(Path.cwd()),
+                title=f'Select an output file for {self.label.cget("text")}',
+            )
+            if filename != '':
+                self.setfield(filename)
+                # print(filename)
+            else:
+                pass
+                # print('no file selected.')
 
         elif 'list[Path]' == self.dtype:
             filename = ctk.filedialog.askopenfilename(
-                title='Pick File(s)', multiple=True
+                title=f'Pick files for {self.label.cget("text")}',
+                multiple=True,
+                initialdir=str(Path.cwd()),
             )
             if filename != '':
                 filename = str(filename).replace("'", '')[1:-1]
@@ -180,20 +319,53 @@ class PathBox:
                 self.setfield(filename)
                 # print(filename)
             else:
-                print('no file selected.')
+                pass
+                # print('no file selected.')
+
+        elif 'list[Folder]' == self.dtype:
+            selected_folders = []
+            initial_dir = '.'
+            while True:
+                # Prompt user for a single directory
+                folder = ctk.filedialog.askdirectory(
+                    title=f'Select {self.label.cget("text")} directory #{len(selected_folders) + 1} for (Click Cancel to Finish)',
+                    initialdir=initial_dir,
+                )
+                initial_dir = Path(folder).parent.as_posix()
+                # If the user cancels, break the loop
+                if not folder:
+                    break
+
+                selected_folders.append(folder)
+                pass
+                # print(f'Added: {folder}')
+
+            if selected_folders:
+                folders = ', '.join(selected_folders)
+                self.setfield(folders)
+                # print(filename)
+            else:
+                pass
+                # print('no folders selected selected.')
 
         elif 'Folder' in self.dtype:
-            filename = ctk.filedialog.askdirectory(title='Pick Folder')
+            filename = ctk.filedialog.askdirectory(
+                title=f'Pick a folder for {self.label.cget("text")}',
+                initialdir=str(Path.cwd()),
+            )
             if filename != '':
                 self.setfield(filename)
                 # print(filename)
             else:
-                print('no folder selected.')
+                pass
+                # print('no folder selected.')
 
         # treat it as a list if list is present
         elif 'list' in self.dtype:
             filename = ctk.filedialog.askopenfilename(
-                title='Pick File(s)', multiple=True
+                title='Pick File(s)',
+                multiple=True,
+                initialdir=str(Path.cwd()),
             )
             if filename != '':
                 filename = str(filename).replace("'", '')[1:-1]
@@ -202,16 +374,26 @@ class PathBox:
                 self.setfield(filename)
                 # print(filename)
             else:
-                print('no file selected.')
+                pass
+                # print('no file selected.')
         else:
-            filename = ctk.filedialog.askopenfilename(title='Pick File', multiple=False)
-            print(filename)
+            filename = ctk.filedialog.askopenfilename(
+                title='Pick File', multiple=False, initialdir=str(Path.cwd())
+            )
+            # print(filename)
             if filename != '':
                 self.setfield(filename)
                 # print(filename)
             else:
-                print('no file selected.')
-            raise Exception(f'{self.dtype} not a recognized pathbox type')
+                pass
+                # print('no file selected.')
+            # raise Exception(f'{self.dtype} not a recognized pathbox type')
+
+    def relative_if_possible(self, p: str | Path):
+        try:
+            return Path(p).relative_to(Path.cwd()).as_posix()
+        except ValueError:
+            return Path(p).as_posix()
 
     def get(self):
         text = self.box.get()
@@ -219,15 +401,30 @@ class PathBox:
         if text == '':
             return None
         if 'list' in self.dtype:
-            return text.replace('"', '').replace("'", '').split(', ')
+            modified = text.replace('"', '').replace("'", '').split(',')
+            result = [item.strip() for item in modified]
+            return result
         else:
-            return text
+            return text.strip()
 
     def setfield(self, text):
         if text is None:
             text = ''
-        if self.dtype == 'list[Path]':
-            text = str(text).replace('[', '').replace("'", '').replace(']', '')
+        elif 'list' in self.dtype:
+            # format properly
+            text = (
+                str(text)
+                .replace('[', '')
+                .replace("'", '')
+                .replace(']', '')
+                .replace('"', '')
+            )
+            # convert to relative paths when possible
+            paths = [self.relative_if_possible(p) for p in text.split(', ')]
+            text = ', '.join(paths)
+        else:
+            text = self.relative_if_possible(text)
+
         self.box.delete('0', last_index='end')
         self.box.insert('1', str(text))
 
@@ -278,10 +475,12 @@ class DropDownBox:
 
         # build form fields
         desc = npparam.desc
+        # print('desc is', type(desc))
         i = None
         self.fields = {}
         for di, d in enumerate(desc):
-            if desc[di] == 'Options Format':
+            # print(d)
+            if desc[di].lstrip() == 'Options Format':
                 i = di + 3
         if i is None:
             raise Exception('Bad Formatting on Options Format Field DOC String')
@@ -364,9 +563,19 @@ class ToggleFrame(ctk.CTkFrame):
         self.label.grid(row=0, column=0, sticky='e', padx=(0, 10))
 
         self.toggle_button = ctk.CTkButton(
-            self.label_frame, text='>', command=self._toggle_open_close, width=20
+            self.label_frame, text='collapse', command=self._toggle_open_close, width=20
         )
         self.toggle_button.grid(row=0, column=1, sticky='ne', padx=0)
+
+    def collapse(self):
+        child = self.form_frame
+        child.grid_remove()
+        self.toggle_button.configure(text='uncollapse')
+
+    def uncollapse(self):
+        child = self.form_frame
+        child.grid()
+        self.toggle_button.configure(text='  collapse')
 
     def _toggle_open_close(self):
         """
@@ -376,17 +585,17 @@ class ToggleFrame(ctk.CTkFrame):
         """
         child = self.form_frame
         if child.winfo_viewable():
-            child.grid_remove()
-            self.toggle_button.configure(text='>')
+            self.collapse()
         else:
-            child.grid()
-            self.toggle_button.configure(text='V')
+            self.uncollapse()
 
 
 class DictionairyEntry(ctk.CTkFrame):
     def __init__(self, master, row, npparam):
         super().__init__(master)
         self.grid(row=row, column=0, sticky='ew', columnspan=2, pady=10)
+        theme_data = ctk.ThemeManager.theme
+        self.configure(fg_color=theme_data['CTk']['fg_color'][1])
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
@@ -407,7 +616,10 @@ class DictionairyEntry(ctk.CTkFrame):
         self.label.grid(row=0, column=0, sticky='e', padx=(0, 10))
 
         self.toggle_button = ctk.CTkButton(
-            self.label_frame, text='>', command=self._toggle_open_close, width=20
+            self.label_frame,
+            text=' collapse',
+            command=self._toggle_open_close,
+            width=20,
         )
         self.toggle_button.grid(row=0, column=1, sticky='ne', padx=0)
 
@@ -428,8 +640,25 @@ class DictionairyEntry(ctk.CTkFrame):
             split = desc[i].split(' : ')
             name = split[0]
             dtype_str = split[1]
-            new_desc = desc[i + 1]
-            i += 2
+            new_desc = [desc[i + 1].lstrip()]
+            min_whitespace = len(desc[i + 1]) - len(desc[i + 1].lstrip())
+            # search for when leading whitespace get smaller,
+            # indicates indent has gone down and we've moved on to the next
+            # parameter
+            searching = True
+            i_search_param = i + 2
+            while searching:
+                check = desc[i_search_param]
+                new_leading_whitespace = len(check) - len(check.lstrip())
+                # reach end of parameter description
+                if new_leading_whitespace < min_whitespace:
+                    searching = False
+                else:
+                    i_search_param += 1
+                    new_desc += [check.lstrip()]
+
+            # print(new_desc)
+            i = i_search_param
 
             p = dummy_npparam(name, dtype_str, new_desc)
             default = npdoc_defaults[dtype_str]
@@ -438,12 +667,24 @@ class DictionairyEntry(ctk.CTkFrame):
             row_count += 1
             self.fields[p.name] = field
 
+        self.collapse()
+
     def get(self):
         return {k: v.get() for k, v in self.fields.items()}
 
     def setfield(self, setdict):
         for k in setdict:
             self.fields[k].setfield(setdict[k])
+
+    def collapse(self):
+        child = self.form_frame
+        child.grid_remove()
+        self.toggle_button.configure(text='uncollapse')
+
+    def uncollapse(self):
+        child = self.form_frame
+        child.grid()
+        self.toggle_button.configure(text='  collapse')
 
     def _toggle_open_close(self):
         """
@@ -453,11 +694,9 @@ class DictionairyEntry(ctk.CTkFrame):
         """
         child = self.form_frame
         if child.winfo_viewable():
-            child.grid_remove()
-            self.toggle_button.configure(text='>')
+            self.collapse()
         else:
-            child.grid()
-            self.toggle_button.configure(text='V')
+            self.uncollapse()
 
 
 class NumpyArrayEntry:
@@ -489,7 +728,7 @@ class NumpyArrayEntry:
 
     def get(self):
         text = self.box.get()
-        print(self.label._text, text)
+        # print(self.label._text, text)
         if text == '':
             return None
         else:
@@ -501,7 +740,7 @@ class NumpyArrayEntry:
                     .astype(self.dtype)
                 )
                 data = data[:, 0]
-                print(data, data.shape)
+                # print(data, data.shape)
                 assert len(data.shape) == 1
                 return data
             # otherwise parse box and cast as array
@@ -521,7 +760,9 @@ class NumpyArrayEntry:
 
     def fetch_paths(self):
         filename = ctk.filedialog.askopenfilename(
-            title='Pick Array csv (no header, first column)', multiple=False
+            title='Pick Array csv (no header, first column)',
+            multiple=False,
+            initialdir=str(Path.cwd()),
         )
         if filename != '':
             self.setfield(filename)
@@ -552,7 +793,7 @@ class SequenceEntry:
 
     def get(self):
         text = self.box.get()
-        print(self.label._text, text)
+        # print(self.label._text, text)
         if text == '':
             return None
         else:

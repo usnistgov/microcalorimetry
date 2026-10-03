@@ -1,16 +1,11 @@
 {
-    "title": "Historical Eta Measurments List",
+    "title": "Historical Eta Measurements List",
     "type": "object",
     "description":"Describes historical Eta measurements to be used when calculating/reviewing Eta measurements.",
     "properties": {
         "additionalProperties": {
-            "description": "All properties are dictionaries that describe each dataset",
-            "properties":{
-                "datamodel":{
-                    "$ref": "Eta.json#/definitions/Eta"
-                }
-            },
-            "required":["datamodel"]
+            "description": "All properties are key value pairs with the name of the measurement as a key, and the value an EtaLike object.",
+            "$ref": "Eta.json#/definitions/EtaLike"
         }
     }
 }
