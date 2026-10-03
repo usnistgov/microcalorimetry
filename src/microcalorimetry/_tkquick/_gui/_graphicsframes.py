@@ -684,7 +684,7 @@ def plot_RMEMeas(file, hdf5_path, fig=None):
     with h5py.File(file, 'r') as f:
         data = f[hdf5_path]
 
-        data = RMEMeas.from_h5(f[hdf5_path])
+        data = load_object(f[hdf5_path])
         if len(data.nom.shape) == 1 and data.nom.dtype is not complex:
             print('1d array, plotting as line')
             if not fig:
